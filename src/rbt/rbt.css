@@ -40,7 +40,7 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 }
 
 /*
- * 表达式窗口的正文根是一列:提示区按内容高(不参与拉伸),编辑器占满剩下的高度.
+ * 表达式窗口的正文根是一列:编辑器宿主占满整高(窗口里只有它一件).
  *
  * 为什么要 flex 而不是让编辑器只长到自己那 100px:`.code-editor` 的
  * `min-height: 100%` 需要**宿主高度是确定的**才解析得出来;宿主若是普通块(高度 auto),
@@ -52,15 +52,12 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
     flex-direction: column;
 }
 
-#rbtEditorPanel > :first-child {
-    flex: 0 0 auto;
-}
-
 /*
  * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在里面).
  *
- * 桌面化之后它只剩三件库不给的事:与提示区之间的间距,占满窗口剩余高度,由外框自己定
- * 最小高度.
+ * 桌面化之后它只剩库不给的一件事:占满窗口正文的高度(理由见上面那条 flex).
+ * **外边距也没有**:它是正文根唯一的孩子,窗口留白已由 `--rbt-window-padding` 给过
+ * (两行提示不在这一窗里,见 config 的 RBT_HINT_BOX_CLASS).
  * **横向滚动不在它这里**:滚动归上面的窗口正文根(与库的"滚动归属"一致),它自己不建立
  * scrollport -- 所以不再写 `overflow-x`,否则同一个方向会多出一条滑条,行号槽也会以
  * 错误的那一层为 sticky 参照系.
@@ -71,7 +68,6 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 #rbtEditor {
     flex: 1 1 auto;
     min-height: 0;
-    margin-top: var(--rbt-input-margin);
 }
 
 /*
@@ -118,6 +114,18 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 
 #rbtEditor .rbt-token--punct {
     color: var(--rbt-token-punct-color);
+}
+
+/*
+ * 提示区:两行静态说明,排在性质检查窗口正文的最前(输出区之上,见 ui/rbt_views.ts).
+ *
+ * 色用 `--rbt-hint-color`(中性说明那一档,与 #treeOutput 里的空输入 / 空树提示同色):
+ * 它说的是"这套表达式怎么读",不该和下面的性质清单抢注意力,所以也不吃正文色.
+ * 下边距把说明与结果分开(输出区自己不带 margin-top:间距只写这一处).
+ */
+#rbtOutputPanel .rbt-hints {
+    color: var(--rbt-hint-color);
+    margin-bottom: var(--rbt-hint-margin);
 }
 
 /*

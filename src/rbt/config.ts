@@ -36,9 +36,11 @@ export const RBT_DOM = {
     /**
      * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在它里面).
      *
-     * 它承担两件事:库不给的外边距与最小高度.滚动**不在**这里 -- 桌面化之后滚的是
-     * 窗口正文根(`editorPanelId`),行号槽 `position: sticky; left: 0` 钉在那个滚动区
-     * 左边,这正是库要的宿主形态(见 miko_ui 的 styles/editor.css 的"滚动归属").
+     * 它承担库不给的一件事:**占满窗口正文的高度**.编辑器外框的 `min-height: 100%`
+     * 要有"高度确定"的宿主才解析得出(见 src/rbt/rbt.css 的 `#rbtEditor`).
+     * 滚动**不在**这里 -- 桌面化之后滚的是窗口正文根(`editorPanelId`),行号槽
+     * `position: sticky; left: 0` 钉在那个滚动区左边,这正是库要的宿主形态
+     * (见 miko_ui 的 styles/editor.css 的"滚动归属").
      */
     editorId: 'rbtEditor',
     /**
@@ -64,15 +66,18 @@ export const RBT_DOM = {
      */
     treeId: 'rbtTree',
     /**
-     * 表达式窗口正文根的 id:提示区 + 编辑器宿主都在它里面,滚动也归它.
+     * 表达式窗口正文根的 id:**只有**编辑器宿主 `#rbtEditor` 在它里面,滚动也归它.
      *
      * 桌面化之前滚动归 `#rbtEditor`(宿主自己 `overflow-x: auto`);现在窗口正文根
      * 是滚动容器(与库的 `styles/editor.css` 的"滚动归属"一致:编辑器自己不滚),
-     * 所以 `#rbtEditor` 只剩外边距与最小高度.
+     * 所以 `#rbtEditor` 只负责占满窗口高度.
+     *
+     * 提示区不在这里:那两行是静态说明,与"这一轮输入"无关,已经搬到性质检查窗口
+     * 的正文最前(见下面的 RBT_HINT_BOX_CLASS 与 ui/rbt_views.ts 的 outputPanel).
      */
     editorPanelId: 'rbtEditorPanel',
     /**
-     * 性质窗口正文根的 id:唯一输出区 #treeOutput 在它里面,滚动归它.
+     * 性质窗口正文根的 id:提示区 + 唯一输出区 #treeOutput 都在它里面,滚动归它.
      *
      * 与 `editorPanelId` 分开命名而不是复用同一个 id:同一页只该有一次 id,而这是
      * 两扇窗口各自的正文根,库要按窗口 id 分别 append.
@@ -87,6 +92,11 @@ export const RBT_DOM = {
 // 与 miko_graphcalc 把 3D 视口当桌面背景是同一条做法(见库 `mountDesktop` 的
 // `background` 参数):窗口层浮在背景之上,背景铺满整块桌面,窗口没盖住的地方
 // 看到的就是它.
+//
+// 两扇窗口各装什么(见 ui/rbt_views.ts):
+// - 表达式窗口:只有编辑器宿主.输入是这一扇窗口唯一要做的事,窗口高度全给输入区;
+// - 性质检查窗口:提示区(两行静态说明)在上,唯一输出区 #treeOutput 在下.
+//   静态说明与"这一轮的结果"同处一窗,读结论时语法就在同一栏顶部.
 //
 // 这里声明的是**库的** `DesktopConfig.windows` 要的窗口清单(类型
 // `WindowConfigEntry`):id / 标题栏与任务栏文案 / 默认几何 / 最小尺寸.几何用的是
@@ -153,6 +163,24 @@ export const RBT_DESKTOP_WINDOWS = [
         minSize: { w: 300, h: 180 },
     },
 ] as const satisfies readonly WindowConfigEntry[];
+
+// ---------- 提示区(性质检查窗口正文顶部那两行静态说明) ----------
+//
+// 提示区是**静态文案**:简写语法与配色图例说的是"这套表达式怎么读",与这一轮的输入
+// 无关,所以它不进 #treeOutput(那里每轮整批重建),而是自己一块元素,排在性质检查
+// 窗口正文的最前、输出区之上(见 ui/rbt_views.ts 的 outputPanel).
+//
+// 为什么不在表达式窗口:那个窗口只留编辑器 -- 整扇窗口的高度都给输入区,光标与
+// 选区不被两行说明挤开;说明挪到"看结果"的那扇窗口里,读结论时语法就在同一栏顶部.
+
+/**
+ * 提示区外框的类名(样式见 src/rbt/rbt.css 的 `.rbt-hints`).
+ *
+ * 不能复用 `RBT_OUTPUT_HINT_CLASS`(`tree-hint`):那个类名是"这一轮的输出是一行提示"
+ * 的语义,行为测试按它数 #treeOutput 里的行数(见 rbt.test.ts),挂到这块静态说明上
+ * 会让"空输入只有一行提示"这类断言多出两行.
+ */
+export const RBT_HINT_BOX_CLASS = 'rbt-hints';
 
 /** 提示区第一行:简写叶子节点说明(可见文本) */
 export const RBT_HINT_SHORTHAND = '支持简写叶子节点 (例如 "5R" 等价于 "5R(nil,nil)")';

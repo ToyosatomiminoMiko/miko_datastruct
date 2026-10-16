@@ -11,8 +11,12 @@
 **搬出窗口、成为桌面背景**:
 
   #rbtTree(桌面背景,所有窗口之下,铺满整块桌面)
-  ├── 窗口 "表达式":提示区 + 编辑器宿主 #rbtEditor
-  └── 窗口 "性质检查":唯一输出区 #treeOutput
+  ├── 窗口 "表达式":只有编辑器宿主 #rbtEditor
+  └── 窗口 "性质检查":提示区(两行静态说明)+ 唯一输出区 #treeOutput
+
+两扇窗口各装什么是**按"操作 / 说明 / 结果"分**的:编辑器独占一扇,窗口整高都给输入区,
+光标与选区不被说明挤开;两行说明说的是"这套表达式怎么读",与本轮的输出结果同处一栏
+(说明在上、结果在下),看结论时语法就在眼前.
 
 这样做的理由与 miko_graphcalc 把 3D 视口当桌面背景是同一条:树是**结果**,窗口是
 **操作**;把结果铺在桌面上、操作浮在上面,改表达式时不用在"输入框"和"看树"之间
@@ -63,6 +67,7 @@ import {
 import {
     RBT_DOM,
     RBT_EDITOR_GUTTER_MIN_WIDTH,
+    RBT_HINT_BOX_CLASS,
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
     RBT_INPUT_PLACEHOLDER,
@@ -127,7 +132,7 @@ export function createRbtViews(): RbtViews {
     });
     editor.textarea.setAttribute('placeholder', RBT_INPUT_PLACEHOLDER);
 
-    // 编辑器宿主:外边距与最小高度挂在它上面,滚动归窗口正文根(见文件头)
+    // 编辑器宿主:占满窗口正文的高度,滚动归窗口正文根(见文件头)
     const editorHost = create_element({ tag: 'div' }, { id: RBT_DOM.editorId }, editor.element);
 
     // 唯一输出区:提示 / 错误 / 性质清单都塞进这一个元素(理由见下面 outputPanel 的说明).
@@ -158,14 +163,15 @@ export function createRbtViews(): RbtViews {
     );
 
     /*
-      提示区:两行 span 各自以 <br> 结束.
+      提示区:两行 span 各自以 <br> 结束,外框认 config 的 RBT_HINT_BOX_CLASS.
 
-      它在表达式窗口正文的最前:改表达式时眼睛在编辑器上,提示就贴在它上面
-      (与"输出区排在树旁边"同一条:视线不用跨窗口)。
+      它排在**性质检查窗口**正文的最前(输出区之上):那两行是静态说明,与这一轮的
+      输入无关,所以跟"结果"放同一栏 -- 表达式窗口因此只剩编辑器,窗口整高都是输入区
+      (与"输出区与树同屏"同一条思路:要一起看的放在一起).
     */
     const hints = create_element(
         { tag: 'div' },
-        {},
+        { class: RBT_HINT_BOX_CLASS },
         create_element({ tag: 'span' }, {}, RBT_HINT_SHORTHAND),
         create_element({ tag: 'br' }),
         create_element({ tag: 'span' }, {}, RBT_HINT_COLOR_LEGEND),
@@ -180,16 +186,19 @@ export function createRbtViews(): RbtViews {
       为什么正文根就是滚动容器而不是再套一层:库的 `.window-body` 已经把高度裁好,
       窗口边上那圈描边就是内容的框;再套一层"卡片"会多出一圈边框与内边距(与库里
       其余窗口同一条口径,见 miko_ui 的 README "编辑器不滚,宿主滚").
+
+      两扇窗口各一根正文根,不合并:库按窗口 id 分别 append,而"一扇窗口一条滑条"
+      要求滑条就在窗口边上(见 src/rbt/rbt.css 的"窗口正文"一节).
     */
     const editorPanel = create_element(
         { tag: 'div' },
         { class: 'ui-scrollbar', id: RBT_DOM.editorPanelId },
-        hints,
         editorHost,
     );
     const outputPanel = create_element(
         { tag: 'div' },
         { class: 'ui-scrollbar', id: RBT_DOM.outputPanelId },
+        hints,
         output,
     );
 

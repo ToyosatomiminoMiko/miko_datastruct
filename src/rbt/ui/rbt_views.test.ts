@@ -3,10 +3,10 @@
  *
  * 这一层分两段,因为"标记长什么样"与"桌面装配成什么样"是两件事:
  *
- * 1. **视图标记**(`createRbtViews()` 的返回值,此时还没挂进任何文档):提示区两行、
- *    编辑器宿主 `#rbtEditor`、初始 hidden 的输出区 `#treeOutput`、以及一块**空的**
- *    背景 `<svg>` #rbtTree.这些是"标记里本来有什么",必须在挂载前断言 -- 一挂载,
- *    rbt.ts 就会种入示例并画出 31 个节点;
+ * 1. **视图标记**(`createRbtViews()` 的返回值,此时还没挂进任何文档):性质检查窗口里
+ *    的提示区两行 + 初始 hidden 的输出区 `#treeOutput`、表达式窗口里唯一一件编辑器
+ *    宿主 `#rbtEditor`、以及一块**空的**背景 `<svg>` #rbtTree.这些是"标记里本来有什么",
+ *    必须在挂载前断言 -- 一挂载,rbt.ts 就会种入示例并画出 31 个节点;
  * 2. **桌面装配**(`mountRBT()`,与 index.html 同形):桌面根里依次是 背景树 ->
  *    窗口层 -> 吸附预览 -> 任务栏,`#rbtTree` 是桌面根的直接子节点、**不在任何窗口里**
  *    (这就是"树是桌面背景"这句话的全部可断言内容),两扇窗口的正文根各挂库的
@@ -31,6 +31,7 @@ import { describe, expect, it } from 'vitest';
 import {
     RBT_DESKTOP_WINDOWS,
     RBT_DOM,
+    RBT_HINT_BOX_CLASS,
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
     RBT_INPUT_PLACEHOLDER,
@@ -66,10 +67,11 @@ function windowBody(host: HTMLElement, windowId: string): HTMLElement {
 }
 
 describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
-    it('提示区是表达式窗口正文的第一个孩子:两行逐字保留(含 U+00A0 与「黒」)', () => {
-        const { editorPanel } = buildViews();
-        const hintBox = editorPanel.children[0];
+    it('提示区是性质检查窗口正文的第一个孩子(输出区之上):两行逐字保留(含 U+00A0 与「黒」)', () => {
+        const { editorPanel, outputPanel } = buildViews();
+        const hintBox = outputPanel.children[0];
 
+        expect(hintBox?.classList.contains(RBT_HINT_BOX_CLASS)).toBe(true);
         const spans = [...(hintBox?.querySelectorAll('span') ?? [])];
         expect(spans.map((span) => span.textContent))
             .toEqual([RBT_HINT_SHORTHAND, RBT_HINT_COLOR_LEGEND]);
@@ -78,15 +80,19 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         expect(RBT_HINT_COLOR_LEGEND).toContain('黒');
         // 两行各自以 <br> 结束
         expect(hintBox?.querySelectorAll('br')).toHaveLength(2);
+        // 表达式窗口一个字的说明都不留:那扇窗口只有编辑器一件
+        expect(editorPanel.children).toHaveLength(1);
+        expect(editorPanel.querySelector(`.${RBT_HINT_BOX_CLASS}`)).toBeNull();
     });
 
     it('表达式输入是库的 CodeEditor:宿主 #rbtEditor 里是外框 + textarea + 行号 + 高亮层', () => {
         const { views, editorPanel } = buildViews();
         const editorHost = editorPanel.querySelector(`#${RBT_DOM.editorId}`);
 
-        // 宿主是我们的那一格(提示区之后),库的外框长在它里面(库的元素上一个 id 都没有)
+        // 宿主是我们的那一格,而且是正文根唯一的孩子(提示区已经搬去另一扇窗口);
+        // 库的外框长在它里面(库的元素上一个 id 都没有)
         expect(editorHost).not.toBeNull();
-        expect(editorHost).toBe(editorPanel.children[1]);
+        expect(editorHost).toBe(editorPanel.children[0]);
         expect(editorHost).toBe(views.editor.element.parentElement);
         expect(views.editor.element.className).toBe('code-editor');
 
@@ -112,8 +118,9 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
     it('唯一输出区初始隐藏且是空的(提示 / 错误 / 清单共用这一个元素)', () => {
         const { views, outputPanel } = buildViews();
 
-        expect(outputPanel.children).toHaveLength(1);
-        expect(outputPanel.children[0]).toBe(views.output);
+        // 正文根里是 说明(提示区)-> 结果(输出区) 两件
+        expect(outputPanel.children).toHaveLength(2);
+        expect(outputPanel.children[1]).toBe(views.output);
         expect(views.output.id).toBe(RBT_DOM.outputId);
         // 容器只认 id(#treeOutput):自己不挂类名(类名契约只剩提示行 / 错误行 / 抬头的类)
         expect(views.output.className).toBe('');

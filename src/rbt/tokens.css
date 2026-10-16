@@ -25,10 +25,12 @@ miko_ui/styles/editor.css 与它读的库令牌,本项目一条都不覆盖(见 
      */
     --rbt-window-padding: 12px;
     /*
-     * 提示区与表达式编辑器之间的间距(px),以及编辑器的最小高度(px).
-     * 外框的底色 / 描边 / 圆角归库(见文件头),这里只给库不给的尺寸.
+     * 提示区与输出区之间的间距(px),以及编辑器的最小高度(px).
+     * 提示区排在性质检查窗口正文的最前(见 config 的 RBT_HINT_BOX_CLASS),这条间距
+     * 由它自己的 `margin-bottom` 给;编辑器外框的底色 / 描边 / 圆角归库(见文件头),
+     * 这里只给库不给的尺寸.
      */
-    --rbt-input-margin: 10px;
+    --rbt-hint-margin: 10px;
     --rbt-input-min-height: 100px;
     /*
      * 表达式词法着色(高亮 HTML 由 src/rbt/ui/rbt_highlight.ts 产出,类名在 config.ts).
