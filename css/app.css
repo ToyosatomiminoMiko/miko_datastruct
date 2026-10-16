@@ -1,21 +1,21 @@
 /*
-应用层样式:页面基线 + 从主站继承下来的两条应用级令牌.
+应用层样式:页面基线 + 从主站继承下来的应用级令牌.
 
-为什么令牌在这里:`src/rbt/*.css` 是从主站逐字搬来的,它引的两条令牌 `--font-code` 与
-`--card-width` 原本定义在主站的 `public/css/tokens.css`(站点层,跨模块共用的排版口径).
-独立项目没有那一层,就在这里补一份等价定义,让 `rbt.css` / `tokens.css` 一个字节都不用改.
+为什么令牌在这里:`src/rbt/*.css` 是从主站逐字搬来的,它引的 `--font-code` 原本定义在
+主站的 `public/css/tokens.css`(站点层,跨模块共用的排版口径).独立项目没有那一层,
+就在这里补一份等价定义,让 `rbt.css` / `tokens.css` 不必为这条改字.
 
 `--font-code` 引的是库的代码面令牌(`--code-font-family`),字体文件与 `@font-face` 随
-`miko_ui` 发布,本项目不自带字体.
+`miko_ui` 发布,本项目不自带字体.表达式编辑器那一格不用它:库的编辑器自己引
+`--code-font-family`(见 miko_ui 的 styles/editor.css),只有输出区与树上的节点值走
+`--font-code`.
 
 文档基线(盒模型 / body 底色与字体)也在这里:主站那份在 `public/css/index.css`,
 本项目只留红黑树用得到的那几条.
 */
 :root {
-    /* 代码等宽字体栈:表达式输入框与树上的节点值引它 */
+    /* 代码等宽字体栈:输出区与树上的节点值引它 */
     --font-code: var(--code-font-family);
-    /* 面板 / 输入框占满可用宽度的口径(rbt.css 的 `#treeInput` 引它) */
-    --card-width: 100%;
 
     /* 页面底色 / 正文色:与主站的 --bg-page / --text-page 同值,搬过来保持观感一致 */
     --app-bg-page: #212529;
@@ -23,8 +23,9 @@
 }
 
 /*
- * 全站盒模型.必须留着:主站在这一点上是同一条基线,`#treeInput` 的
- * `width: var(--card-width)` 加上 1.5px 描边,少了 border-box 就会横向溢出 3px.
+ * 全站盒模型:与主站同一条基线.
+ * 库的组件自己声明 box-sizing(见 `.code-editor` / `.code-editor-gutter`),这一条管的是
+ * 应用层:盒子的宽度口径统一按 border-box 算,加内边距 / 描边不会把盒子撑出容器.
  */
 * {
     box-sizing: border-box;
@@ -48,7 +49,7 @@ body {
     line-height: 1.5;
 }
 
-/* 面板宿主:定尺居中,窄屏留边;面板自己按 --card-width = 100% 铺满它 */
+/* 面板宿主:定尺居中,窄屏留边;面板自己铺满它(内部各件按 100% 宽走) */
 #app {
     width: min(1100px, 92vw);
     margin: 0 auto;

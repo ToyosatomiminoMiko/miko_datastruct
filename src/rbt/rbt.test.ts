@@ -15,7 +15,11 @@
  * 从前这一层打在 canvas 原型上,记录 `fillText` 的调用;换成 SVG 之后树就是文档里
  * 的元素,直接查 DOM 即可 -- 那一整套"造一块只记 fillText 的 2D 上下文"的桩因此
  * 整个删掉了.真像素 / 真实 CSS 级联(颜色真的落在 fill 上,令牌真的生效)仍然只在
- * scripts/smoke_home.mjs 里验,不在这一层重复.
+ * 真机上验,不在这一层重复.
+ *
+ * 输入是 miko_ui 的 CodeEditor 之后多了一条契约:**载入示例要连装饰层一起刷新**。
+ * 程序化写 `textarea.value` 不派发 input 事件,行号与高亮层不会自己更新,所以这一层
+ * 断言"挂载之后高亮层里就是那段示例"(id 与类名对不上时它会一直停在初值,不报错).
  *
  * @vitest-environment happy-dom
  */
@@ -37,6 +41,7 @@ import {
     RBT_OUTPUT_ERROR_CLASS,
     RBT_OUTPUT_HINT_CLASS,
     RBT_PROPERTIES,
+    RBT_TOKEN_VALUE_CLASS,
     RBT_TREE_EXAMPLE,
 } from '@/rbt/config';
 import { mountRBT } from '@/rbt/rbt';
@@ -48,7 +53,14 @@ function byId<T extends Element>(id: string): T {
     return element as unknown as T;
 }
 
-/** 往输入框里喂一个表达式并派发 input 事件(与用户敲键盘走的是同一条链路) */
+/** 编辑器里的真 textarea(库建的,我们的宿主里只有这一颗;取不到同样是契约变了) */
+function editorTextarea(): HTMLTextAreaElement {
+    const textarea = byId<HTMLElement>(RBT_DOM.editorId).querySelector('textarea');
+    if (!textarea) throw new Error(`#${RBT_DOM.editorId} 里找不到编辑器的 textarea`);
+    return textarea;
+}
+
+/** 往编辑器里喂一个表达式并派发 input 事件(与用户敲键盘走的是同一条链路) */
 function typeExpression(input: HTMLTextAreaElement, expression: string): void {
     input.value = expression;
     input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -60,7 +72,7 @@ function mountPanel(): { input: HTMLTextAreaElement; output: HTMLElement; tree: 
     document.body.append(host);
     mountRBT(host);
     return {
-        input: byId<HTMLTextAreaElement>(RBT_DOM.inputId),
+        input: editorTextarea(),
         output: byId<HTMLElement>(RBT_DOM.outputId),
         tree: byId<SVGSVGElement>(RBT_DOM.treeId),
     };
@@ -111,6 +123,19 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         const { tree } = mountPanel();
 
         expect(treeEdges(tree)).toHaveLength(31 - 1);
+    });
+
+    it('示例是种进编辑器的,行号与高亮层一起被刷新(程序化写值不派发 input)', () => {
+        const { input } = mountPanel();
+        const host = byId<HTMLElement>(RBT_DOM.editorId);
+
+        expect(input.value).toBe(RBT_TREE_EXAMPLE);
+        // 单行表达式:行号只有一行(直接赋值后没 refresh 的话这里还是初值)
+        expect(host.querySelector('.code-editor-lines')?.textContent).toBe('1');
+        // 高亮层里就是那段示例,而且真的分了词(不是一段没着色的纯文本)
+        const code = host.querySelector('.code-editor-highlight-code');
+        expect(code?.textContent).toBe(RBT_TREE_EXAMPLE);
+        expect(code?.querySelectorAll(`.${RBT_TOKEN_VALUE_CLASS}`).length).toBeGreaterThan(0);
     });
 
     it('节点与连线的坐标来自布局,不是全挤在原点', () => {
@@ -209,6 +234,7 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         mountRBT(host);
 
         expect(host.querySelectorAll(`#${RBT_DOM.treeId}`)).toHaveLength(1);
+        expect(host.querySelectorAll(`#${RBT_DOM.editorId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
     });
 });

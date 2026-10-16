@@ -1,9 +1,17 @@
 /**
  * 红黑树面板的标记契约(进程内,跑在 happy-dom 里).
  *
- * `src/rbt/rbt.css` 按 `#treeInput` 命中(宽度 / 等宽字体 / 最小高度),
+ * `src/rbt/rbt.css` 按 `#rbtEditor`(编辑器宿主)/ `#treeOutput` / `#rbtTree` 命中,
  * 树的 viewBox 1200×640 来自 config.这里把这些契约连同**逐字文案**一起钉住
  * (两行提示里的 U+00A0 与「黒」是界面上真实写的字,顺手改掉就会变成静默的文案漂移).
+ *
+ * 表达式输入从裸 textarea 换成 miko_ui 的 CodeEditor(见 ui/rbt_panel.ts)之后,这一层
+ * 钉的是**装配契约**,不是库的内部结构:
+ * - 我们那一格宿主 `#rbtEditor` 在正文里,库的外框 `.code-editor` 长在它里面;
+ * - textarea 是库建的,但 spellcheck 与 placeholder 由我们给(库没有 placeholder 选项);
+ * - 行号槽与高亮层都在,且高亮开关(`is-highlighted`)已经打开 -- 那个类同时控制
+ *   "textarea 文字透明"与"高亮层显示",少一半的后果是编辑框一片空白;
+ * - **分词不在这里测**:那是纯函数,见 rbt_highlight.test.ts.
  *
  * 树那块从 canvas 换成 SVG 之后,契约变了三条,都在这里钉住:
  * - 元素是 `<svg>` 而不是 `<canvas>`,所以查的是 `svg#rbtTree`(标签名也一起断言,
@@ -21,7 +29,6 @@ import {
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
     RBT_INPUT_PLACEHOLDER,
-    RBT_INPUT_SPELLCHECK,
     RBT_PANEL_TITLE,
     RBT_VIEW_BOX,
     RBT_VIEW_BOX_HEIGHT,
@@ -59,14 +66,34 @@ describe('红黑树:面板结构', () => {
     });
 });
 
-describe('红黑树:输入与树', () => {
-    it('输入框的 id / spellcheck / placeholder 与原来一致', () => {
+describe('红黑树:编辑器 / 输出区 / 树', () => {
+    it('表达式输入是库的 CodeEditor:宿主 #rbtEditor 里是外框 + textarea + 行号 + 高亮层', () => {
         const panel = renderPanel(createRbtPanel);
-        expect(document.getElementById(RBT_DOM.inputId)).toBe(panel.input);
-        expect(panel.input.getAttribute('spellcheck')).toBe(RBT_INPUT_SPELLCHECK);
-        expect(panel.input.getAttribute('placeholder')).toBe(RBT_INPUT_PLACEHOLDER);
-        // 表达式是"代码",初始值由挂载函数写(标记里不带 value)
-        expect(panel.input.value).toBe('');
+        const host = document.getElementById(RBT_DOM.editorId);
+
+        // 宿主是我们的那一格,库的外框长在它里面(库的元素上一个 id 都没有)
+        expect(host).not.toBeNull();
+        expect(host?.tagName).toBe('DIV');
+        expect(host).toBe(panel.editor.element.parentElement);
+        expect(panel.editor.element.className).toBe('code-editor');
+
+        // textarea 就是库交回的那一颗,而且只有这一颗(值的唯一真相源)
+        const textareas = host?.querySelectorAll('.code-editor-textarea') ?? [];
+        expect(textareas).toHaveLength(1);
+        expect(textareas[0]).toBe(panel.editor.textarea);
+
+        // 拼写检查按库的布尔选项写成属性;占位文案由我们补(库没有 placeholder 选项)
+        expect(panel.editor.textarea.getAttribute('spellcheck')).toBe('false');
+        expect(panel.editor.textarea.getAttribute('placeholder')).toBe(RBT_INPUT_PLACEHOLDER);
+
+        // 表达式是"代码",初始值由挂载函数种(标记里不带 value)
+        expect(panel.editor.textarea.value).toBe('');
+
+        // 行号与高亮层缺一不可:没有它们编辑器就退化成裸 textarea
+        expect(host?.querySelector('.code-editor-lines')?.textContent).toBe('1');
+        expect(host?.querySelector('.code-editor-highlight-code')).toBe(panel.editor.highlightCode);
+        // 高亮开关:文字透明与着色层由同一个类控制,只开一半等于编辑框空白
+        expect(panel.editor.textarea.classList.contains('is-highlighted')).toBe(true);
     });
 
     it('唯一输出区初始隐藏且是空的(提示 / 错误 / 清单共用这一个元素)', () => {
@@ -95,11 +122,11 @@ describe('红黑树:输入与树', () => {
         expect(panel.tree.children).toHaveLength(0);
     });
 
-    it('提示区与各件都在 .ui-panel-body 里,顺序是 提示 -> 输入框 -> 输出区 -> 树', () => {
+    it('提示区与各件都在 .ui-panel-body 里,顺序是 提示 -> 编辑器 -> 输出区 -> 树', () => {
         const panel = renderPanel(createRbtPanel);
         const body = panel.root.querySelector('.ui-panel-body');
         expect([...(body?.children ?? [])].map((child) => child.id))
-            .toEqual(['', RBT_DOM.inputId, RBT_DOM.outputId, RBT_DOM.treeId]);
+            .toEqual(['', RBT_DOM.editorId, RBT_DOM.outputId, RBT_DOM.treeId]);
     });
 
     it('文档里没有重复 id', () => {

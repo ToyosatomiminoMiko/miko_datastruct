@@ -1,31 +1,85 @@
 @import '@/rbt/tokens.css';
 
 /*
-红黑树工具样式(输入框 / 唯一输出区 / 那棵 SVG 树).
+红黑树工具样式(表达式编辑器 / 唯一输出区 / 那棵 SVG 树).
 
-三个 id 都在这里:`#treeInput`(表达式输入框),`#treeOutput`(提示 / 错误 / 性质清单
-的唯一输出区),`#rbtTree`(SVG 树).标记由 rbt.ts 生成,文案与结构类名在 config.ts.
+三个 id 都在这里:`#rbtEditor`(miko_ui 编辑器的宿主),`#treeOutput`(提示 / 错误 /
+性质清单的唯一输出区),`#rbtTree`(SVG 树).标记由 ui/rbt_panel.ts 生成,文案与结构
+类名在 config.ts.
+
+编辑器**外框内部**的观感(底色 / 描边 / 圆角 / 行号槽,以及"透明 textarea + 背后高亮层"
+的严格重叠)全归库的 miko_ui/styles/editor.css,这里一条都不覆盖:这一层只做库不做
+的两件事 -- 给宿主该有的滚动与尺寸(见下面 `#rbtEditor`),给词法高亮的颜色(库的口径
+就是"分词与配色归消费者",见 ui/rbt_highlight.ts).
 
 可调数值全部走本目录 tokens.css 的 `--rbt-*`(选择器里不写死色值与尺寸,换配色不用
 碰 TS);唯一的例外是 `#treeOutput` 的 `line-height: 1.4`,它是排版本地的结构性字面量.
 
-注意 public/css/index.css 开头那条 `*` 重置(那个文件由 index.html 静态引入,排在
-本文件所在产物之前):它对 SVG 的 `<text>` 一样生效,所以"树本身"那一块里节点值的
-font-family / font-size / fill 必须显式写,理由在那一块的注释里.
+注意 css/app.css 那条 `*` 重置(全站盒模型)与 body 上的字体基线:节点值的
+font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG 的 `<text>` 一样吃
+可继承的 font 属性,不写就会跟着正文的 `--font-family-base` 走,而不是等宽字体.
 */
-#treeInput {
-    width: var(--card-width);
-    padding: 0px;
-    font-family: var(--font-code);
-    color: var(--rbt-text-color);
-    background: var(--rbt-input-bg);
-    border: var(--rbt-input-border);
+/*
+ * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在里面).
+ *
+ * 库的编辑器**自己不滚**:外框的宽高都由内容给出(高亮内容那个 `white-space: pre`
+ * 的 `<pre>`),滚动归装它的那一层.所以这一格要做的三件事:
+ * 1. 上下外边距:沿用输入框时代的两条令牌,观感不变;
+ * 2. 最小高度:挂在外框上而不是宿主上,让编辑器自己长到 100px(宿主只是滚动区,
+ *    它长高只会让外框底下一片空);
+ * 3. 横向滚动:长表达式不折行(textarea 与行号都要"源码行 == 视觉行",见库的
+ *    editor.css),所以只能滚 -- 滚的是宿主,横向滚时行号槽
+ *    (`position: sticky; left: 0`)钉在滚动区左边,这正是库要的宿主形态.
+ *
+ * 为什么用 `overflow-x` 而不是 `overflow`:另一轴留 `visible` 的话会按规范被算成
+ * `auto`,那一轴一旦有溢出就多出一条滚动条;宿主的高度由内容给出,纵向本就不会溢出.
+ */
+#rbtEditor {
     margin-top: var(--rbt-input-margin);
     margin-bottom: var(--rbt-input-margin);
-    resize: vertical;
+    overflow-x: auto;
+}
+
+#rbtEditor .code-editor {
     min-height: var(--rbt-input-min-height);
-    /* 保留显式声明 */
-    white-space: pre-wrap;
+}
+
+/*
+ * 占位文案:高亮层就位时 textarea 的文字是透明的(库的 `.is-highlighted`),
+ * 而 `::placeholder` 的颜色在 Chromium 里由 currentColor 派生,跟着一起透明的话
+ * 占位文案就"没了"(不报错,只是看不见).所以显式给色,并把 Firefox 默认的那层
+ * 透明度写回 1,两个引擎观感一致.
+ */
+#rbtEditor .code-editor-textarea::placeholder {
+    color: var(--rbt-hint-color);
+    opacity: 1;
+}
+
+/*
+ * 表达式词法着色:类名由 src/rbt/ui/rbt_highlight.ts 产出(契约写在 config.ts 的
+ * "表达式词法着色"一节),颜色引 tokens.css 的 --rbt-token-*.
+ *
+ * 这些规则全部是**新增**的,没有一条覆盖库:高亮层只负责把注入的 HTML 显示在
+ * textarea 背后,库的样式表里没有任何颜色规则(它不认识红黑树表达式).
+ */
+#rbtEditor .rbt-token--value {
+    color: var(--rbt-token-value-color);
+}
+
+#rbtEditor .rbt-token--red {
+    color: var(--rbt-token-red-color);
+}
+
+#rbtEditor .rbt-token--black {
+    color: var(--rbt-token-black-color);
+}
+
+#rbtEditor .rbt-token--nil {
+    color: var(--rbt-token-nil-color);
+}
+
+#rbtEditor .rbt-token--punct {
+    color: var(--rbt-token-punct-color);
 }
 
 /*
@@ -94,10 +148,10 @@ font-family / font-size / fill 必须显式写,理由在那一块的注释里.
  *     相等,理由写在本目录 tokens.css 的 --rbt-node-radius 上方;
  *   - 窄屏缩放交给 width: 100% + viewBox,不必再管 dpr.
  *
- * 节点值的字体是**必须显式写**的:public/css/index.css 开头那条 `*` 重置把全站字体
- * 统一成 --font-base,它对 SVG 的 <text> 一样生效(SVG 的 font 也是可继承的 CSS
- * 属性),不写这一条的话节点值会吃 --font-base 而不是等宽字体.字号与 fill 同理都被
- * 那条重置清空过,所以三个值都落在下面那条规则里.
+ * 节点值的字体是**必须显式写**的:css/app.css 的 body 基线把正文统一成
+ * `--font-family-base`,它对 SVG 的 <text> 一样生效(SVG 的 font 也是可继承的 CSS
+ * 属性),不写这一条的话节点值会吃正文基线而不是等宽字体.字号与 fill 也写在同一
+ * 条规则里:三者都是"节点值长什么样",放一处才不会漏.
  * ================================================================
  */
 

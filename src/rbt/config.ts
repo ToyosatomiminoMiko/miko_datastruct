@@ -13,12 +13,23 @@
 /**
  * 红黑树控件用到的 DOM 元素 id.
  * 标记由 src/rbt/ui/rbt_panel.ts 按本文件的声明生成(id 写入元素再由组件
- * 交回引用);这些常量同时给样式(src/rbt/rbt.css 的 `#treeInput` /
+ * 交回引用);这些常量同时给样式(src/rbt/rbt.css 的 `#rbtEditor` /
  * `#treeOutput` / `#rbtTree`)与组件共用.
+ *
+ * 三个 id 里只有 `#rbtEditor` 是**宿主**:表达式输入从裸 textarea 换成 miko_ui 的
+ * CodeEditor 之后,输入框那一格由库的元素组成(外框 / 行号槽 / 高亮层),而库的
+ * 外框自己不滚(宽高都随内容长,滚动归装它的那一层),所以我们的样式命中的是
+ * 自己那一格宿主,不是库里面的 textarea -- 库的元素上一个 id 都不加,那会把
+ * 消费者的 id 变成库的公开 API(见 miko_ui 的 styles/styles.css 文件头).
  */
 export const RBT_DOM = {
-    /** 表达式输入 textarea 的 id */
-    inputId: 'treeInput',
+    /**
+     * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在它里面).
+     *
+     * 它承担三件事:库不给的外边距 / 最小高度,以及**滚动**(长表达式横向滚,
+     * 行号槽 `position: sticky; left: 0` 钉在滚动区左边,这正是库要的宿主形态).
+     */
+    editorId: 'rbtEditor',
     /**
      * 唯一输出区的 id:提示 / 错误 / 性质检查清单都写进这一个元素.
      *
@@ -60,12 +71,25 @@ export const RBT_HINT_SHORTHAND = '支持简写叶子节点 (例如 "5R" 等价�
  */
 export const RBT_HINT_COLOR_LEGEND = 'R 红色 \u00a0|\u00a0 B 黒色';
 
-/** 表达式输入框的占位文案(可见文本) */
+/**
+ * 表达式编辑器的占位文案(可见文本).
+ *
+ * 库的 `createCodeEditor` 没有 placeholder 选项(它只认 value / spellcheck /
+ * highlight / gutterMinWidth),所以这条由 ui/rbt_panel.ts 写在库交回的 textarea 上
+ * (`setAttribute`):换掉的是输入控件,提示文案不变.
+ */
 export const RBT_INPUT_PLACEHOLDER =
     '例: 10B(5R(1B,8R),15R(12B,20B))  或深度4满树示例自动加载';
 
-/** 表达式输入框的拼写检查属性值('false' = 不当自然语言检查) */
-export const RBT_INPUT_SPELLCHECK = 'false';
+/**
+ * 编辑器行号槽的宽度下限(px),交给 CodeEditor 的 `gutterMinWidth`.
+ *
+ * 槽的实际宽度由库算("最大行号位数 × 当前字体下的数字宽 + 内边距 / 边框",
+ * 且不小于这个下限),所以这里给的是**下限**而不是目标宽度:库的样式表里还有一条
+ * 同名的 `--code-gutter-width: 32px` 只是"量出来之前"的初值(见 miko_ui 的
+ * styles/tokens.css).表达式通常写成单行,行号只有一位,所以下限就是它的实际宽度.
+ */
+export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
 
 /**
  * 树绘制 `<svg>` 的 viewBox 尺寸(逻辑坐标,单位同 CSS px).
@@ -140,6 +164,32 @@ export const RBT_NODE_BLACK_CLASS = 'rbt-node--black';
 
 /** 父子连线的类名(`<line>` 的描边与线宽在 CSS) */
 export const RBT_EDGE_CLASS = 'rbt-edge';
+
+// ---------- 表达式词法着色:类名契约(样式在 src/rbt/rbt.css) ----------
+//
+// 表达式编辑器的高亮 HTML 由 ui/rbt_highlight.ts 产出,注入给 miko_ui 的 CodeEditor.
+// 库的高亮层只做一件事:把注入的 `highlight(source)` 产物显示在透明 textarea 背后
+// (见 miko_ui 的 editor/EditorHighlight 文件头)-- 它不认识任何语言的词法,也知道
+// 自己不该认识,所以"哪个词是什么"与"它是什么颜色"都在我们这一侧:类名在这里声明,
+// 配色在 src/rbt/tokens.css 的 `--rbt-token-*`.
+//
+// 这几个类名是**跨语言契约**:rbt_highlight.ts 产出它们,rbt.css 按它们命中,
+// rbt_highlight.test.ts 断言它们,改名要三处一起改(没有编译期保护).
+
+/** 节点值的类名(表达式里 `10B` 的那个 `10`) */
+export const RBT_TOKEN_VALUE_CLASS = 'rbt-token--value';
+
+/** 红色节点标记 `R` 的类名 */
+export const RBT_TOKEN_RED_CLASS = 'rbt-token--red';
+
+/** 黑色节点标记 `B` 的类名 */
+export const RBT_TOKEN_BLACK_CLASS = 'rbt-token--black';
+
+/** 空树写法 `nil` 的类名(大小写不敏感,解析器三种写法都收) */
+export const RBT_TOKEN_NIL_CLASS = 'rbt-token--nil';
+
+/** 结构符号 `(` / `)` / `,` 的类名 */
+export const RBT_TOKEN_PUNCT_CLASS = 'rbt-token--punct';
 
 // ---------- 输出区(提示 / 错误 / 性质清单共用一套类名) ----------
 //

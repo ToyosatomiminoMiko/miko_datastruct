@@ -5,7 +5,13 @@
 解析与性质检查在 rbt_tree.ts(纯逻辑,可单测);本文件只剩两件事:
 - 把布局结果画成一棵 `<svg>`:区间递归分配坐标 + 连线(`<line>`)+ 节点
   (`<g>` 里一颗 `<circle>` 与一个 `<text>`);
-- mountRBT:接管宿主,把"格式检查 -> 性质检查 -> 重绘"接到输入框的 input 事件上.
+- mountRBT:接管宿主,把"格式检查 -> 性质检查 -> 重绘"接到编辑器 textarea 的
+  input 事件上.
+
+输入控件是 miko_ui 的 CodeEditor(外框 + 行号 + 词法高亮,标记见 ui/rbt_panel.ts):
+**值仍然只从 textarea 读**,行号与高亮是库按注入的分词器自己维护的装饰层 -- 本文件
+只多做一件程序化写入的事:载入示例走库的 `seedTextareaSource`,再显式 `refresh()`
+一次(直接赋值不派发 input 事件,装饰层不会自己更新).
 
 **为什么是 SVG 而不是 canvas**(2026-10 起):树的每一笔都成了文档里的元素,于是
 - 配色 / 字号 / 线宽回到 CSS(引 src/rbt/tokens.css 的 `--rbt-*`),不再写死在 config 里
@@ -70,7 +76,13 @@ import {
     type RbtPropertyReport,
 } from './rbt_tree';
 import { createRbtPanel } from './ui/rbt_panel';
-import { childNodes, create_element, create_svg_element } from 'miko_ui';
+import {
+    childNodes,
+    create_element,
+    create_svg_element,
+    seedTextareaSource,
+    type CodeEditorHandle,
+} from 'miko_ui';
 
 // ============================================================
 // 布局 -- 区间递归分配法:每个节点占据一段水平区间并居中,左右子树各分得父节点
@@ -273,20 +285,39 @@ function propertyLines(report: RbtPropertyReport): HTMLElement[] {
 }
 
 /**
- * 把红黑树面板挂到宿主(骨架交回的 `shell.panes.rbt` 空窗格)上.
+ * 已挂载的编辑器句柄(按宿主记).
+ *
+ * 为什么需要:库的 CodeEditor 在 textarea 上挂着 input / scroll 监听与一个
+ * `ResizeObserver`(行号与高亮各一个),`dispose()` 才会拆掉.标记可以靠
+ * `replaceChildren` 整块换掉,但**观察者不会随节点离场自动消失** -- 同一颗宿主
+ * 重复挂载时要先把上一份编辑器拆掉,否则每挂一次就多留一个观察者(旧节点已不在
+ * 文档里,泄漏的是内存与回调,不报错也看不出来).
+ *
+ * 键是宿主而不是模块级单例:同一页挂两块面板时各挂各的,互不干扰.
+ */
+const mountedEditors = new WeakMap<HTMLElement, CodeEditorHandle>();
+
+/**
+ * 把红黑树面板挂到宿主(页面那唯一一颗手写宿主 `#app`)上.
  * 标记由 rbt_panel.ts 生成并把元素引用交回,所以这里只按引用操作元素,
  * 不查 DOM,也没有"找不到元素"的失败路径;绘制在 renderTreeSvg,解析与性质检查在
  * rbt_tree.ts.
  */
 export function mountRBT(host: HTMLElement): void {
+    // 重复挂载同一颗宿主:先拆掉上一份编辑器(见 mountedEditors)
+    mountedEditors.get(host)?.dispose();
+
     const panel = createRbtPanel();
-    // 宿主由本模块独占(骨架建的空窗格),用 replaceChildren 整体接管:
+    // 宿主由本模块独占,用 replaceChildren 整体接管:
     // 重复挂载不会留下两份同 id 的标记(见 clock.ts / oled.ts 的同一条约定).
     host.replaceChildren(panel.root);
 
-    const input = panel.input;
+    const editor = panel.editor;
+    // 值只从 textarea 读:行号 / 高亮是库按它自己维护的装饰层,不参与解析
+    const input = editor.textarea;
     const outputEl = panel.output;
     const treeEl = panel.tree;
+    mountedEditors.set(host, editor);
 
     /**
      * 输出区的写入口:整批替换 #treeOutput 的子节点,空数组就整块 hidden.
@@ -334,7 +365,16 @@ export function mountRBT(host: HTMLElement): void {
 
     input.addEventListener('input', renderTree);
 
-    // 打开页面时自动加载示例
-    input.value = RBT_TREE_EXAMPLE;
+    /*
+      打开页面时自动加载示例.
+
+      走库的 `seedTextareaSource` 而不是直接赋值:它是"首屏种子"那条路(编辑器本来
+      是空的,没有撤销历史要保,也不抢焦点),语义比 `input.value = ...` 清楚;
+      赋值本身不会派发 input 事件,所以装饰层与输出区都得自己叫一次:
+      先 `editor.refresh()`(重算行号 + 重绘高亮,见 ui/rbt_panel.ts 的 editor 说明),
+      再 renderTree()。
+    */
+    seedTextareaSource(input, RBT_TREE_EXAMPLE);
+    editor.refresh();
     renderTree();
 }

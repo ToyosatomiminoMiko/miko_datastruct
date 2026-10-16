@@ -1,8 +1,11 @@
 /*
 红黑树工具的设计令牌.
 
-输入框 / 唯一输出区 / 那棵 SVG 树的可调数值全部集中在这里,`rbt.css` 只引用
+表达式编辑器 / 唯一输出区 / 那棵 SVG 树的可调数值全部集中在这里,`rbt.css` 只引用
 `var(--rbt-*)`,选择器里不写死色值与尺寸(换配色不用碰 TS).
+
+编辑器**外框自己**的观感(底色 / 描边 / 圆角 / 行号槽色)不在这里:那是库的
+miko_ui/styles/editor.css 与它读的库令牌,本项目一条都不覆盖(见 rbt.css 的说明).
 
 跨语言契约(改一处必须改两处,不一致时不会有任何报错):
   - `--rbt-node-radius` 与 `src/rbt/config.ts` 的 `RBT_NODE_RADIUS` 必须相等:
@@ -14,14 +17,24 @@
 */
 :root {
     /* ---------- 红黑树 ---------- */
-    /* 表达式输入框的字体绿 / 背景黑 */
-    --rbt-text-color: #00FF00FF;
-    --rbt-input-bg: #000000FF;
-    /* 输入框边框 */
-    --rbt-input-border: 1.5px solid #e2e8f0;
-    /* 输入框上下外边距 / 最小高度 */
+    /*
+     * 表达式编辑器宿主 `#rbtEditor` 的上下外边距与最小高度.
+     * 外框的底色 / 描边 / 圆角归库(见文件头),这里只给库不给的两条.
+     */
     --rbt-input-margin: 10px;
     --rbt-input-min-height: 100px;
+    /*
+     * 表达式词法着色(高亮 HTML 由 src/rbt/ui/rbt_highlight.ts 产出,类名在 config.ts).
+     *
+     * 值沿用输入框时代的荧光绿;颜色标记 R / B 与树上红黑节点同色系(但**不共用**
+     * --rbt-node-*-fill:那是圆的填充,在深色编辑区上直接当文字色偏暗);
+     * nil 与解析不了的部分走中性提示色,括号与逗号弱化(结构符号不该抢值的注意力).
+     */
+    --rbt-token-value-color: #00FF00FF;
+    --rbt-token-red-color: #ff5555;
+    --rbt-token-black-color: #e5e7eb;
+    --rbt-token-nil-color: #94a3b8;
+    --rbt-token-punct-color: #64748b;
     /* 性质检查:PASS(浅绿,与输入框的绿同一色系)/ FAIL(玫红,同解析错误) */
     --rbt-pass-color: #4ade80;
     --rbt-fail-color: #e11d48;
