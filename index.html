@@ -5,14 +5,34 @@
 页面上只有一颗手写的元素 `#app`:整块桌面(背景那棵 SVG 树 + 窗口层 + 任务栏,以及
 两扇窗口里的提示 / 编辑器 / 输出区)全部由 `src/main.ts` 调 `mountRBT()` 长进来,HTML 里
 没有第二处标记可改.
+
+`<head>` 里的三条是**页面自身**的声明,与 `#app` 无关,所以留在 HTML 里:
+  - charset / viewport:常规两条;
+  - title:浏览器标签页;
+  - `darkreader-lock`:见下面那段说明.
 样式不在这里挂载:库层与应用层都由 `src/main.ts` 按顺序 import,Vite 会把它们抽成
 产物里的一个 <link>,所以生产构建的首帧不吃 FOUC.
+
+页面**本来就是深色**的,三种"把颜色改掉"的来源各有一条对应的声明(前两条在 CSS 里):
+  1. 浏览器 / 系统的强制深色(Chrome 自动深色那种亮度反转)
+     -> `css/app.css` 的 `:root { color-scheme: dark }`;
+  2. 系统高对比度(forced-colors,按系统色改写 fill / stroke)
+     -> `src/rbt/rbt.css` 的 `@media (forced-colors: active)` 里给 #rbtTree 的
+        `forced-color-adjust: none`(颜色就是这棵树的数据,不能被改写);
+  3. **Dark Reader 这类扩展**:它们不认规范,只认自己的一套注入样式(`!important`
+     + 它自己的变量),规范级的两条对它无效 —— 所以要用它自己的"锁"。Dark Reader 的
+     贡献指南写明:页面在 <head> 里放一个 `name="darkreader-lock"` 的 <meta> 就能请它
+     关掉自己("Website pages can request Dark Reader to disable itself by embedding
+     a Dark Reader lock").没有这把锁时,它会把黑节点反成白底、而节点值仍是白字,
+     圆和数字**同色**、读不出来.
 -->
 <html lang="zh-CN">
 
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Dark Reader 的"别动这个页面"声明(扩展自己的约定,不是标准) -->
+    <meta name="darkreader-lock" />
     <title>Red-Black Tree</title>
 </head>
 
@@ -22,3 +42,4 @@
 </body>
 
 </html>
+

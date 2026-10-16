@@ -14,6 +14,29 @@
 本项目只留红黑树用得到的那几条.
 */
 :root {
+    /*
+     * 页面是深色的:把这条**显式声明**出来(库的上游示例与主站的 base.css 都装着它).
+     *
+     * 两件事都靠这一条:
+     *
+     * 1. **原生件按深色画**:滚动条 / 光标 / 选区 / 表单控件由浏览器渲染,它只看
+     *    `color-scheme`.少了这条,深色面板上会冒出浅色滚动条(库的 `.ui-scrollbar`
+     *    只管它自己挂类的那几个容器);
+     * 2. **挡住"深色模式夺舍"**:用户若开了强制深色(Chrome 的自动深色 / 规范里说的
+     *    "dark room" 模式),按 CSS Color Adjust Level 1 §2.5,UA 会对**没有声明支持
+     *    深色**的页面做自动调整("auto-adjust other colors ... such as by inverting
+     *    their brightness");页面一旦用 `color-scheme`(或同名的 `<meta
+     *    name="color-scheme">`)声明了 dark,这一段自动调整就**不发生**.
+     *
+     * 注意 `!important` 在这里**不管用**:自动反色与强制颜色改写都不是级联的胜负,
+     * 而是 UA 在渲染 / used value 阶段改颜色;唯一的口子是 `forced-color-adjust`
+     * (见 rbt.css 里那棵树那条).
+     *
+     * 写属性而不是写在 `<meta>` 里:与库的示例、主站的 base.css 同一条做法;两者
+     * 规范上都认(§2.1 说 meta 设的是"页面 color scheme",这里设的是根元素那条).
+     */
+    color-scheme: dark;
+
     /* 代码等宽字体栈:输出区与树上的节点值引它 */
     --font-code: var(--code-font-family);
 
