@@ -5,10 +5,16 @@
 解析与性质检查在 rbt_tree.ts(纯逻辑,可单测);本文件只剩两件事:
 - 把布局结果画成一棵 `<svg>`:区间递归分配坐标 + 连线(`<line>`)+ 节点
   (`<g>` 里一颗 `<circle>` 与一个 `<text>`);
-- mountRBT:接管宿主,把"格式检查 -> 性质检查 -> 重绘"接到编辑器 textarea 的
+- mountRBT:接管宿主,用库的 `mountDesktop` 立起桌面(背景 = 那棵树,两扇窗口 =
+  表达式与性质检查),把"格式检查 -> 性质检查 -> 重绘"接到编辑器 textarea 的
   input 事件上.
 
-输入控件是 miko_ui 的 CodeEditor(外框 + 行号 + 词法高亮,标记见 ui/rbt_panel.ts):
+**界面是桌面,不是一个面板**(2026-10 起):从前整块界面是 `createPanel` 的一颗框体,
+树是正文里最后一件;现在树是**桌面背景**,提示 + 编辑器与输出区各成一扇窗口
+(见 ui/rbt_views.ts 的文件头).装配顺序与 miko_graphcalc 同形:
+先建内容(背景 + 逐窗口正文),再 `mountDesktop(host, spec)` 建桌面三层与窗口外壳.
+
+输入控件是 miko_ui 的 CodeEditor(外框 + 行号 + 词法高亮,标记见 ui/rbt_views.ts):
 **值仍然只从 textarea 读**,行号与高亮是库按注入的分词器自己维护的装饰层 -- 本文件
 只多做一件程序化写入的事:载入示例走库的 `seedTextareaSource`,再显式 `refresh()`
 一次(直接赋值不派发 input 事件,装饰层不会自己更新).
@@ -35,13 +41,15 @@
 */
 
 /*
-样式:`tokens.css`(设计令牌)与 `rbt.css`(输入框 / 输出区 / SVG 树的观感)在本模块
-引入(与 SETTING 页 / 地铁车窗同一条做法).
+样式:`tokens.css`(设计令牌)与 `rbt.css`(编辑器 / 输出区 / 背景那棵树 / 桌面根)在
+本模块引入(与 SETTING 页 / 地铁车窗同一条做法).
 */
 import '@/rbt/rbt.css';
 
 import {
     RBT_CLAMP_TOLERANCE,
+    RBT_DESKTOP_INSET,
+    RBT_DESKTOP_WINDOWS,
     RBT_DIAGNOSTICS_ROW_CLASS,
     RBT_DIAGNOSTICS_STATE_CLASS,
     RBT_DIAGNOSTICS_SUMMARY_CLASS,
@@ -75,13 +83,16 @@ import {
     type RbtNode,
     type RbtPropertyReport,
 } from './rbt_tree';
-import { createRbtPanel } from './ui/rbt_panel';
+import { createRbtViews } from './ui/rbt_views';
 import {
+    DEFAULT_DESKTOP_CONFIG,
     childNodes,
     create_element,
     create_svg_element,
+    mountDesktop,
     seedTextareaSource,
     type CodeEditorHandle,
+    type DesktopHandle,
 } from 'miko_ui';
 
 // ============================================================
@@ -285,39 +296,66 @@ function propertyLines(report: RbtPropertyReport): HTMLElement[] {
 }
 
 /**
- * 已挂载的编辑器句柄(按宿主记).
+ * 已挂载的一次桌面(按宿主记).
  *
  * 为什么需要:库的 CodeEditor 在 textarea 上挂着 input / scroll 监听与一个
- * `ResizeObserver`(行号与高亮各一个),`dispose()` 才会拆掉.标记可以靠
- * `replaceChildren` 整块换掉,但**观察者不会随节点离场自动消失** -- 同一颗宿主
- * 重复挂载时要先把上一份编辑器拆掉,否则每挂一次就多留一个观察者(旧节点已不在
- * 文档里,泄漏的是内存与回调,不报错也看不出来).
+ * `ResizeObserver`(行号与高亮各一个),`dispose()` 才会拆掉;桌面那边的窗口外壳
+ * 与三层容器(`.window-layer` / `.snap-preview` / `.dock`)也归 `DesktopHandle`.
+ * 标记可以靠 `replaceChildren` 整块换掉,但**观察者与 window 上的监听不会随节点
+ * 离场自动消失** -- 同一颗宿主重复挂载时要先把上一份桌面与编辑器拆掉,否则每挂
+ * 一次就多留一套窗口、一个观察者与一条 resize 通道(旧节点已不在文档里,泄漏的是
+ * 内存与回调,不报错也看不出来).
  *
- * 键是宿主而不是模块级单例:同一页挂两块面板时各挂各的,互不干扰.
+ * 键是宿主而不是模块级单例:同一页挂两块桌面时各挂各的,互不干扰.
  */
-const mountedEditors = new WeakMap<HTMLElement, CodeEditorHandle>();
+interface MountedRbt {
+    readonly desktop: DesktopHandle;
+    readonly editor: CodeEditorHandle;
+}
+
+const mounted = new WeakMap<HTMLElement, MountedRbt>();
 
 /**
- * 把红黑树面板挂到宿主(页面那唯一一颗手写宿主 `#app`)上.
- * 标记由 rbt_panel.ts 生成并把元素引用交回,所以这里只按引用操作元素,
+ * 把红黑树桌面挂到宿主(页面那唯一一颗手写宿主 `#app`)上.
+ *
+ * 分两步(与 ui/rbt_views.ts 的分工一致):先建内容(桌面背景那棵树 + 逐窗口正文),
+ * 再交给库的 `mountDesktop` 建三层容器与窗口外壳.所以这里只按引用操作元素,
  * 不查 DOM,也没有"找不到元素"的失败路径;绘制在 renderTreeSvg,解析与性质检查在
  * rbt_tree.ts.
  */
 export function mountRBT(host: HTMLElement): void {
-    // 重复挂载同一颗宿主:先拆掉上一份编辑器(见 mountedEditors)
-    mountedEditors.get(host)?.dispose();
+    // 重复挂载同一颗宿主:先拆掉上一份桌面与编辑器(见 MountedRbt)
+    const previous = mounted.get(host);
+    previous?.desktop.dispose();
+    previous?.editor.dispose();
+    mounted.delete(host);
 
-    const panel = createRbtPanel();
-    // 宿主由本模块独占,用 replaceChildren 整体接管:
-    // 重复挂载不会留下两份同 id 的标记(见 clock.ts / oled.ts 的同一条约定).
-    host.replaceChildren(panel.root);
+    // 宿主由本模块独占:清空之后整体接管(桌面三层是 append 进来的,不清会叠两份)
+    host.replaceChildren();
 
-    const editor = panel.editor;
+    const views = createRbtViews();
+    /*
+      立起桌面:库一律用默认值(窗口动作 / 边缘余量 / 标题栏高度 / z / 吸附),
+      应用只覆盖两处 --
+      - `windows`:窗口清单(应用特有的,库不预设);
+      - `edgeGap`:与窗口几何里的 `inset` 是同一个数(见 config 的 RBT_DESKTOP_INSET),
+        改成库的默认值会让"默认离边多远"和"能贴多近"各说各话.
+      背景是那棵树的 `<svg>` 根:它由库 append 到桌面根上,窗口层与任务栏都压在它上面.
+    */
+    const desktop = mountDesktop(host, {
+        ...DEFAULT_DESKTOP_CONFIG,
+        edgeGap: RBT_DESKTOP_INSET,
+        windows: RBT_DESKTOP_WINDOWS,
+        background: [views.tree],
+        content: views.content,
+    });
+
+    const editor = views.editor;
     // 值只从 textarea 读:行号 / 高亮是库按它自己维护的装饰层,不参与解析
     const input = editor.textarea;
-    const outputEl = panel.output;
-    const treeEl = panel.tree;
-    mountedEditors.set(host, editor);
+    const outputEl = views.output;
+    const treeEl = views.tree;
+    mounted.set(host, { desktop, editor });
 
     /**
      * 输出区的写入口:整批替换 #treeOutput 的子节点,空数组就整块 hidden.
@@ -335,7 +373,7 @@ export function mountRBT(host: HTMLElement): void {
         const expr = input.value.trim();
 
         if (expr === '') {
-            // 没输入:说清画布为什么是空的
+            // 没输入:说清桌面上为什么没有树
             renderOutput([textLine(RBT_OUTPUT_HINT_CLASS, RBT_EMPTY_HINT_TEXT)]);
             clearTreeSvg(treeEl);
             return;
@@ -350,12 +388,12 @@ export function mountRBT(host: HTMLElement): void {
                 clearTreeSvg(treeEl);
                 return;
             }
-            // 第 2 步:性质检查写进输出区,画布只画这棵树
+            // 第 2 步:性质检查写进输出区,桌面背景只画这棵树
             renderOutput(propertyLines(checkTreeProperties(rootNode)));
             renderTreeSvg(treeEl, rootNode);
         } catch (err) {
             // 格式检查没过:输出区出一行错误(性质检查的输入都还没有);
-            // 画布清空而不写错误文案 -- 文案一律归 HTML
+            // 背景清空而不写错误文案 -- 文案一律归 HTML
             renderOutput([
                 textLine(RBT_OUTPUT_ERROR_CLASS, `${RBT_ERROR_UI_PREFIX}${(err as Error).message}`),
             ]);
@@ -371,7 +409,7 @@ export function mountRBT(host: HTMLElement): void {
       走库的 `seedTextareaSource` 而不是直接赋值:它是"首屏种子"那条路(编辑器本来
       是空的,没有撤销历史要保,也不抢焦点),语义比 `input.value = ...` 清楚;
       赋值本身不会派发 input 事件,所以装饰层与输出区都得自己叫一次:
-      先 `editor.refresh()`(重算行号 + 重绘高亮,见 ui/rbt_panel.ts 的 editor 说明),
+      先 `editor.refresh()`(重算行号 + 重绘高亮,见 ui/rbt_views.ts 的 editor 说明),
       再 renderTree()。
     */
     seedTextareaSource(input, RBT_TREE_EXAMPLE);

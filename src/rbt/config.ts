@@ -6,28 +6,39 @@
 // 字号 / 线宽全部回到 CSS(src/rbt/tokens.css 的 `--rbt-*` 令牌 +
 // src/rbt/rbt.css 的 `#rbtTree` 区块).从前 `ctx.fillStyle` 读不到 CSS 变量,
 // 这套配色只能写死在这里,那是 canvas 的固有代价.
+//
+// 桌面化(2026-10)之后这里还多一节**窗口清单**:哪些窗口 / 标题叫什么 / 默认几何.
+// 那份数据是库的 `mountDesktop` 的构造参数(类型 `WindowConfigEntry`),所以本文件
+// 只做一次 type-only 导入 -- 类型归库,值归应用,运行时没有依赖.
 // ================================================================
+
+import type { WindowConfigEntry } from 'miko_ui';
+
 
 // ---------- DOM 契约(id,src/rbt/rbt.css 按它命中) ----------
 
 /**
  * 红黑树控件用到的 DOM 元素 id.
- * 标记由 src/rbt/ui/rbt_panel.ts 按本文件的声明生成(id 写入元素再由组件
+ * 标记由 src/rbt/ui/rbt_views.ts 按本文件的声明生成(id 写入元素再由组件
  * 交回引用);这些常量同时给样式(src/rbt/rbt.css 的 `#rbtEditor` /
- * `#treeOutput` / `#rbtTree`)与组件共用.
+ * `#treeOutput` / `#rbtTree` 等)与组件共用.
  *
- * 三个 id 里只有 `#rbtEditor` 是**宿主**:表达式输入从裸 textarea 换成 miko_ui 的
- * CodeEditor 之后,输入框那一格由库的元素组成(外框 / 行号槽 / 高亮层),而库的
- * 外框自己不滚(宽高都随内容长,滚动归装它的那一层),所以我们的样式命中的是
+ * 五个 id 里只有 `#rbtEditor` 是**库组件的宿主**:表达式输入从裸 textarea 换成
+ * miko_ui 的 CodeEditor 之后,输入框那一格由库的元素组成(外框 / 行号槽 / 高亮层),
+ * 而库的外框自己不滚(宽高都随内容长,滚动归装它的那一层),所以我们的样式命中的是
  * 自己那一格宿主,不是库里面的 textarea -- 库的元素上一个 id 都不加,那会把
  * 消费者的 id 变成库的公开 API(见 miko_ui 的 styles/styles.css 文件头).
+ *
+ * 另外两个 `*PanelId` 是**窗口正文根**:桌面化之后滚动归窗口正文
+ * (见 src/rbt/rbt.css 的"滚动归属"一节),它们是各自窗口里唯一会滚的那一层.
  */
 export const RBT_DOM = {
     /**
      * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在它里面).
      *
-     * 它承担三件事:库不给的外边距 / 最小高度,以及**滚动**(长表达式横向滚,
-     * 行号槽 `position: sticky; left: 0` 钉在滚动区左边,这正是库要的宿主形态).
+     * 它承担两件事:库不给的外边距与最小高度.滚动**不在**这里 -- 桌面化之后滚的是
+     * 窗口正文根(`editorPanelId`),行号槽 `position: sticky; left: 0` 钉在那个滚动区
+     * 左边,这正是库要的宿主形态(见 miko_ui 的 styles/editor.css 的"滚动归属").
      */
     editorId: 'rbtEditor',
     /**
@@ -47,18 +58,101 @@ export const RBT_DOM = {
      * 命中检测 / pointer 事件 / CSS transition 全部由浏览器给,颜色能直接引 CSS
      * 令牌(见 src/rbt/tokens.css 的 `--rbt-node-*`),`canvas` 那条路整个不要了.
      * id 由 `canvasId` 改成 `treeId`:名字跟着它现在是什么走,不留一个名不副实的旧 id.
+     *
+     * 桌面化之后它还是**桌面背景**(见 RBT_DESKTOP_WINDOWS 上方的说明):
+     * 这棵 `<svg>` 是所有窗口之下那一层,不再属于任何窗口.
      */
     treeId: 'rbtTree',
+    /**
+     * 表达式窗口正文根的 id:提示区 + 编辑器宿主都在它里面,滚动也归它.
+     *
+     * 桌面化之前滚动归 `#rbtEditor`(宿主自己 `overflow-x: auto`);现在窗口正文根
+     * 是滚动容器(与库的 `styles/editor.css` 的"滚动归属"一致:编辑器自己不滚),
+     * 所以 `#rbtEditor` 只剩外边距与最小高度.
+     */
+    editorPanelId: 'rbtEditorPanel',
+    /**
+     * 性质窗口正文根的 id:唯一输出区 #treeOutput 在它里面,滚动归它.
+     *
+     * 与 `editorPanelId` 分开命名而不是复用同一个 id:同一页只该有一次 id,而这是
+     * 两扇窗口各自的正文根,库要按窗口 id 分别 append.
+     */
+    outputPanelId: 'rbtOutputPanel',
 } as const;
 
-// ---------- 面板标记契约(声明式模型,ui/rbt_panel.ts 用) ----------
+// ---------- 桌面窗口(miko_ui 的 mountDesktop) ----------
 //
-// 结构 / 文案 / id 与 src/rbt/rbt.css 及测试的定位契约一致.框体
-// (section.ui-panel + 标题栏 + 正文容器)由 miko_ui 的 `createPanel` 建,
-// 类名归库;提示区排在正文容器最前(见 ui/rbt_panel.ts).
+// 从前整块界面是一颗 `createPanel` 的框体:提示 / 编辑器 / 输出区 / 树按顺序堆在
+// 同一个正文里.现在同一个内容分成两扇窗口,那棵树搬出窗口、成为**桌面背景** --
+// 与 miko_graphcalc 把 3D 视口当桌面背景是同一条做法(见库 `mountDesktop` 的
+// `background` 参数):窗口层浮在背景之上,背景铺满整块桌面,窗口没盖住的地方
+// 看到的就是它.
+//
+// 这里声明的是**库的** `DesktopConfig.windows` 要的窗口清单(类型
+// `WindowConfigEntry`):id / 标题栏与任务栏文案 / 默认几何 / 最小尺寸.几何用的是
+// 库的锚点词汇(x / y / w / h 每轴一个锚点),锚点 -> 绝对像素是库的
+// `resolveRelativeGeometries` 纯函数的事,本文件只声明"哪扇窗口大概在哪一栏".
+//
+// 两扇窗口各占一栏的左右两条边,中间留给背景那棵树:表达式在左(改表达式时眼睛
+// 在左边),性质检查在右(结论与树同屏).
 
-/** 面板标题(可见文本,全站不用 emoji) */
-export const RBT_PANEL_TITLE = 'Red-Black Tree';
+/** 表达式窗口的 id(库只把它当 Map 的键,值本身在本文件里当字面量用) */
+export const RBT_WINDOW_EDITOR = 'editor';
+
+/** 性质检查窗口的 id(与 RBT_WINDOW_EDITOR 成对,见 ui/rbt_views.ts 的 content) */
+export const RBT_WINDOW_PROPERTIES = 'properties';
+
+/** 应用自己的窗口 id 联合:窗口内容表按它收口,漏一扇窗口编译期就报错 */
+export type RbtWindowId = typeof RBT_WINDOW_EDITOR | typeof RBT_WINDOW_PROPERTIES;
+
+/**
+ * 窗口与桌面上 / 右 / 下边缘的间隙(px).
+ *
+ * **只有一份**:窗口几何的锚点(`inset`)与库的 `DesktopConfig.edgeGap`(窗口夹取
+ * 与边缘吸附用的余量)引的是同一个数 -- 写成两处的话,拖动到边上时"窗口能贴多近"
+ * 与"默认离边多远"会各说各话.
+ */
+export const RBT_DESKTOP_INSET = 16;
+
+/** 窗口默认宽度(px):左右各一栏,中间那条留给桌面背景上的树 */
+export const RBT_WINDOW_WIDTH = 420;
+
+/**
+ * 两扇窗口的声明(数组顺序 = 任务栏按钮顺序 = 初始 z 序).
+ *
+ * 高度用的是两种锚点,各有理由:
+ * - 表达式窗口按工作区高度的比例(`fraction`):编辑器铺满窗口(见 rbt.css 的
+ *   `#rbtEditorPanel`),但整栏高度会把左下方那片桌面背景全盖掉,取一半多一点;
+ * - 性质窗口贴到桌面下沿(`from: 'bottom'`):四条性质是固定长度清单,给它"到边"
+ *   的高度,清单再长也不出内部滚动条.
+ */
+export const RBT_DESKTOP_WINDOWS = [
+    {
+        id: RBT_WINDOW_EDITOR,
+        title: '表达式',
+        dock: { label: '表达式' },
+        defaultGeometry: {
+            x: { at: RBT_DESKTOP_INSET },
+            y: { at: RBT_DESKTOP_INSET },
+            w: { at: RBT_WINDOW_WIDTH },
+            h: { fraction: 0.55, of: 'usableHeight' },
+        },
+        minSize: { w: 300, h: 200 },
+    },
+    {
+        id: RBT_WINDOW_PROPERTIES,
+        title: '性质检查',
+        dock: { label: '性质' },
+        defaultGeometry: {
+            x: { from: 'right', inset: RBT_DESKTOP_INSET },
+            y: { at: RBT_DESKTOP_INSET },
+            w: { at: RBT_WINDOW_WIDTH },
+            // h = 桌面高 - inset - y:底边与桌面下沿对齐(同一条规则,不另算一遍)
+            h: { from: 'bottom', inset: RBT_DESKTOP_INSET },
+        },
+        minSize: { w: 300, h: 180 },
+    },
+] as const satisfies readonly WindowConfigEntry[];
 
 /** 提示区第一行:简写叶子节点说明(可见文本) */
 export const RBT_HINT_SHORTHAND = '支持简写叶子节点 (例如 "5R" 等价于 "5R(nil,nil)")';
@@ -75,7 +169,7 @@ export const RBT_HINT_COLOR_LEGEND = 'R 红色 \u00a0|\u00a0 B 黒色';
  * 表达式编辑器的占位文案(可见文本).
  *
  * 库的 `createCodeEditor` 没有 placeholder 选项(它只认 value / spellcheck /
- * highlight / gutterMinWidth),所以这条由 ui/rbt_panel.ts 写在库交回的 textarea 上
+ * highlight / gutterMinWidth),所以这条由 ui/rbt_views.ts 写在库交回的 textarea 上
  * (`setAttribute`):换掉的是输入控件,提示文案不变.
  */
 export const RBT_INPUT_PLACEHOLDER =
@@ -95,7 +189,7 @@ export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
  * 树绘制 `<svg>` 的 viewBox 尺寸(逻辑坐标,单位同 CSS px).
  *
  * 布局算出来的 x / y 就是 **viewBox 坐标系**里的坐标,SVG 自己按
- * `preserveAspectRatio` 缩放进面板宽度(见 src/rbt/rbt.css 的 `#rbtTree`),
+ * `preserveAspectRatio` 缩放进**整块桌面**(见 src/rbt/rbt.css 的 `#rbtTree`),
  * 所以改这两个值 = 换一块更宽 / 更高的画布,不用动任何布局代码.
  */
 export const RBT_VIEW_BOX_WIDTH = 1200;

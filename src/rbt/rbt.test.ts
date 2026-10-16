@@ -49,7 +49,7 @@ import { mountRBT } from '@/rbt/rbt';
 /** 按 id 取刚挂载出来的元素(取不到说明标记契约变了,直接抛错而不是让断言读 null) */
 function byId<T extends Element>(id: string): T {
     const element = document.getElementById(id);
-    if (!element) throw new Error(`面板里找不到 #${id}`);
+    if (!element) throw new Error(`桌面上找不到 #${id}`);
     return element as unknown as T;
 }
 
@@ -66,7 +66,11 @@ function typeExpression(input: HTMLTextAreaElement, expression: string): void {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-/** 挂一块新面板,交回输入框 / 输出区 / 那棵 SVG(每轮输入前后都拿它读状态) */
+/**
+ * 挂一次桌面(与真页面同形:一颗宿主 + `mountRBT`),交回输入框 / 输出区 / 那棵 SVG
+ * (每轮输入前后都拿它读状态).树现在是**桌面背景**,输出区在性质窗口的正文里,
+ * 两者都不再属于同一颗框体 -- 取它们一律按 id,不按面板结构.
+ */
 function mountPanel(): { input: HTMLTextAreaElement; output: HTMLElement; tree: SVGSVGElement } {
     const host = document.createElement('div');
     document.body.append(host);
@@ -115,7 +119,7 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         const nodes = treeNodes(tree);
         expect(nodes).toHaveLength(31);
         expect(tree.querySelectorAll(`.${RBT_NODE_SHAPE_CLASS}`)).toHaveLength(31);
-        // 节点值全是纯数字(画布上除了节点值没有任何别的文字)
+        // 节点值全是纯数字(背景上除了节点值没有任何别的文字)
         expect(treeLabels(tree).every((label) => /^\d+$/.test(label))).toBe(true);
     });
 
@@ -227,12 +231,17 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
             .toHaveLength(RBT_PROPERTIES.length);
     });
 
-    it('重复挂载同一块宿主不会插出第二棵树(宿主由本模块独占)', () => {
+    it('重复挂载同一块宿主不会叠出第二套桌面(窗口 / 任务栏 / 树都只有一份)', () => {
         const host = document.createElement('div');
         document.body.append(host);
         mountRBT(host);
         mountRBT(host);
 
+        // 上一份桌面被拆掉:窗口外壳与任务栏按钮不叠加,三层容器也只剩一套
+        expect(host.querySelectorAll('.window-layer')).toHaveLength(1);
+        expect(host.querySelectorAll('.window')).toHaveLength(2);
+        expect(host.querySelectorAll('.dock .dock-btn')).toHaveLength(2);
+        // 标记同样只有一份(宿主由本模块独占)
         expect(host.querySelectorAll(`#${RBT_DOM.treeId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`#${RBT_DOM.editorId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
