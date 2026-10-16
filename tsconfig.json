@@ -1,0 +1,46 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "lib": [
+            "ES2020",
+            "DOM",
+            "DOM.Iterable"
+        ],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        /**
+         * `src/` 内的跨目录导入统一走根别名 `@/`.
+         *
+         * 单一来源约束:Vite/Vitest 不读 tsconfig,别名的另一半在 `vite.config.ts` 的
+         * `resolve.alias`,改一处必须同步另一处(只改一边的表现是"编辑器不报错但构建
+         * 失败"或反之).
+         *
+         * 本仓库是 TypeScript 7,`baseUrl` 已被移除(会报 TS5102),所以 `paths` 的
+         * 目标必须写成 `./src/*` 这种带 `./` 的相对模式,写成 `src/*` 会报 TS5090.
+         */
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        },
+        "strict": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "allowJs": false,
+        "checkJs": false,
+        "types": [
+            "node"
+        ]
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.d.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}

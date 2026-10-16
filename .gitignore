@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vscode
+__pycache__/
+
+# miko_ui 从 npm 装进 node_modules/,本仓库没有它的本地副本.
+# 本地联调库(改 miko_ui 源码)时可以把 node_modules/miko_ui 换成指向工作副本的
+# 符号链接:那种情况下 Vite 的 server.fs.allow 默认只放行工作区根,库样式表里
+# url() 引的三份 woff2 是纯静态资源请求(按链接解析后的真实路径过白名单),会 403
+# 并**静默**退回回退字体 -- 要联调就自己在 vite.config.ts 的 server.fs.allow 里
+# 追加那份副本的路径(主站就是这么做的).

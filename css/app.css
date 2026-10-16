@@ -1,0 +1,56 @@
+/*
+应用层样式:页面基线 + 从主站继承下来的两条应用级令牌.
+
+为什么令牌在这里:`src/rbt/*.css` 是从主站逐字搬来的,它引的两条令牌 `--font-code` 与
+`--card-width` 原本定义在主站的 `public/css/tokens.css`(站点层,跨模块共用的排版口径).
+独立项目没有那一层,就在这里补一份等价定义,让 `rbt.css` / `tokens.css` 一个字节都不用改.
+
+`--font-code` 引的是库的代码面令牌(`--code-font-family`),字体文件与 `@font-face` 随
+`miko_ui` 发布,本项目不自带字体.
+
+文档基线(盒模型 / body 底色与字体)也在这里:主站那份在 `public/css/index.css`,
+本项目只留红黑树用得到的那几条.
+*/
+:root {
+    /* 代码等宽字体栈:表达式输入框与树上的节点值引它 */
+    --font-code: var(--code-font-family);
+    /* 面板 / 输入框占满可用宽度的口径(rbt.css 的 `#treeInput` 引它) */
+    --card-width: 100%;
+
+    /* 页面底色 / 正文色:与主站的 --bg-page / --text-page 同值,搬过来保持观感一致 */
+    --app-bg-page: #212529;
+    --app-text-page: #dee2e6;
+}
+
+/*
+ * 全站盒模型.必须留着:主站在这一点上是同一条基线,`#treeInput` 的
+ * `width: var(--card-width)` 加上 1.5px 描边,少了 border-box 就会横向溢出 3px.
+ */
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--app-bg-page);
+    color: var(--app-text-page);
+    /*
+     * 字体给到 body 是必要的:`rbt_panel.ts` 建的两行提示区没有类名也没有字体规则,
+     * 全靠继承;不写这一条会掉进浏览器默认的衬线字体(与主站观感不一致).
+     * 库的 tokens.css 在 main.ts 里先于本文件引入,所以这个令牌一定解析得到.
+     */
+    font-family: var(--font-family-base);
+    line-height: 1.5;
+}
+
+/* 面板宿主:定尺居中,窄屏留边;面板自己按 --card-width = 100% 铺满它 */
+#app {
+    width: min(1100px, 92vw);
+    margin: 0 auto;
+    padding: 24px 0 48px;
+}
