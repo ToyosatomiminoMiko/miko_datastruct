@@ -19,6 +19,13 @@
 就是树本身.两扇窗口内部再按"输入 / 说明 + 结果"分:编辑器独占一扇(整高都是输入区),
 两行说明(简写语法 / 配色图例)与本轮输出同处一栏,说明在上、结果在下.
 
+背景与桌面根的口径**由库定**(2026-10,与 `miko_graphcalc`、库的示例三方对齐):
+`#rbtTree` 挂库的 `.desktop-background`(铺满桌面根、压在三层容器之下、底色取
+`--color-bg-desktop`),`#app` 的 `position: relative` 与 `overflow: hidden` 由库的
+`.desktop-root` 给,应用侧不再各写一份定位样板.本应用只做两件事:树的绘制,以及
+**覆盖桌面底色**(`css/app.css` 的 `--color-bg-desktop: #212529`,与主站同值)--
+覆盖库的 token,而不是再造一个 `--app-bg-page` 之类的名字.
+
 这个目录是**从主站拆出来的**([ToyosatomiminoMiko.github.io](../../)):`src/rbt/` 下的
 源码与测试搬自主站的 `src/rbt/`,拆出来时**没有改任何功能** —— 只是把"长在主站标签页
 窗格里"改成"长在自己页面的一颗宿主上".之后的两次功能改动是表达式输入换成库的
@@ -35,6 +42,20 @@ npm run typecheck  # tsc --noEmit
 npm run build      # clean -> test -> typecheck -> vite build(产物在 dist/)
 npm run preview    # 预览 dist/
 ```
+
+改库(`miko_ui`)时不必发版:本地把解析目标换成工作副本,与 `miko_graphcalc` 同一套
+做法(同一份脚本,见 `scripts/dev_ui_link.py` 的模块说明):
+
+```bash
+npm run ui:link    # node_modules/miko_ui -> ../miko_ui(可用 MIKO_UI_DIR 覆盖)
+npm run ui:status  # 看现在解析到 npm 版还是本地副本
+npm run ui:unlink  # 还原成 npm 版(按 lock 重装)
+```
+
+两条都只动被忽略的 `node_modules/`,不碰 `package.json` 与 `package-lock.json`,所以
+CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立即生效**;
+库的 `src/` 要先编译进 `dist/`(`cd ../miko_ui && npm run build:dist`,或在库里常驻
+`npx tsc -p tsconfig.build.json --watch`).
 
 `vite.config.ts` 的 `base` 是部署路径的**唯一开关**(现在写成 `/miko_datastruct/`,
 与仓库名一致);换仓库名或换子路径只改那一处.
@@ -53,6 +74,7 @@ src/rbt/ui/rbt_highlight.ts 表达式分词 -> 高亮 HTML(纯函数,注入给�
 src/rbt/tokens.css      设计令牌(--rbt-*:窗口正文内边距 / 编辑器尺寸 / 输出区与树 / 词法着色)
 src/rbt/rbt.css         观感(桌面背景那棵树 / 窗口正文滚动区 / 编辑器宿主 / 输出区 / 词法着色)
 src/test_support/       标记契约测试的两个小助手(renderHost / expectNoDuplicateIds)
+scripts/dev_ui_link.py  本地联调:miko_ui 换成指向工作副本的软链(link / unlink / status)
 ```
 
 跨目录导入一律用源码根别名 `@/`(`@/rbt/config`,`@/test_support/desktop_test_helpers`);

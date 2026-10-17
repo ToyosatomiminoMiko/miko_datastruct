@@ -148,11 +148,16 @@ export function createRbtViews(): RbtViews {
       有据可依(见 rbt.css 的 `#rbtTree`:宽高都是 100%,比例由 viewBox +
       preserveAspectRatio 管).`preserveAspectRatio` 是 SVG 默认值,写出来是因为
       它决定了"缩放时不裁切"这件事,改 CSS 尺寸的人得看得见这条前提.
+
+      `class: 'desktop-background'` 是库给背景节点的可选类(见 miko_ui 的
+      styles/desktop.css):定位(铺满桌面根、压在三层容器之下)与桌面底色由它统一,
+      本应用只补"画什么"(节点 / 连线在 rbt.ts 里落笔).
     */
     const tree = create_svg_element(
         { tag: 'svg' },
         {
             id: RBT_DOM.treeId,
+            class: 'desktop-background',
             viewBox: RBT_VIEW_BOX,
             preserveAspectRatio: 'xMidYMid meet',
             width: String(RBT_VIEW_BOX_WIDTH),

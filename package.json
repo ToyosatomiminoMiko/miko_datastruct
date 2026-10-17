@@ -17,6 +17,9 @@
   },
   "scripts": {
     "dev": "vite",
+    "ui:link": "python3 scripts/dev_ui_link.py link",
+    "ui:unlink": "python3 scripts/dev_ui_link.py unlink",
+    "ui:status": "python3 scripts/dev_ui_link.py status",
     "clean": "node -e 'const fs = require(\"node:fs\"); fs.rmSync(\"dist\", { recursive: true, force: true });'",
     "build:app": "npm run typecheck && vite build",
     "build:all": "npm run clean && npm test && npm run build:app",

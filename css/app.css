@@ -40,8 +40,18 @@
     /* 代码等宽字体栈:输出区与树上的节点值引它 */
     --font-code: var(--code-font-family);
 
-    /* 页面底色 / 正文色:与主站的 --bg-page / --text-page 同值,搬过来保持观感一致 */
-    --app-bg-page: #212529;
+    /*
+     * 桌面底色 = 覆盖库的 `--color-bg-desktop`(库默认为 `--color-bg-app`),值取自
+     * 主站的 `--bg-page`(#212529),保持与主站一致的观感.
+     *
+     * 为什么是"覆盖库的 token"而不是"再造一个 --app-bg-page":桌面底色只能有一个
+     * 名字(库的 `--color-bg-desktop`,见 miko_ui 的 styles/tokens.css 与
+     * styles/desktop.css),否则树背景 / body / 将来的自绘背景各认一个,改配色就会
+     * 漏掉其中一处.应用要换色就覆盖它 -- 这正是 token 层开放覆盖的那条约定.
+     */
+    --color-bg-desktop: #212529;
+
+    /* 正文色:与主站的 --text-page 同值,搬过来保持观感一致 */
     --app-text-page: #dee2e6;
 }
 
@@ -61,7 +71,8 @@ body {
 
 body {
     margin: 0;
-    background: var(--app-bg-page);
+    /* 与桌面底色同一个 token:桌面铺满视口,body 这一层只是首帧 / 桌面之外的兜底 */
+    background: var(--color-bg-desktop);
     color: var(--app-text-page);
     /*
      * 字体给到 body 是必要的:`rbt_views.ts` 建的提示区没有类名也没有字体规则,
@@ -73,21 +84,19 @@ body {
 }
 
 /*
- * 应用根 = **桌面**:铺满视口,自己是所有绝对定位层(树背景 / 窗口层 / 任务栏)的
- * 定位参照.
+ * 应用根 = **桌面**:铺满视口,树背景 / 窗口层 / 任务栏都长在它里面.
  *
  * 从前的两条(定尺居中 `min(1100px, 92vw)` 与上下 padding)是"面板挂在页面上"的写法,
  * 桌面化之后不再适用:窗口几何由库的 WindowManager 按 `clientWidth/clientHeight` 算成
  * 行内像素,宿主要有确定的尺寸,居中留边只会让窗口算法按错误的桌面尺寸摆窗口.
- * `position: relative` 也是必须的 -- 背景 `#rbtTree` 是 `position: absolute; inset: 0`,
- * 少了它就会以初始包含块(视口)为参照,而不是以桌面为参照.
  *
- * `overflow: hidden`:桌面不滚动.窗口被夹在桌面里(库的 `edgeKeep` / `edgeGap`),
- * 内容各自在自己的正文根里滚,所以桌面这一层永远不该出现滑条.
+ * 这一层只剩**尺寸**:`position: relative`(背景 `#rbtTree` 与窗口层都是
+ * `absolute; inset: 0`,少了定位参照就会以初始包含块(视口)为参照)与
+ * `overflow: hidden`(桌面不滚动,滑条会改变几何读到的 `clientWidth/Height`)由库的
+ * `.desktop-root` 给 -- 库在 `mountDesktop()` 里挂这个类,不再由每个应用各抄一遍
+ * (见 miko_ui 的 styles/desktop.css 的"桌面骨架").
  */
 #app {
-    position: relative;
     width: 100vw;
     height: 100vh;
-    overflow: hidden;
 }

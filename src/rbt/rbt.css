@@ -203,19 +203,21 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  */
 
 /*
- * 整棵树的画布 = **桌面背景**:铺满宿主 #app(z-index: 0),窗口层与任务栏都压在它上面.
+ * 整棵树的画布 = **桌面背景**(`mountRBT` 经 `mountDesktop(host, { background })`
+ * 把它 append 到桌面根上;节点挂着库的 `.desktop-background`).
+ *
+ * 应用这一侧只剩两件:**尺寸**,以及"它是块级元素"这一条(SVG 默认 inline).
  *
  * 宽高都是 100% 而不是"按宽度等比":桌面不是面板,没有"宽度决定高度"这回事;比例由
  * viewBox 与 `preserveAspectRatio: xMidYMid meet` 负责 -- 整棵树在桌面上等比放大、
  * 居中、**不裁切**(窗口没盖住的地方看到的就是它).
  *
- * `position: absolute` + `z-index: 0` 是必要的:窗口层(.window-layer)由库带着
- * z-index 落进 #app,背景不定位的话会按文档流排在窗口层之前、被它整块盖住.
+ * 定位(铺满桌面根)与桌面底色归库的 `.desktop-background`(见 miko_ui 的
+ * styles/desktop.css):这两条对所有"主视口当背景"的应用是同一套口径,不该每个
+ * 应用各写一遍.`display: block` 是本应用要的 -- SVG 默认 inline,不写会在树下面
+ * 留出基线缝.
  */
 #rbtTree {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
     display: block;
     width: 100%;
     height: 100%;
