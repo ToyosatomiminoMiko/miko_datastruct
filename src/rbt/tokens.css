@@ -7,10 +7,11 @@
 编辑器**外框自己**的观感(底色 / 描边 / 圆角 / 行号槽色)不在这里:那是库的
 miko_ui/styles/editor.css 与它读的库令牌,本项目一条都不覆盖(见 rbt.css 的说明).
 
-跨语言契约(改一处必须改两处,不一致时不会有任何报错):
-  - `--rbt-node-radius` 与 `src/rbt/config.ts` 的 `RBT_NODE_RADIUS` 必须相等:
-    布局拿它算最小间距 / 安全边距与内容包围盒(节点该放哪、围多大),这里拿它画圆
-    (节点多大).
+跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):
+  - `--rbt-node-radius` 只在 CSS 这一侧定义:TS 已经不关心半径(内容实际占多大由
+    渲染层落笔后向浏览器要 `getBBox()`,见 ui/rbt_render.ts).唯一要守住的是
+    `src/rbt/config.ts` 的 `RBT_MIN_HORIZONTAL_GAP` 必须大于 2 × 这个半径,否则
+    同层相邻的两个圆会叠在一起.
 
 进入动画的时长**只有 CSS 一处**(`--rbt-node-enter-duration`):动画是纯 CSS 的(挂在
 圆与节点值上,见 rbt.css),TS 侧不参与,所以它不是跨语言契约 -- 从前这里写着"与
@@ -64,9 +65,9 @@ config.ts 里那条同名常量是同一件事",那条常量早已不存在,别�
      * fill / stroke / font 都吃令牌(canvas 的 ctx.fillStyle 读不到自定义属性,
      * 从前这套配色只能写死在 src/rbt/config.ts).
      *
-     * --rbt-node-radius 与 TS 的 RBT_NODE_RADIUS 必须相等:布局拿它算最小间距与
-     * 安全边距(节点该放哪),这里拿它画圆(节点多大).改一处要改两处,不一致的
-     * 表现是节点之间该留的空没留够,不会有任何报错.
+     * 半径只写在 CSS 这一侧:TS 不读它(内容占多大由浏览器 getBBox 量,节点彼此
+     * 离多远由 config 的 RBT_MIN_HORIZONTAL_GAP 管).零成本的一致性检查只有一条:
+     * 直径 2 × 22px 要小于 RBT_MIN_HORIZONTAL_GAP(70),否则圆会叠.
      */
     --rbt-node-radius: 22px;
     /*

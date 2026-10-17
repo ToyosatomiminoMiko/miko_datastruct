@@ -53,8 +53,8 @@ preventDefault 掉的是那串兼容鼠标事件(dblclick 正在其中,能不能
 ## 分工与不做的事
 
 本模块不认识树:它只认识"一块内容包围盒 + 一块视口矩形 + 三种手势".包围盒由
-ui/rbt_layout.ts 的布局给,`<g>` 由 ui/rbt_views.ts 建,绑在谁身上、什么时候拆由
-rbt.ts 的 mountRBT 管.
+ui/rbt_render.ts 落笔后向浏览器 `getBBox()` 量来(见 drawTree),`<g>` 由
+ui/rbt_views.ts 建,绑在谁身上、什么时候拆由 rbt.ts 的 mountRBT 管.
 
 不做(留作后续,真要时再加):触摸双指捏合(需要自己管多指针,库的拖动是单指针)、
 小地图 / 比例尺、缩放到某个节点、惯性滑动.
@@ -95,7 +95,8 @@ export interface RbtViewState {
 /**
  * 平面上的一块矩形(世界坐标或屏幕像素,由调用方决定;本模块只用它的算术).
  *
- * 三种用途共用同一形状:内容的包围盒(布局给)、视口可用区(视口给)、适应计算的输入.
+ * 三种用途共用同一形状:内容的包围盒(渲染层用 `getBBox()` 量给)、视口可用区(视口给)、
+ * 适应计算的输入.
  * 视口那块的 `minX` / `minY` 恒为 0(它的原点就是它自己).
  */
 export interface RbtPlaneBox {

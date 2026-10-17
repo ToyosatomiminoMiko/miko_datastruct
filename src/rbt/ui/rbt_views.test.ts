@@ -14,7 +14,7 @@
  *    `ui-scrollbar`,窗口标题与任务栏文案来自 config 的窗口清单.
  *
  * `src/rbt/rbt.css` 按 `#rbtViewport` / `#rbtTree` / `#rbtEditorPanel` /
- * `#rbtOutputPanel` / `#rbtEditor` / `#treeOutput` 命中;平面几何(叶子节距 / 视口参数)与
+ * `#rbtOutputPanel` / `#rbtEditor` / `#treeOutput` 命中;平面几何(布局参数 / 视口参数)与
  * 窗口清单都来自 config.逐字文案(三行提示里的 U+00A0 与「黒」)一并钉住:顺手改掉就会
  * 变成静默的文案漂移.
  *

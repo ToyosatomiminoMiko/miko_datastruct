@@ -173,9 +173,10 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         /*
           世界层的 transform 由视口句柄写(见 ui/rbt_viewport.ts).
 
-          happy-dom 里量不出视口尺寸(host.clientWidth 恒为 0),适应给不出比例,于是
-          落在恒等视角上 -- 这一层钉的是"属性一定被写过、格式就是 translate + scale",
-          真机上的适应比例不在这一层验.
+          happy-dom 不做排版:`world.getBBox()` 恒为空矩形,drawTree 交回 null,rbt.ts
+          因此不报包围盒(见 ui/rbt_render.test.ts);就算报了,host.clientWidth 也是 0.
+          两层兜底叠在一起,世界层停在视口挂载时写的恒等视角上 -- 这一层钉的是"属性
+          一定被写过、格式就是 translate + scale",真机上的适应比例不在这一层验.
         */
         expect(world?.getAttribute('transform')).toBe('translate(0 0) scale(1)');
     });

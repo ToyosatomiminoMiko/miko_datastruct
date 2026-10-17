@@ -17,8 +17,8 @@
 建桌面三层与窗口外壳.
 
 **树画在"平面"里,平面由一块可拖动缩放的视口看着**(2026-10 起):布局算出来的
-x / y 是**平面坐标**(单位 = 屏幕像素 @ 缩放 1),平面本身无限大 -- 水平跨度由叶子
-数推(见 ui/rbt_layout.ts),垂直方向深一层就往下走一步.树上的东西全部落进世界层
+x / y 是**平面坐标**(单位 = 屏幕像素 @ 缩放 1),平面本身无限大 -- 布局只保证同层节点
+彼此不撞(见 ui/rbt_layout.ts),不预设画布多大.树上的东西全部落进世界层
 `<g class="rbt-world">`,视口只改这一层的 `transform`(见 ui/rbt_viewport.ts);
 画完一次把内容的**包围盒**交给视口,由它决定"装进视口并居中"(用户没手动挪过视角
 时).
@@ -237,11 +237,13 @@ export function mountRBT(host: HTMLElement): void {
             }
             // 第 2 步:性质检查写进输出区,平面里只画这棵树
             renderOutput(propertyLines(checkTreeProperties(rootNode)));
-            // 第 3 步:布局 -> 落笔 -> 把这块内容的包围盒报给视口(用户没手动挪过
-            // 视角时,视口按它适应并居中)
+            // 第 3 步:布局 -> 落笔 -> 把落笔后量到的实际包围盒报给视口(用户没手动挪过
+            // 视角时,视口按它适应并居中).量不到(测试环境)就不动视角.
             const layout = layoutTree(rootNode);
-            drawTree(worldEl, layout);
-            viewport.contentChanged(layout.bounds);
+            const bounds = drawTree(worldEl, layout);
+            if (bounds !== null) {
+                viewport.contentChanged(bounds);
+            }
         } catch (err) {
             // 格式检查没过:输出区出一行错误(性质检查的输入都还没有);
             // 背景清空而不写错误文案 -- 文案一律归 HTML

@@ -193,8 +193,9 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  *
  *   - 观感全在这一块里,颜色引本目录 tokens.css 的 --rbt-node-* / --rbt-edge-*(换配色
  *     不用碰 TS);
- *   - 圆的大小按 --rbt-node-radius 画,而 TS 侧只算"圆该在哪"(布局).两边半径必须
- *     相等,理由写在本目录 tokens.css 的 --rbt-node-radius 上方;
+ *   - 圆的大小按 --rbt-node-radius 画,而 TS 侧只算"圆该在哪"(布局)、不再算"围多大"
+ *     (内容包围盒由浏览器 getBBox 量,见 ui/rbt_render.ts).半径与布局唯一的约束是
+ *     "直径要小于 RBT_MIN_HORIZONTAL_GAP",见 tokens.css 的 --rbt-node-radius 上方;
  *   - 缩放交给世界层的 transform(见 ui/rbt_viewport.ts 的 planeViewTransform),
  *     不必再管 dpr:SVG 是矢量,放大多少都是浏览器重新光栅化.
  *
