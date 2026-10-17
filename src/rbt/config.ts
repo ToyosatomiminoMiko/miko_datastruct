@@ -21,9 +21,9 @@ import type { WindowConfigEntry } from 'miko_ui';
  * 红黑树控件用到的 DOM 元素 id.
  * 标记由 src/rbt/ui/rbt_views.ts 按本文件的声明生成(id 写入元素再由组件
  * 交回引用);这些常量同时给样式(src/rbt/rbt.css 的 `#rbtEditor` /
- * `#treeOutput` / `#rbtTree` 等)与组件共用.
+ * `#treeOutput` / `#rbtViewport` / `#rbtTree` 等)与组件共用.
  *
- * 五个 id 里只有 `#rbtEditor` 是**库组件的宿主**:表达式输入从裸 textarea 换成
+ * 六个 id 里只有 `#rbtEditor` 是**库组件的宿主**:表达式输入从裸 textarea 换成
  * miko_ui 的 CodeEditor 之后,输入框那一格由库的元素组成(外框 / 行号槽 / 高亮层),
  * 而库的外框自己不滚(宽高都随内容长,滚动归装它的那一层),所以我们的样式命中的是
  * 自己那一格宿主,不是库里面的 textarea -- 库的元素上一个 id 都不加,那会把
@@ -33,6 +33,16 @@ import type { WindowConfigEntry } from 'miko_ui';
  * (见 src/rbt/rbt.css 的"滚动归属"一节),它们是各自窗口里唯一会滚的那一层.
  */
 export const RBT_DOM = {
+    /**
+     * 平面视口 `#rbtViewport`:桌面背景那一层,里面只有那棵树的 `<svg>`.
+     *
+     * 它是**视口**,`#rbtTree` 是**画布**:裁切、光标、指针手势(拖动 / 滚轮)都归这一
+     * 层,svg 退回 1:1 的绘制面(理由见本文件"平面与视口"一节,以及 ui/rbt_views.ts).
+     * 为什么不让 svg 自己当视口:库的口径是"背景节点挂 `.desktop-background`,绘制与
+     * 尺寸归消费者",而一根 div 的裁切 / 光标 / `touch-action` 比 SVG 根更少歧义;将来
+     * 视口上要加的浮层(比例 / 复位按钮)也有现成的父亲.
+     */
+    viewportId: 'rbtViewport',
     /**
      * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在它里面).
      *
@@ -54,15 +64,16 @@ export const RBT_DOM = {
      */
     outputId: 'treeOutput',
     /**
-     * 树绘制 `<svg>` 根的 id.
+     * 树绘制 `<svg>` 根的 id(**世界坐标的画布**,不是视口).
      *
      * 从前这里是 `rbCanvas`(canvas 2D).换成 SVG 之后树是**文档里的元素**:
      * 命中检测 / pointer 事件 / CSS transition 全部由浏览器给,颜色能直接引 CSS
      * 令牌(见 src/rbt/tokens.css 的 `--rbt-node-*`),`canvas` 那条路整个不要了.
      * id 由 `canvasId` 改成 `treeId`:名字跟着它现在是什么走,不留一个名不副实的旧 id.
      *
-     * 桌面化之后它还是**桌面背景**(见 RBT_DESKTOP_WINDOWS 上方的说明):
-     * 这棵 `<svg>` 是所有窗口之下那一层,不再属于任何窗口.
+     * 平面化(2026-10)之后它**不再自己缩放**:没有 viewBox,宽高由视口那一层给
+     * (`width/height: 100%`),一个用户单位就是一个 CSS 像素.树挂在这颗 svg 里唯一
+     * 的世界层 `<g>` 上,视口改的是那一层的 transform(见 RBT_WORLD_CLASS).
      */
     treeId: 'rbtTree',
     /**
@@ -72,7 +83,7 @@ export const RBT_DOM = {
      * 是滚动容器(与库的 `styles/editor.css` 的"滚动归属"一致:编辑器自己不滚),
      * 所以 `#rbtEditor` 只负责占满窗口高度.
      *
-     * 提示区不在这里:那两行是静态说明,与"这一轮输入"无关,已经搬到性质检查窗口
+     * 提示区不在这里:那是静态说明,与"这一轮输入"无关,已经搬到性质检查窗口
      * 的正文最前(见下面的 RBT_HINT_BOX_CLASS 与 ui/rbt_views.ts 的 outputPanel).
      */
     editorPanelId: 'rbtEditorPanel',
@@ -95,7 +106,7 @@ export const RBT_DOM = {
 //
 // 两扇窗口各装什么(见 ui/rbt_views.ts):
 // - 表达式窗口:只有编辑器宿主.输入是这一扇窗口唯一要做的事,窗口高度全给输入区;
-// - 性质检查窗口:提示区(两行静态说明)在上,唯一输出区 #treeOutput 在下.
+// - 性质检查窗口:提示区(静态说明)在上,唯一输出区 #treeOutput 在下.
 //   静态说明与"这一轮的结果"同处一窗,读结论时语法就在同一栏顶部.
 //
 // 这里声明的是**库的** `DesktopConfig.windows` 要的窗口清单(类型
@@ -164,14 +175,14 @@ export const RBT_DESKTOP_WINDOWS = [
     },
 ] as const satisfies readonly WindowConfigEntry[];
 
-// ---------- 提示区(性质检查窗口正文顶部那两行静态说明) ----------
+// ---------- 提示区(性质检查窗口正文顶部那静态说明) ----------
 //
 // 提示区是**静态文案**:简写语法与配色图例说的是"这套表达式怎么读",与这一轮的输入
 // 无关,所以它不进 #treeOutput(那里每轮整批重建),而是自己一块元素,排在性质检查
 // 窗口正文的最前、输出区之上(见 ui/rbt_views.ts 的 outputPanel).
 //
 // 为什么不在表达式窗口:那个窗口只留编辑器 -- 整扇窗口的高度都给输入区,光标与
-// 选区不被两行说明挤开;说明挪到"看结果"的那扇窗口里,读结论时语法就在同一栏顶部.
+// 选区不被说明挤开;说明挪到"看结果"的那扇窗口里,读结论时语法就在同一栏顶部.
 
 /**
  * 提示区外框的类名(样式见 src/rbt/rbt.css 的 `.rbt-hints`).
@@ -194,6 +205,15 @@ export const RBT_HINT_SHORTHAND = '支持简写叶子节点 (例如 "5R" 等价�
 export const RBT_HINT_COLOR_LEGEND = 'R 红色 \u00a0|\u00a0 B 黒色';
 
 /**
+ * 提示区第三行:背景平面的操作说明(可见文本).
+ *
+ * 为什么值得占一行:平面视口的三种操作(拖动 / 滚轮 / 双击)**在界面上没有任何控件**,
+ * 不写出来就只能靠用户乱试;它跟上面两行同处一栏(说明在上、结果在下),读结论时
+ * 顺手就能看到怎么看这棵树.
+ */
+export const RBT_HINT_VIEWPORT = '背景平面:拖动平移、滚轮缩放、双击适应视口';
+
+/**
  * 表达式编辑器的占位文案(可见文本).
  *
  * 库的 `createCodeEditor` 没有 placeholder 选项(它只认 value / spellcheck /
@@ -213,20 +233,96 @@ export const RBT_INPUT_PLACEHOLDER =
  */
 export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
 
+// ---------- 平面与视口(世界坐标 -> 屏幕像素) ----------
+//
+// 2026-10:那棵树从"一块定尺画布"变成**平面空间**里的一份内容,于是这里不再有
+// viewBox 尺寸,换成一组视口参数.
+//
+// 从前 `#rbtTree` 是 `viewBox="0 0 1200 640"` + `preserveAspectRatio` 的定尺画布:
+// 布局先把树压进这块 1200×640 的框(越界坐标被钳回来),浏览器再把整块框等比缩到
+// 桌面.两个后果:深一点的树被钳到挤在一起,小树却在一整块空框里显小 -- 画布尺寸
+// 与树的内容无关.
+//
+// 现在的口径(实现见 ui/rbt_viewport.ts):
+//   - **布局算出来的 x / y 就是平面坐标**(单位 = 屏幕像素 @ k=1);`<svg>` 不再有
+//     viewBox,它是 1:1 的画布,一个用户单位就是一个 CSS 像素;
+//   - 树上的一切(连线 / 节点)挂在一层 `<g class="rbt-world">` 里,视口只改这一层的
+//     `transform = translate(x y) scale(k)`.世界坐标是内容自己的坐标,与"桌面多大"
+//     无关,所以平面是无限大的(裁剪由视口给);
+//   - **没有坐标系**:不画网格 / 轴 / 刻度,平面的底色就是桌面底色(见 rbt.css).
+//
+// 视口 = 桌面背景那一块 `#rbtViewport`:铺满桌面、裁掉外面的内容、收指针事件;窗口层
+// 与任务栏压在它上面,窗口没盖住的地方就是平面本身.
+//
+// 今天只有**水平跨度**需要一个"平方面积"的输入:区间分配法把水平空间按叶子分,叶子
+// 越多跨度越大,所以宽度由叶子数推出来(见 rbt.ts 的 planeWidth);垂直方向不设上限
+// (深一层就往下走一步),平面的高度由内容的实际包围盒给出.
+
 /**
- * 树绘制 `<svg>` 的 viewBox 尺寸(逻辑坐标,单位同 CSS px).
+ * 叶子节距(px):平面水平跨度 = 叶子数 × 这个值(但不少于"叶子数 × 最小间距").
  *
- * 布局算出来的 x / y 就是 **viewBox 坐标系**里的坐标,SVG 自己按
- * `preserveAspectRatio` 缩放进**整块桌面**(见 src/rbt/rbt.css 的 `#rbtTree`),
- * 所以改这两个值 = 换一块更宽 / 更高的画布,不用动任何布局代码.
+ * 70 不是随手给的:从前那块 1200×640 的定尺画布减去左右安全边距之后,正好是 16 片
+ * 叶子各摊到 ~70px -- 也就是深度 4 的示例树今天的观感.改成按内容推宽度之后,示例树
+ * 看着与从前一致,而更宽的树(叶子更多)会自己长出去,不再被钳回来.
+ *
+ * 与 RBT_MIN_HORIZONTAL_GAP 的关系:两者都参与"每片叶子摊多宽",取大者 -- 节距是
+ * **观感想要的**间距,最小间距是**几何必须的**下限(圆不重叠),叶子特别多时按后者
+ * 兜底(见 rbt.ts 的 planeWidth).
  */
-export const RBT_VIEW_BOX_WIDTH = 1200;
-export const RBT_VIEW_BOX_HEIGHT = 640;
+export const RBT_LEAF_PITCH = 70;
 
-/** `<svg>` 的 viewBox 属性值(`min-x min-y width height`,固定从原点起) */
-export const RBT_VIEW_BOX = `0 0 ${RBT_VIEW_BOX_WIDTH} ${RBT_VIEW_BOX_HEIGHT}`;
+/** 适应视口时内容四周的留白(px,屏幕像素):树不贴着视口边缘 */
+export const RBT_PLANE_FIT_PADDING = 48;
 
-// ---------- 布局几何(单位:viewBox 坐标) ----------
+/**
+ * 自动适应(setFit)时允许的最大缩放:1 = 不放大.
+ *
+ * 三节点的小树,包围盒比视口小得多,不设上限的话首屏会把它吹成一屏大的三个圆.
+ * 1:1 是这类结构图最自然的默认观感;要看大就自己滚轮放大(手动缩放的窗口见
+ * RBT_MIN_ZOOM / RBT_MAX_ZOOM).
+ */
+export const RBT_FIT_MAX_ZOOM = 1;
+
+/** 手动缩放的上下限:下限够看很深的树(256 片叶子 ≈ 0.08),上限够盯一个节点 */
+export const RBT_MIN_ZOOM = 0.05;
+export const RBT_MAX_ZOOM = 4;
+
+/**
+ * 滚轮灵敏度:像素 delta 每 1px,缩放 `e^(-delta × 这个值)` 倍.
+ *
+ * 用指数而不是加法:缩放是**乘性**的,同样一格滚轮在 0.1 与 2 两档下该放大同样的
+ * 比例(加法在 0.1 档下一格跳一大截,在 2 档下几乎不动).0.0015 让一格 100px 的
+ * 滚轮 ≈ 1.16 倍.
+ */
+export const RBT_WHEEL_ZOOM_SENSITIVITY = 0.0015;
+
+/**
+ * wheel 事件的 deltaMode 归一化:把"行 / 页"折算成像素.
+ *
+ * 为什么必须折:同一个滚轮在 Chrome 上是 `deltaMode = 0`(像素,一格约 100),在
+ * Firefox 上是 `deltaMode = 1`(行,一格 3) -- 不折的话 Firefox 上一格只放大
+ * 0.5%,等于不响应.两个数按各自的常见约定取值,不追求精确,只求量级一致.
+ */
+export const RBT_WHEEL_LINE_PIXELS = 16;
+export const RBT_WHEEL_PAGE_PIXELS = 800;
+
+/**
+ * 双击判定间隔(ms):两次按下挨得比它近 = 双击"适应视口".
+ *
+ * 判定发生在**起手之前**(与库的窗口标题栏双击同一条口径,见 miko_ui 的
+ * shared/dragGesture.ts 的 `canStart`):是双击就不起手拖动,也不 preventDefault.
+ */
+export const RBT_DOUBLE_PRESS_MS = 320;
+
+/**
+ * 世界层的类名:树上所有连线 / 节点都挂在这一层 `<g>` 里,视口只改它的 transform.
+ *
+ * 它是**跨语言契约**:ui/rbt_views.ts 建它,测试按它断言"结构与世界坐标对得上",
+ * rbt.css 里另有它一段说明(样式表对世界层没有规则,那是刻意的).
+ */
+export const RBT_WORLD_CLASS = 'rbt-world';
+
+// ---------- 布局几何(单位:平面坐标 = 屏幕像素 @ 缩放 1) ----------
 
 /**
  * 节点圆半径.

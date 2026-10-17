@@ -2,21 +2,25 @@
 红黑树工具的**桌面视图组件**(声明式).
 
 整块界面按 config.ts 的声明在这里生成,由 src/rbt/rbt.ts 的 `mountRBT` 交给库的
-`mountDesktop` 装配.这一层不认识窗口系统:它只产出三样东西 -- 一块**桌面背景**
-(那棵 `<svg>` 树)和两扇窗口的**正文节点**,再由 `content()` 按窗口 id 交回去
-(与库 `mountDesktop` 的分工一致:库建容器并把节点搬进去,消费者只管内容).
+`mountDesktop` 装配.这一层不认识窗口系统:它只产出四样东西 -- 一块**桌面背景**
+(平面视口 + 那棵 `<svg>` 树 + 它的世界层)和两扇窗口的**正文节点**,再由 `content()`
+按窗口 id 交回去(与库 `mountDesktop` 的分工一致:库建容器并把节点搬进去,消费者只管
+内容).
 
 桌面化(2026-10)之前这里是 `createRbtPanel()`:一颗 `createPanel` 的框体,提示区 /
 编辑器 / 输出区 / 树按顺序堆在同一个正文里.现在同一个内容分成两扇窗口,那棵树
 **搬出窗口、成为桌面背景**:
 
-  #rbtTree(桌面背景,所有窗口之下,铺满整块桌面)
-  ├── 窗口 "表达式":只有编辑器宿主 #rbtEditor
-  └── 窗口 "性质检查":提示区(两行静态说明)+ 唯一输出区 #treeOutput
+  #rbtViewport(桌面背景:窗口层之下、铺满桌面的那块"平面取景框")
+  └─ svg#rbtTree(1:1 画布,没有 viewBox)
+     └─ g.rbt-world(树的一切都在世界坐标里;视口只改这一层的 transform)
+
+  窗口 "表达式":只有编辑器宿主 #rbtEditor
+  窗口 "性质检查":提示区(三行静态说明)+ 唯一输出区 #treeOutput
 
 两扇窗口各装什么是**按"操作 / 说明 / 结果"分**的:编辑器独占一扇,窗口整高都给输入区,
-光标与选区不被说明挤开;两行说明说的是"这套表达式怎么读",与本轮的输出结果同处一栏
-(说明在上、结果在下),看结论时语法就在眼前.
+光标与选区不被说明挤开;三行说明说的是"这套表达式怎么读、这块平面怎么动",与本轮的
+输出结果同处一栏(说明在上、结果在下),看结论时语法与操作提示就在眼前.
 
 这样做的理由与 miko_graphcalc 把 3D 视口当桌面背景是同一条:树是**结果**,窗口是
 **操作**;把结果铺在桌面上、操作浮在上面,改表达式时不用在"输入框"和"看树"之间
@@ -38,22 +42,28 @@ API;而且宿主在 CSS 里还有别的活干(外边距 / 最小高度,见 rbt.c
 **树是一棵 `<svg>`,不是一个 `<canvas>`**(2026-10 起):节点与连线都是文档里的真
 元素,所以命中检测 / pointer 事件 / CSS transition / CSS 令牌着色全部由浏览器给,
 不必自己写 `ctx` 那一套.标记里只放**空的 `<svg>` 根**:每轮要画什么由 rbt.ts 按
-布局结果重建(整批换掉根的子节点),这一层不认识树,只认识"这里有一块画树的背景".
+布局结果重建(整批换掉世界层的子节点),这一层不认识树,只认识"这里有一块画树的背景".
 
 `<svg>` 归 `create_svg_element` 建(库的 SVG 命名空间原语)而不是 `create_element`:
 两条路都建得出 `<svg>`,但只有前者给的是 `SVGSVGElement`(命名空间也确定是 SVG,
 不靠 HTML 解析器"按上下文收编"的特例),拿到的类型才对得上后面要往上挂的几何节点
 (见 miko_ui 的 `widgets/svg/dom.ts` 文件头).
 
-`preserveAspectRatio` + CSS 的 `width/height: 100%` 让整棵树按桌面尺寸等比缩放:
-viewBox 是 1200×640 的逻辑坐标,窗口与窄屏上都不会溢出,也不需要 `devicePixelRatio`
-那一套(canvas 时代必须手算 dpr,否则高分辨率屏上是糊的).
+**平面化(2026-10 起):背景是一块"可拖动缩放的平面视口",不是一块定尺画布**.
+从前 `<svg>` 自己带 `viewBox="0 0 1200 640"` 与 `preserveAspectRatio`,整棵树被等比
+缩到桌面;现在 `<svg>` 没有 viewBox(1 用户单位 = 1 CSS 像素),树挂在里面唯一的世界层
+`<g class="rbt-world">` 上,视口只改这一层的 `transform`(见 ui/rbt_viewport.ts).
+
+为什么多一层 div 当视口:`#rbtViewport` 是库要的那颗**背景节点**(挂
+`.desktop-background`,见 miko_ui 的 styles/desktop.css,与库示例里的 `#viewport`
+同形),裁切 / 光标 / `touch-action` 这些"视口"这一层的职责写在它上面;`<svg>` 因此
+退回纯粹的 1:1 绘制面,将来视口上要加的浮层也有现成的父亲.
 
 背景只画树:一切文案(空输入 / 空树提示,解析错误,性质结论)都写进**同一个**输出区
 #treeOutput,颜色 / 字号 / 折行交给 CSS,截图与选中复制也才正常.
 
 本模块是纯函数:不读页面,不改全局,不绑业务事件,只把"描述"变成元素并把行为
-代码要用的引用一起交回;装配桌面与绑事件都是 rbt.ts 的事.
+代码要用的引用一起交回;装配桌面、绑视口手势都是 rbt.ts 的事.
 */
 
 import {
@@ -70,12 +80,11 @@ import {
     RBT_HINT_BOX_CLASS,
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
+    RBT_HINT_VIEWPORT,
     RBT_INPUT_PLACEHOLDER,
-    RBT_VIEW_BOX,
-    RBT_VIEW_BOX_HEIGHT,
-    RBT_VIEW_BOX_WIDTH,
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
+    RBT_WORLD_CLASS,
     type RbtWindowId,
 } from '@/rbt/config';
 import { highlightRbtExpression } from '@/rbt/ui/rbt_highlight';
@@ -86,13 +95,28 @@ const RBT_TREE_LABEL = '红黑树结构图';
 /** 红黑树桌面视图:桌面背景 + 两扇窗口的正文 + 行为代码要用的元素引用 */
 export interface RbtViews {
     /**
-     * 桌面背景:那棵空的 `<svg>` 根 #rbtTree.
+     * 平面视口 #rbtViewport:交给库当**桌面背景**的那颗节点(挂 `.desktop-background`).
      *
-     * 这里只给一块**空的**画布:子节点(连线 / 节点)由 rbt.ts 每轮 `replaceChildren`
-     * 整批重建,所以这一层与布局无关.它由 `mountDesktop` 直接 append 到桌面根上,
-     * **不在任何窗口里** -- 这就是"树是背景"这句话在 DOM 上的全部含义.
+     * 它**不在任何窗口里**,由 `mountDesktop` 直接 append 到桌面根上 -- 这就是"树是
+     * 背景"这句话在 DOM 上的全部含义.裁切 / 光标 / 指针手势(拖动平移、滚轮缩放)都
+     * 归这一层,见 ui/rbt_viewport.ts 与 rbt.css 的 `#rbtViewport`.
+     */
+    readonly viewport: HTMLElement;
+    /**
+     * 那棵树的 `<svg>` 根 #rbtTree(1:1 的像素画布,没有 viewBox).
+     *
+     * 它长在视口里,自己**不再缩放**:世界坐标 -> 屏幕像素的缩放全归世界层的
+     * `transform`.树上的结构(节点 / 连线)不在这里,见 `world`.
      */
     readonly tree: SVGSVGElement;
+    /**
+     * 世界层 `<g class="rbt-world">`:树上一切(连线 / 节点)的父节点,也是视口唯一
+     * 改动的那一层(`transform = translate(x y) scale(k)`).
+     *
+     * 行为代码每轮 `replaceChildren` 整批重建它的子节点;视口句柄改它的 transform.
+     * 这里只给一个**空的** `<g>`:标记里不带任何结构,画什么由 rbt.ts 按布局结果给.
+     */
+    readonly world: SVGGElement;
     /**
      * 逐窗口内容:库的 `mountDesktop` 按窗口 id 现取一次.
      *
@@ -142,37 +166,46 @@ export function createRbtViews(): RbtViews {
     const output = create_element({ tag: 'div' }, { id: RBT_DOM.outputId, hidden: 'hidden' });
 
     /*
-      树这块画布:空的 `<svg>` 根,也是**桌面背景**.
+      桌面背景:平面视口(#rbtViewport)→ 画布(svg#rbtTree)→ 世界层(g.rbt-world).
 
-      `width` / `height` 与 viewBox 同值,只为给出宽高比(1.875)让背景层"等比铺满"
-      有据可依(见 rbt.css 的 `#rbtTree`:宽高都是 100%,比例由 viewBox +
-      preserveAspectRatio 管).`preserveAspectRatio` 是 SVG 默认值,写出来是因为
-      它决定了"缩放时不裁切"这件事,改 CSS 尺寸的人得看得见这条前提.
+      三层各只有一件事:
+      - **视口**:铺满桌面、裁切、收指针事件(定位与底色来自库的 `.desktop-background`,
+        画什么与尺寸归我们;见 miko_ui 的 styles/desktop.css);
+      - **画布**:1:1 的像素面 -- 没有 viewBox,也没有 width/height 属性(尺寸由 CSS
+        给 100%,一个用户单位就是一个 CSS 像素).所以布局算出来的坐标就是屏幕像素,
+        缩放由世界层的 transform 表达;
+      - **世界层**:树上一切的父节点,树的世界坐标只在这一层的 transform 里被换算
+        (见 ui/rbt_viewport.ts 的 planeViewTransform).空着建出来,是因为"层"属于
+        标记结构(视口要长期引用它),而"画什么"属于每轮重建的内容.
 
-      `class: 'desktop-background'` 是库给背景节点的可选类(见 miko_ui 的
-      styles/desktop.css):定位(铺满桌面根、压在三层容器之下)与桌面底色由它统一,
-      本应用只补"画什么"(节点 / 连线在 rbt.ts 里落笔).
+      `role` / `aria-label` 挂在整个背景那一层:视口是可交互的(拖动 / 缩放),但它
+      画的是这一轮解析出来的树,读屏该说清"这里是什么".
     */
+    const world = create_svg_element({ tag: 'g' }, { class: RBT_WORLD_CLASS });
     const tree = create_svg_element(
         { tag: 'svg' },
         {
             id: RBT_DOM.treeId,
-            class: 'desktop-background',
-            viewBox: RBT_VIEW_BOX,
-            preserveAspectRatio: 'xMidYMid meet',
-            width: String(RBT_VIEW_BOX_WIDTH),
-            height: String(RBT_VIEW_BOX_HEIGHT),
             role: 'img',
             'aria-label': RBT_TREE_LABEL,
         },
+        world,
+    );
+    const viewport = create_element(
+        { tag: 'div' },
+        { id: RBT_DOM.viewportId, class: 'desktop-background' },
+        tree,
     );
 
     /*
-      提示区:两行 span 各自以 <br> 结束,外框认 config 的 RBT_HINT_BOX_CLASS.
+      提示区:三行 span 各自以 <br> 结束,外框认 config 的 RBT_HINT_BOX_CLASS.
 
-      它排在**性质检查窗口**正文的最前(输出区之上):那两行是静态说明,与这一轮的
+      它排在**性质检查窗口**正文的最前(输出区之上):那三行是静态说明,与这一轮的
       输入无关,所以跟"结果"放同一栏 -- 表达式窗口因此只剩编辑器,窗口整高都是输入区
       (与"输出区与树同屏"同一条思路:要一起看的放在一起).
+
+      第三行(平面怎么动)与前两行同属"怎么读这个界面":那三种手势在界面上没有控件,
+      不写出来用户只能乱试.
     */
     const hints = create_element(
         { tag: 'div' },
@@ -180,6 +213,8 @@ export function createRbtViews(): RbtViews {
         create_element({ tag: 'span' }, {}, RBT_HINT_SHORTHAND),
         create_element({ tag: 'br' }),
         create_element({ tag: 'span' }, {}, RBT_HINT_COLOR_LEGEND),
+        create_element({ tag: 'br' }),
+        create_element({ tag: 'span' }, {}, RBT_HINT_VIEWPORT),
         create_element({ tag: 'br' }),
     );
 
@@ -216,7 +251,9 @@ export function createRbtViews(): RbtViews {
     const isRbtWindowId = (id: string): id is RbtWindowId => id in bodies;
 
     return {
+        viewport,
         tree,
+        world,
         content: (id) => (isRbtWindowId(id) ? { body: bodies[id] } : {}),
         editor,
         output,

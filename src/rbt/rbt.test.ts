@@ -43,6 +43,7 @@ import {
     RBT_PROPERTIES,
     RBT_TOKEN_VALUE_CLASS,
     RBT_TREE_EXAMPLE,
+    RBT_WORLD_CLASS,
 } from '@/rbt/config';
 import { mountRBT } from '@/rbt/rbt';
 
@@ -68,8 +69,9 @@ function typeExpression(input: HTMLTextAreaElement, expression: string): void {
 
 /**
  * 挂一次桌面(与真页面同形:一颗宿主 + `mountRBT`),交回输入框 / 输出区 / 那棵 SVG
- * (每轮输入前后都拿它读状态).树现在是**桌面背景**,输出区在性质窗口的正文里,
- * 两者都不再属于同一颗框体 -- 取它们一律按 id,不按面板结构.
+ * (每轮输入前后都拿它读状态).树现在画在**桌面背景那块平面**里(视口 -> svg ->
+ * 世界层),输出区在性质窗口的正文里,两者都不再属于同一颗框体 -- 取它们一律按 id,
+ * 不按面板结构.
  */
 function mountPanel(): { input: HTMLTextAreaElement; output: HTMLElement; tree: SVGSVGElement } {
     const host = document.createElement('div');
@@ -158,6 +160,24 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
             expect(y1).not.toBeNull();
             expect(`${x1},${y1}`).not.toBe(`${edge.getAttribute('x2')},${edge.getAttribute('y2')}`);
         }
+    });
+
+    it('树画在世界层里,而且视口给这一层写了 transform(平面 -> 屏幕的换算只有这一处)', () => {
+        const { tree } = mountPanel();
+        const world = tree.querySelector(`.${RBT_WORLD_CLASS}`);
+
+        expect(world).not.toBeNull();
+        // 节点与连线都在世界层里:世界坐标 = 布局坐标,画布自己不再缩放
+        expect(world?.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
+        expect(world?.querySelectorAll(`.${RBT_EDGE_CLASS}`)).toHaveLength(31 - 1);
+        /*
+          世界层的 transform 由视口句柄写(见 ui/rbt_viewport.ts).
+
+          happy-dom 里量不出视口尺寸(host.clientWidth 恒为 0),适应给不出比例,于是
+          落在恒等视角上 -- 这一层钉的是"属性一定被写过、格式就是 translate + scale",
+          真机上的适应比例不在这一层验.
+        */
+        expect(world?.getAttribute('transform')).toBe('translate(0 0) scale(1)');
     });
 
     it('红黑修饰类按表达式里的颜色挂上(根黑,两个孩子红)', () => {

@@ -60,7 +60,7 @@ export interface RbtNode {
     color: RbtColor;
     left: RbtNode | null;
     right: RbtNode | null;
-    /** 布局期由 rbt.ts 写入的 viewBox 坐标(解析与性质检查不读它) */
+    /** 布局期由 rbt.ts 写入的平面坐标(解析与性质检查不读它) */
     x?: number;
     y?: number;
 }

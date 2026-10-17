@@ -1,18 +1,20 @@
 @import '@/rbt/tokens.css';
 
 /*
-红黑树工具样式(表达式编辑器 / 唯一输出区 / 桌面背景那棵树).
+红黑树工具样式(表达式编辑器 / 唯一输出区 / 桌面背景那块平面视口).
 
-五个 id 都在这里:`#rbtTree`(桌面背景,那棵 SVG 树),`#rbtEditorPanel` /
-`#rbtOutputPanel`(两扇窗口的正文根,各自是滚动容器),`#rbtEditor`(miko_ui 编辑器的
-宿主),`#treeOutput`(提示 / 错误 / 性质清单的唯一输出区).标记由 ui/rbt_views.ts 生成,
+六个 id 都在这里:`#rbtViewport`(桌面背景:平面视口,窗口层之下那一层),
+`#rbtTree`(视口里那棵 SVG,1:1 画布),`#rbtEditorPanel` / `#rbtOutputPanel`
+(两扇窗口的正文根,各自是滚动容器),`#rbtEditor`(miko_ui 编辑器的宿主),
+`#treeOutput`(提示 / 错误 / 性质清单的唯一输出区).标记由 ui/rbt_views.ts 生成,
 文案与结构类名在 config.ts;窗口外壳(标题栏 / 正文容器 / 任务栏)的观感归库的
 miko_ui/styles/desktop.css,这里一条都不覆盖.
 
 编辑器**外框内部**的观感(底色 / 描边 / 圆角 / 行号槽,以及"透明 textarea + 背后高亮层"
 的严格重叠)也全归库的 miko_ui/styles/editor.css,这里不改:这一层只做库不做的那几件
 事 -- 给窗口正文根该有的滚动与内边距(见下面"窗口正文"),给编辑器宿主外边距与最小
-高度,给词法高亮的颜色(库的口径就是"分词与配色归消费者",见 ui/rbt_highlight.ts).
+高度,给平面视口的裁切 / 光标 / 指针手势,给词法高亮的颜色(库的口径就是"分词与配色归
+消费者",见 ui/rbt_highlight.ts).
 
 可调数值全部走本目录 tokens.css 的 `--rbt-*`(选择器里不写死色值与尺寸,换配色不用
 碰 TS);唯一的例外是 `#treeOutput` 的 `line-height: 1.4`,它是排版本地的结构性字面量.
@@ -57,7 +59,7 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  *
  * 桌面化之后它只剩库不给的一件事:占满窗口正文的高度(理由见上面那条 flex).
  * **外边距也没有**:它是正文根唯一的孩子,窗口留白已由 `--rbt-window-padding` 给过
- * (两行提示不在这一窗里,见 config 的 RBT_HINT_BOX_CLASS).
+ * (提示区不在这一窗里,见 config 的 RBT_HINT_BOX_CLASS).
  * **横向滚动不在它这里**:滚动归上面的窗口正文根(与库的"滚动归属"一致),它自己不建立
  * scrollport -- 所以不再写 `overflow-x`,否则同一个方向会多出一条滑条,行号槽也会以
  * 错误的那一层为 sticky 参照系.
@@ -117,7 +119,7 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 }
 
 /*
- * 提示区:两行静态说明,排在性质检查窗口正文的最前(输出区之上,见 ui/rbt_views.ts).
+ * 提示区:静态说明,排在性质检查窗口正文的最前(输出区之上,见 ui/rbt_views.ts).
  *
  * 色用 `--rbt-hint-color`(中性说明那一档,与 #treeOutput 里的空输入 / 空树提示同色):
  * 它说的是"这套表达式怎么读",不该和下面的性质清单抢注意力,所以也不吃正文色.
@@ -182,18 +184,19 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 
 /*
  * ================================================================
- * 红黑树:树本身(桌面背景那棵 #rbtTree)
+ * 红黑树:树本身(桌面背景那块平面视口里的 #rbtTree)
  *
- * 这一块是 2026-10 从 canvas 换过来的结果,同月又从"面板里的一块画布"变成
- * **桌面背景**.从前树的每一笔都要自己算:配色写死在 src/rbt/config.ts
- * (ctx.fillStyle 读不到 CSS 变量),字号按半径手算,窄屏上还要处理 devicePixelRatio
- * 否则糊.现在节点与连线都是文档里的元素:
+ * 这一块是 2026-10 从 canvas 换过来的结果,同月又从"面板里的一块画布"变成**桌面
+ * 背景**,再到"一块可拖动缩放的**平面视口**".从前树的每一笔都要自己算:配色写死在
+ * src/rbt/config.ts(ctx.fillStyle 读不到 CSS 变量),字号按半径手算,窄屏上还要处理
+ * devicePixelRatio 否则糊.现在节点与连线都是文档里的元素:
  *
  *   - 观感全在这一块里,颜色引本目录 tokens.css 的 --rbt-node-* / --rbt-edge-*(换配色
  *     不用碰 TS);
  *   - 圆的大小按 --rbt-node-radius 画,而 TS 侧只算"圆该在哪"(布局).两边半径必须
  *     相等,理由写在本目录 tokens.css 的 --rbt-node-radius 上方;
- *   - 缩放交给 width/height: 100% + viewBox + preserveAspectRatio,不必再管 dpr.
+ *   - 缩放交给世界层的 transform(见 ui/rbt_viewport.ts 的 planeViewTransform),
+ *     不必再管 dpr:SVG 是矢量,放大多少都是浏览器重新光栅化.
  *
  * 节点值的字体是**必须显式写**的:css/app.css 的 body 基线把正文统一成
  * `--font-family-base`,它对 SVG 的 <text> 一样生效(SVG 的 font 也是可继承的 CSS
@@ -203,25 +206,57 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  */
 
 /*
- * 整棵树的画布 = **桌面背景**(`mountRBT` 经 `mountDesktop(host, { background })`
- * 把它 append 到桌面根上;节点挂着库的 `.desktop-background`).
+ * 平面视口 = **桌面背景**(`mountRBT` 经 `mountDesktop(host, { background })` 把它
+ * append 到桌面根上;它就是挂着库的 `.desktop-background` 的那颗节点).
  *
- * 应用这一侧只剩两件:**尺寸**,以及"它是块级元素"这一条(SVG 默认 inline).
- *
- * 宽高都是 100% 而不是"按宽度等比":桌面不是面板,没有"宽度决定高度"这回事;比例由
- * viewBox 与 `preserveAspectRatio: xMidYMid meet` 负责 -- 整棵树在桌面上等比放大、
- * 居中、**不裁切**(窗口没盖住的地方看到的就是它).
+ * 应用这一侧只补三件库不规定的:
+ * - **裁切**:世界层比视口大得多(树的坐标范围可以到几万像素),边上不该画到桌面外面
+ *   去 -- 这本来也是"视口"这个词的含义;
+ * - **光标**:抓 / 抓取中.库的拖动实现读的就是 handle 自己的计算样式
+ *   (见 miko_ui 的 shared/dragGesture.ts),所以这两个状态只能写在 CSS 里;
+ * - **手势归视口**:`touch-action: none` 让触屏上的单指拖动是平移(而不是滚动页面),
+ *   并且把浏览器自己的双指缩放(页面缩放)让开;`user-select: none` 免得拖动时把 SVG
+ *   里的节点值选中,拖完留下一片蓝色选区.
  *
  * 定位(铺满桌面根)与桌面底色归库的 `.desktop-background`(见 miko_ui 的
- * styles/desktop.css):这两条对所有"主视口当背景"的应用是同一套口径,不该每个
- * 应用各写一遍.`display: block` 是本应用要的 -- SVG 默认 inline,不写会在树下面
- * 留出基线缝.
+ * styles/desktop.css):这两条对所有"主视口当背景"的应用是同一套口径,不该每个应用
+ * 各写一遍.
+ */
+#rbtViewport {
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+/* 拖动态:类名由库的拖动实现挂(`is-dragging`),这里只接住它换光标 */
+#rbtViewport.is-dragging {
+    cursor: grabbing;
+}
+
+/*
+ * 视口里那颗 `<svg>` = **1:1 的像素画布**:没有 viewBox,一个用户单位就是一个 CSS
+ * 像素,尺寸由上面那一层给.世界坐标 -> 屏幕像素的缩放全在世界层的 transform 里,
+ * 所以布局算出来的坐标(单位 px)在这里不用换算,量视口多大也直接读 clientWidth.
+ *
+ * `overflow: hidden` 是**显式**写出来的:SVG 根默认就不画出自己那一块,但那是 UA
+ * 样式给的默认值(而且历史上各引擎的默认值不一样);树的坐标范围远超视口,这条不能
+ * 靠默认值承担.
+ *
+ * `display: block` 是本应用要的 -- SVG 默认 inline,不写会在树下面留出基线缝.
  */
 #rbtTree {
     display: block;
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
+
+/*
+ * 世界层(`#rbtTree .rbt-world`)在样式表里**没有规则**:它是纯坐标层,`transform` 由
+ * ui/rbt_viewport.ts 写在属性上,连线与节点的观感各归各的类.这里留一段话而不是一条
+ * 空规则:空的 `{}` 只会让下一个人以为"这里该有点什么".
+ */
 
 /* 连线:细线只认描边色,没有填充 */
 #rbtTree .rbt-edge {
@@ -271,13 +306,22 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 /*
  * 进入动画:树每次重建就重播一次.
  *
- * transform-origin 用**元素自己的盒子**(fill-box)而不是视口:默认的 50% 50% 是
- * 相对 `<svg>` 视口的,那样每个节点会从整块画布的中心缩放出去,而它本身还在自己的
- * 位置上 -- 看着像整棵树在抖.`transform-box: fill-box` 把它改成"以这个元素自己的
- * 包围盒为参照",于是每个圆从自己圆心放大.
+ * **动画挂在圆与节点值上,不挂在节点组上**(2026-10 修):节点的位置写在组的
+ * `transform` **属性**上,而 CSS 的 `transform` 与属性是同一个属性 -- 动画一动组的
+ * transform,属性里那个 `translate` 就被盖掉,于是动画期间所有节点都叠在**世界原点**
+ * 那一处(平面左上角,面板时代是画布左上角),整棵树看着"散架":连线还在,节点全没了
+ * (实测:220ms 里 31 个节点挤在原点,透明度还在从 0 涨起来).圆与文字各自动自己的
+ * `scale` 则不碰位置 -- 位置归组的 transform 属性,缩放归子元素.
  *
- * 只动 opacity 与 transform:两者都是合成层属性,不会触发布局重排,所以 31 个节点
- * 一起播也不掉帧(这也是换 SVG 换来的一件:canvas 时代同一个效果要自己写 rAF 补间).
+ * `transform-box: fill-box` + `transform-origin: center` 让缩放以**元素自己的包围盒**
+ * 为中心:默认的 `50% 50%` 是相对 `<svg>` 视口的,那样每个圆会从整块画布的中心缩放
+ * 出去,而它本身还在自己的位置上 -- 看着像整棵树在抖.填充盒则让每个圆从自己圆心、
+ * 每段文字从自己的中心长出来(文字的包围盒中心就是圆心:上面那条 `text-anchor: middle`
+ * + `dominant-baseline: central` 保证的).
+ *
+ * 只动 opacity 与 transform(这里是各自的 scale):都是合成层属性,不会触发布局重排,
+ * 所以 31 个节点一起播也不掉帧(这也是换 SVG 换来的一件:canvas 时代同一个效果要自己
+ * 写 rAF 补间).
  */
 @keyframes rbt-node-enter {
     from {
@@ -291,16 +335,16 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
     }
 }
 
-#rbtTree .rbt-node {
+#rbtTree .rbt-node__shape,
+#rbtTree .rbt-node__label {
     transform-box: fill-box;
     transform-origin: center;
     /*
       这里**不能写 `both`**(也不写 `forwards`):那两个值会把 from 那一帧的
-      `transform: scale(...)` 永久留在元素上,于是每个节点长期停在"从自己中心缩过
-      一点点"的状态 -- 而锚点相对圆心偏了约 2px,节点因此整体挪位,还小了一圈
-      (实测:31 个节点整棵树看着"往下沉",圆心与连线端点对不齐).
-      只留 from 那一帧,不要 fill 模式,动画播完属性就回到 none,节点停在布局给的
-      位置上.要改"从多小长出来"就只动 keyframes 里的 scale,不动这里.
+      `transform: scale(...)` 永久留在元素上,于是圆与节点值长期停在"从自己中心缩过
+      一点点"的状态 -- 圆小一圈,文字也小一圈,而且不会有任何报错.
+      只留 from 那一帧,不要 fill 模式,动画播完属性就回到 none,元素停在布局给的大小上.
+      要改"从多小长出来"就只动 keyframes 里的 scale,不动这里.
     */
     animation: rbt-node-enter var(--rbt-node-enter-duration) ease-out;
 }
@@ -310,7 +354,8 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  * 不播就等于没写过),所以 `animation: none` 就够,不需要额外兜底.
  */
 @media (prefers-reduced-motion: reduce) {
-    #rbtTree .rbt-node {
+    #rbtTree .rbt-node__shape,
+    #rbtTree .rbt-node__label {
         animation: none;
     }
 }

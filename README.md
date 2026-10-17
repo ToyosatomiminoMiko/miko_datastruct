@@ -9,28 +9,41 @@
 界面是 **`miko_ui` 的桌面**(`mountDesktop`:背景 + 窗口层 + 任务栏),不是一颗面板:
 
 ```text
-#rbtTree                 桌面背景 —— 那棵 SVG 树铺满整块桌面,所有窗口都浮在它上面
-├─ 窗口 "表达式"          只有编辑器宿主 #rbtEditor
-└─ 窗口 "性质检查"        两行静态提示 + 唯一输出区 #treeOutput(提示 / 错误 / 四项性质)
+#rbtViewport            桌面背景 —— 平面视口(铺满桌面、裁切、收指针手势)
+└─ svg#rbtTree          1:1 画布(没有 viewBox:一个用户单位 = 一个 CSS 像素)
+   └─ g.rbt-world       世界层:树的一切都在这里,视口只改这一层的 transform
+
+窗口层(压在背景之上)
+├─ 窗口 "表达式"         只有编辑器宿主 #rbtEditor
+└─ 窗口 "性质检查"       三行静态提示 + 唯一输出区 #treeOutput(提示 / 错误 / 四项性质)
 ```
+
+树是**一块平面空间**里的一份内容,不是一块定尺画布(2026-10 改):布局算出来的坐标就是
+平面坐标(水平跨度由叶子数推出来,垂直方向深一层往下走一步),不再有"画布多大"这回事;
+看它的是一块**视口**——**左键拖动平移、滚轮以指针为锚缩放、双击适应视口**.没有坐标系
+(不画网格 / 轴 / 刻度),平面的底色就是桌面底色.用户没手动挪过视角之前,每次重绘都会
+自动适应;挪过之后重绘不再动视角,双击"适应"回到自动.
 
 这样分工的理由是与 `miko_graphcalc` 把 3D 视口当桌面背景同一条:树是**结果**,窗口是
 **操作**;结果铺在桌面上,改表达式时不必在输入框与树之间切来切去,窗口没盖住的地方
-就是树本身.两扇窗口内部再按"输入 / 说明 + 结果"分:编辑器独占一扇(整高都是输入区),
-两行说明(简写语法 / 配色图例)与本轮输出同处一栏,说明在上、结果在下.
+就是平面本身.两扇窗口内部再按"输入 / 说明 + 结果"分:编辑器独占一扇(整高都是输入区),
+三行说明(简写语法 / 配色图例 / 平面怎么动)与本轮输出同处一栏,说明在上、结果在下.
 
 背景与桌面根的口径**由库定**(2026-10,与 `miko_graphcalc`、库的示例三方对齐):
-`#rbtTree` 挂库的 `.desktop-background`(铺满桌面根、压在三层容器之下、底色取
+`#rbtViewport` 挂库的 `.desktop-background`(铺满桌面根、压在三层容器之下、底色取
 `--color-bg-desktop`),`#app` 的 `position: relative` 与 `overflow: hidden` 由库的
-`.desktop-root` 给,应用侧不再各写一份定位样板.本应用只做两件事:树的绘制,以及
-**覆盖桌面底色**(`css/app.css` 的 `--color-bg-desktop: #212529`,与主站同值)--
-覆盖库的 token,而不是再造一个 `--app-bg-page` 之类的名字.
+`.desktop-root` 给,应用侧不再各写一份定位样板.本应用只做三件事:树在世界层里的落笔,
+视口的裁切 / 光标 / 手势,以及**覆盖桌面底色**(`css/app.css` 的
+`--color-bg-desktop: #212529`,与主站同值)-- 覆盖库的 token,而不是再造一个
+`--app-bg-page` 之类的名字.
 
 这个目录是**从主站拆出来的**([ToyosatomiminoMiko.github.io](../../)):`src/rbt/` 下的
 源码与测试搬自主站的 `src/rbt/`,拆出来时**没有改任何功能** —— 只是把"长在主站标签页
-窗格里"改成"长在自己页面的一颗宿主上".之后的两次功能改动是表达式输入换成库的
-`CodeEditor`(裸 textarea -> 行号 + 高亮层,见上),以及面板换成桌面(见
-`RBT_DESKTOP_WINDOWS` 与 `src/rbt/ui/rbt_views.ts`);解析与性质检查的行为契约一直没变.
+窗格里"改成"长在自己页面的一颗宿主上".之后的三次功能改动是:表达式输入换成库的
+`CodeEditor`(裸 textarea -> 行号 + 高亮层,见上)、面板换成桌面(见
+`RBT_DESKTOP_WINDOWS` 与 `src/rbt/ui/rbt_views.ts`)、背景那棵树换成平面视口(见
+`src/rbt/ui/rbt_viewport.ts`);解析与性质检查的行为契约一直没变,布局的**算法**也没变
+(变的只是"平面有多宽"从写死的画布宽度改成按叶子数推出来).
 
 ## 跑起来
 
@@ -66,13 +79,14 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 index.html              页面上只有一颗手写宿主 #app
 src/main.ts             入口:引库样式 + 应用样式,再 mountRBT(#app)
 css/app.css             应用层:页面基线 + 一条从主站继承的令牌(--font-code)
-src/rbt/config.ts       声明式模型:文案 / DOM 契约 id / 窗口清单 / 布局几何 / 结构类名 / 词法类名 / 性质清单
+src/rbt/config.ts       声明式模型:文案 / DOM 契约 id / 窗口清单 / 平面与视口参数 / 布局几何 / 结构类名 / 词法类名 / 性质清单
 src/rbt/rbt_tree.ts     解析(格式检查)与性质检查(纯逻辑,可单测)
-src/rbt/rbt.ts          布局 + SVG 落笔 + mountRBT(建内容 -> mountDesktop -> 行为)
-src/rbt/ui/rbt_views.ts 桌面视图(纯函数:背景树 + 两扇窗口的正文;编辑器是库的 createCodeEditor)
+src/rbt/rbt.ts          布局(叶子数 -> 平面宽度 -> 包围盒)+ 世界层落笔 + mountRBT(建内容 -> mountDesktop + 视口 -> 行为)
+src/rbt/ui/rbt_views.ts 桌面视图(纯函数:平面背景(视口 + 画布 + 世界层)+ 两扇窗口的正文;编辑器是库的 createCodeEditor)
+src/rbt/ui/rbt_viewport.ts 平面视口:世界坐标 -> 屏幕像素的变换数学 + 拖动 / 滚轮 / 双击手势
 src/rbt/ui/rbt_highlight.ts 表达式分词 -> 高亮 HTML(纯函数,注入给编辑器的高亮层)
 src/rbt/tokens.css      设计令牌(--rbt-*:窗口正文内边距 / 编辑器尺寸 / 输出区与树 / 词法着色)
-src/rbt/rbt.css         观感(桌面背景那棵树 / 窗口正文滚动区 / 编辑器宿主 / 输出区 / 词法着色)
+src/rbt/rbt.css         观感(平面视口的裁切与手势 / 世界层里那棵树 / 窗口正文滚动区 / 编辑器宿主 / 输出区 / 词法着色)
 src/test_support/       标记契约测试的两个小助手(renderHost / expectNoDuplicateIds)
 scripts/dev_ui_link.py  本地联调:miko_ui 换成指向工作副本的软链(link / unlink / status)
 ```

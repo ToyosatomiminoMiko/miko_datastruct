@@ -4,17 +4,19 @@
  * 这一层分两段,因为"标记长什么样"与"桌面装配成什么样"是两件事:
  *
  * 1. **视图标记**(`createRbtViews()` 的返回值,此时还没挂进任何文档):性质检查窗口里
- *    的提示区两行 + 初始 hidden 的输出区 `#treeOutput`、表达式窗口里唯一一件编辑器
- *    宿主 `#rbtEditor`、以及一块**空的**背景 `<svg>` #rbtTree.这些是"标记里本来有什么",
- *    必须在挂载前断言 -- 一挂载,rbt.ts 就会种入示例并画出 31 个节点;
- * 2. **桌面装配**(`mountRBT()`,与 index.html 同形):桌面根里依次是 背景树 ->
- *    窗口层 -> 吸附预览 -> 任务栏,`#rbtTree` 是桌面根的直接子节点、**不在任何窗口里**
- *    (这就是"树是桌面背景"这句话的全部可断言内容),两扇窗口的正文根各挂库的
+ *    的提示区三行 + 初始 hidden 的输出区 `#treeOutput`、表达式窗口里唯一一件编辑器
+ *    宿主 `#rbtEditor`、以及一块**空的**平面背景(视口 `#rbtViewport` → `<svg>`
+ *    `#rbtTree` → 世界层 `.rbt-world`).这些是"标记里本来有什么",必须在挂载前断言 --
+ *    一挂载,rbt.ts 就会种入示例并画出 31 个节点;
+ * 2. **桌面装配**(`mountRBT()`,与 index.html 同形):桌面根里依次是 背景(视口)->
+ *    窗口层 -> 吸附预览 -> 任务栏,`#rbtViewport` 是桌面根的直接子节点、**不在任何窗口
+ *    里**(这就是"树是桌面背景"这句话的全部可断言内容),两扇窗口的正文根各挂库的
  *    `ui-scrollbar`,窗口标题与任务栏文案来自 config 的窗口清单.
  *
- * `src/rbt/rbt.css` 按 `#rbtTree` / `#rbtEditorPanel` / `#rbtOutputPanel` / `#rbtEditor` /
- * `#treeOutput` 命中;树的 viewBox 与窗口清单都来自 config.逐字文案(两行提示里的
- * U+00A0 与「黒」)一并钉住:顺手改掉就会变成静默的文案漂移.
+ * `src/rbt/rbt.css` 按 `#rbtViewport` / `#rbtTree` / `#rbtEditorPanel` /
+ * `#rbtOutputPanel` / `#rbtEditor` / `#treeOutput` 命中;平面几何(叶子节距 / 视口参数)与
+ * 窗口清单都来自 config.逐字文案(三行提示里的 U+00A0 与「黒」)一并钉住:顺手改掉就会
+ * 变成静默的文案漂移.
  *
  * 表达式输入从裸 textarea 换成 miko_ui 的 CodeEditor(见 ui/rbt_views.ts)之后,这一层
  * 钉的是**装配契约**,不是库的内部结构:
@@ -34,12 +36,11 @@ import {
     RBT_HINT_BOX_CLASS,
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
+    RBT_HINT_VIEWPORT,
     RBT_INPUT_PLACEHOLDER,
-    RBT_VIEW_BOX,
-    RBT_VIEW_BOX_HEIGHT,
-    RBT_VIEW_BOX_WIDTH,
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
+    RBT_WORLD_CLASS,
 } from '@/rbt/config';
 import { mountRBT } from '@/rbt/rbt';
 import { createRbtViews, type RbtViews } from '@/rbt/ui/rbt_views';
@@ -67,19 +68,19 @@ function windowBody(host: HTMLElement, windowId: string): HTMLElement {
 }
 
 describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
-    it('提示区是性质检查窗口正文的第一个孩子(输出区之上):两行逐字保留(含 U+00A0 与「黒」)', () => {
+    it('提示区是性质检查窗口正文的第一个孩子(输出区之上):三行逐字保留(含 U+00A0 与「黒」)', () => {
         const { editorPanel, outputPanel } = buildViews();
         const hintBox = outputPanel.children[0];
 
         expect(hintBox?.classList.contains(RBT_HINT_BOX_CLASS)).toBe(true);
         const spans = [...(hintBox?.querySelectorAll('span') ?? [])];
         expect(spans.map((span) => span.textContent))
-            .toEqual([RBT_HINT_SHORTHAND, RBT_HINT_COLOR_LEGEND]);
+            .toEqual([RBT_HINT_SHORTHAND, RBT_HINT_COLOR_LEGEND, RBT_HINT_VIEWPORT]);
         // &nbsp; 在不换行语义上有意义,不能退化成普通空格
         expect(RBT_HINT_COLOR_LEGEND).toContain('\u00a0');
         expect(RBT_HINT_COLOR_LEGEND).toContain('黒');
-        // 两行各自以 <br> 结束
-        expect(hintBox?.querySelectorAll('br')).toHaveLength(2);
+        // 三行各自以 <br> 结束
+        expect(hintBox?.querySelectorAll('br')).toHaveLength(3);
         // 表达式窗口一个字的说明都不留:那扇窗口只有编辑器一件
         expect(editorPanel.children).toHaveLength(1);
         expect(editorPanel.querySelector(`.${RBT_HINT_BOX_CLASS}`)).toBeNull();
@@ -131,19 +132,38 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         expect(views.output.textContent).toBe('');
     });
 
-    it('背景树是 svg#rbtTree,viewBox 1200×640 来自 config,且初始是空的', () => {
+    it('背景是 视口 div > svg#rbtTree > 世界层 g,画布不再有 viewBox / 宽高属性', () => {
         const { views } = buildViews();
 
+        // 视口是库要的那颗背景节点(`.desktop-background` 给定位与底色,见 miko_ui)
+        expect(views.viewport.tagName.toLowerCase()).toBe('div');
+        expect(views.viewport.id).toBe(RBT_DOM.viewportId);
+        expect(views.viewport.classList.contains('desktop-background')).toBe(true);
+        expect(views.viewport.children).toHaveLength(1);
+
         // 标签名一起断言:换成 canvas 而只改 id 的话,这一条会红
+        expect(views.viewport.children[0]).toBe(views.tree);
         expect(views.tree.tagName.toLowerCase()).toBe('svg');
         expect(views.tree.id).toBe(RBT_DOM.treeId);
-        expect(views.tree.getAttribute('viewBox')).toBe(RBT_VIEW_BOX);
-        expect(RBT_VIEW_BOX).toBe(`0 0 ${RBT_VIEW_BOX_WIDTH} ${RBT_VIEW_BOX_HEIGHT}`);
-        // 宽高属性只给宽高比,实际显示尺寸由 CSS 给(铺满桌面,见 rbt.css 的 #rbtTree)
-        expect(views.tree.getAttribute('width')).toBe(String(RBT_VIEW_BOX_WIDTH));
-        expect(views.tree.getAttribute('height')).toBe(String(RBT_VIEW_BOX_HEIGHT));
-        // 空:每轮画什么由 rbt.ts 重建,这一层不认识树
-        expect(views.tree.children).toHaveLength(0);
+        /*
+          平面化的核心断言:画布是 **1:1 的像素面**.
+
+          - 没有 `viewBox`:一个用户单位就是一个 CSS 像素,布局算出来的坐标不用换算,
+            "世界坐标 -> 屏幕像素"的缩放只由世界层的 transform 表达;
+          - 没有 `width` / `height` 属性:显示尺寸由 CSS 给 100%(铺满视口),SVG 自己
+            不缩放 -- 这两条一起没掉,才叫"不再是定尺画布".
+        */
+        expect(views.tree.getAttribute('viewBox')).toBeNull();
+        expect(views.tree.getAttribute('width')).toBeNull();
+        expect(views.tree.getAttribute('height')).toBeNull();
+        expect(views.tree.getAttribute('preserveAspectRatio')).toBeNull();
+
+        // 世界层:SVG 里唯一一层,树的世界坐标只在这一层的 transform 里被换算
+        expect(views.tree.children).toHaveLength(1);
+        expect(views.world.tagName.toLowerCase()).toBe('g');
+        expect(views.world.classList.contains(RBT_WORLD_CLASS)).toBe(true);
+        // 空:每轮画什么由 rbt.ts 重建,这一层不认识树(视口句柄只改它的 transform)
+        expect(views.world.children).toHaveLength(0);
     });
 
     it('content() 按窗口 id 交回正文:两扇窗口各一根,未知 id 交回空内容', () => {
@@ -157,21 +177,24 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
 });
 
 describe('红黑树:桌面装配(mountRBT)', () => {
-    it('桌面根里依次是 背景树 -> 窗口层 -> 吸附预览 -> 任务栏', () => {
+    it('桌面根里依次是 背景视口 -> 窗口层 -> 吸附预览 -> 任务栏', () => {
         const { host } = renderHost(mountRBT);
 
         // 三层容器用类名(库的桌面层没有 id 选择器,也不要求消费者写宿主)
         expect([...host.children].map((child) => child.id || child.className))
-            .toEqual([RBT_DOM.treeId, 'window-layer', 'snap-preview', 'dock']);
+            .toEqual([RBT_DOM.viewportId, 'window-layer', 'snap-preview', 'dock']);
     });
 
-    it('树是桌面背景:桌面根的直接子节点,不在任何窗口里', () => {
+    it('视口是桌面背景:桌面根的直接子节点,树在里面,都不在任何窗口里', () => {
         const { host } = renderHost(mountRBT);
+        const viewport = host.querySelector(`#${RBT_DOM.viewportId}`);
         const tree = host.querySelector(`#${RBT_DOM.treeId}`);
 
-        expect(tree).not.toBeNull();
-        expect(tree?.parentElement).toBe(host);
+        expect(viewport).not.toBeNull();
+        expect(viewport?.parentElement).toBe(host);
+        expect(tree?.parentElement).toBe(viewport);
         // 窗口层压在它上面,而它不该被任何窗口收进去(收进去就退回"面板里的一块画布")
+        expect(viewport?.closest('.window')).toBeNull();
         expect(tree?.closest('.window')).toBeNull();
     });
 
