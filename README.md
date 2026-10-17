@@ -1,6 +1,8 @@
 # miko_datastruct
 
 数据结构工具.目前只有一种结构:**红黑树**(输入表达式 -> 解析 -> 四项性质检查 -> 画成 SVG).
+红黑树本身(数据结构 / 性质检查 / 表达式解析)在 `src/rbt/core/` 里,与怎么显示无关;
+界面、布局、文案都在显示层(`src/rbt/config.ts`、`src/rbt/ui/`、`src/rbt/rbt.ts`).
 
 表达式输入是 **`miko_ui` 的 `CodeEditor`**(行号槽 + 词法高亮层):外框 / 字距对齐 /
 "编辑器自己不滚,滚动归宿主"归库;分词与配色归本项目(`src/rbt/ui/rbt_highlight.ts`
@@ -43,14 +45,15 @@
 `CodeEditor`(裸 textarea -> 行号 + 高亮层,见上)、面板换成桌面(见
 `RBT_DESKTOP_WINDOWS` 与 `src/rbt/ui/rbt_views.ts`)、背景那棵树换成平面视口(见
 `src/rbt/ui/rbt_viewport.ts`);解析与性质检查的行为契约一直没变,布局的**算法**也没变
-(变的只是"平面有多宽"从写死的画布宽度改成按叶子数推出来).
+(变的只是"平面有多宽"从写死的画布宽度改成按叶子数推出来).2026-10 又做了一次纯重构:
+把红黑树核心从显示层里拆到 `src/rbt/core/`(见下节),行为一条没改.
 
 ## 跑起来
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173/miko_datastruct/(dev server 也认 vite.config.ts 的 base)
-npm test           # vitest:纯逻辑 + 标记契约(happy-dom,进程内)
+npm test           # vitest:纯逻辑(node)+ 标记契约 / 行为(happy-dom,进程内)
 npm run typecheck  # tsc --noEmit
 npm run build      # clean -> test -> typecheck -> vite build(产物在 dist/)
 npm run preview    # 预览 dist/
@@ -73,15 +76,40 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 `vite.config.ts` 的 `base` 是部署路径的**唯一开关**(现在写成 `/miko_datastruct/`,
 与仓库名一致);换仓库名或换子路径只改那一处.
 
+## 分层:核心 / 显示
+
+`src/rbt/` 下分两层,依赖方向只有 **显示 -> 核心** 一个:
+
+- **核心 `src/rbt/core/`**:红黑树本身.纯逻辑,不碰 DOM,不引用显示层常量,也不写
+  任何给人看的文案.`rbt_tree.ts` 是数据结构(节点 / 颜色,字段只读)加四条性质检查,
+  结论是**结构化**的(违规节点 / 两侧黑高,不是句子);`rbt_parse.ts` 是表达式解析,
+  失败只给**错误码 + 出错片段**.核心节点**不挂坐标**:布局算的 x / y 存在显示层自己
+  的 `RbtPlacedNode` 里.
+- **显示层**:`config.ts`(文案模板 / DOM 契约 / 窗口清单 / 布局与视口参数 / 类名)、
+  `ui/rbt_layout.ts`(叶子数 -> 平面宽度 -> 坐标 / 连线 / 包围盒)、
+  `ui/rbt_render.ts`(世界层落笔)、`ui/rbt_format.ts`(结构化结果 -> 中文文案)、
+  `ui/rbt_views.ts`(桌面视图标记)、`ui/rbt_viewport.ts`(拖动 / 缩放 / 适应)、
+  `rbt.ts`(装配 + 每轮输入的全流程).
+
+这样切线之后,"显示的办法"(间距 / 层距 / 半径 / 窗口几何 / 文案)要删要改都只落在
+显示层:核心层不知道树怎么画,删掉某种画法也不必动性质检查与解析.界面变成可拖动缩放
+的平面之后,布局里那些"算高度 / 算间距"的参数本来就只影响首屏观感(用户可以自己
+缩放),它们集中在 `config.ts` 的布局几何一节与 `ui/rbt_layout.ts`,不再和树的定义
+混在一起.
+
 ## 结构
 
 ```text
 index.html              页面上只有一颗手写宿主 #app
 src/main.ts             入口:引库样式 + 应用样式,再 mountRBT(#app)
 css/app.css             应用层:页面基线 + 一条从主站继承的令牌(--font-code)
-src/rbt/config.ts       声明式模型:文案 / DOM 契约 id / 窗口清单 / 平面与视口参数 / 布局几何 / 结构类名 / 词法类名 / 性质清单
-src/rbt/rbt_tree.ts     解析(格式检查)与性质检查(纯逻辑,可单测)
-src/rbt/rbt.ts          布局(叶子数 -> 平面宽度 -> 包围盒)+ 世界层落笔 + mountRBT(建内容 -> mountDesktop + 视口 -> 行为)
+src/rbt/core/rbt_tree.ts    数据结构(节点 / 颜色,字段只读)+ 四条性质检查(结构化:违规节点 / 两侧黑高)
+src/rbt/core/rbt_parse.ts   表达式解析(字符串 -> 节点;失败只给错误码 + 出错片段)
+src/rbt/config.ts       显示层声明式模型:文案模板 / DOM 契约 id / 窗口清单 / 平面与视口参数 / 布局几何 / 类名 / 性质标签
+src/rbt/rbt.ts          挂载:内容装配 -> mountDesktop + 视口,以及每轮输入的全流程(格式检查 -> 性质检查 -> 重绘)
+src/rbt/ui/rbt_layout.ts   平面布局(纯几何:叶子数 -> 平面宽度 -> 坐标 / 连线 / 包围盒;坐标不进核心节点)
+src/rbt/ui/rbt_render.ts   世界层落笔(SVG 节点 / 连线,每轮整批重建)
+src/rbt/ui/rbt_format.ts   核心结构化结果 -> 中文文案(解析错误 / 性质说明 / 抬头)
 src/rbt/ui/rbt_views.ts 桌面视图(纯函数:平面背景(视口 + 画布 + 世界层)+ 两扇窗口的正文;编辑器是库的 createCodeEditor)
 src/rbt/ui/rbt_viewport.ts 平面视口:世界坐标 -> 屏幕像素的变换数学 + 拖动 / 滚轮 / 双击手势
 src/rbt/ui/rbt_highlight.ts 表达式分词 -> 高亮 HTML(纯函数,注入给编辑器的高亮层)

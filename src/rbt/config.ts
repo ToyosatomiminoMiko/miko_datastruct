@@ -1,7 +1,11 @@
 // ================================================================
-// 红黑树工具(rbt/rbt.ts)常量配置
+// 红黑树工具的**显示层**配置
 //
-// 集中 rbt/rbt.ts 里所有"设计参数":DOM 契约,布局几何,结构类名与文案.
+// 集中显示层所有"设计参数":DOM 契约,窗口清单,提示文案,布局几何,结构类名与
+// 输出区文案.红黑树本身(节点形状 / 性质检查 / 表达式解析)在 src/rbt/core/,那里
+// 一个界面字、一个显示常量都不引 -- 本文件是"显示"这一侧的集中地,改文案 / 改
+// 观感 / 改布局参数都只到这一层为止.
+//
 // **不再有配色与字体**:树从 canvas 换成 SVG 之后,每一笔都是文档里的元素,颜色 /
 // 字号 / 线宽全部回到 CSS(src/rbt/tokens.css 的 `--rbt-*` 令牌 +
 // src/rbt/rbt.css 的 `#rbtTree` 区块).从前 `ctx.fillStyle` 读不到 CSS 变量,
@@ -10,9 +14,14 @@
 // 桌面化(2026-10)之后这里还多一节**窗口清单**:哪些窗口 / 标题叫什么 / 默认几何.
 // 那份数据是库的 `mountDesktop` 的构造参数(类型 `WindowConfigEntry`),所以本文件
 // 只做一次 type-only 导入 -- 类型归库,值归应用,运行时没有依赖.
+//
+// 性质清单的**性质 id** 不在这里:那是核心层的事实(core/rbt_tree.ts 的
+// RBT_PROPERTY_IDS 定顺序,PROPERTY_CHECKS 按 id 收口);这里只给 id 配中文名,
+// 并按核心层的顺序生成界面清单(见 RBT_PROPERTIES).
 // ================================================================
 
 import type { WindowConfigEntry } from 'miko_ui';
+import { RBT_PROPERTY_IDS, type RbtPropertyId } from './core/rbt_tree';
 
 
 // ---------- DOM 契约(id,src/rbt/rbt.css 按它命中) ----------
@@ -255,7 +264,7 @@ export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
 // 与任务栏压在它上面,窗口没盖住的地方就是平面本身.
 //
 // 今天只有**水平跨度**需要一个"平方面积"的输入:区间分配法把水平空间按叶子分,叶子
-// 越多跨度越大,所以宽度由叶子数推出来(见 rbt.ts 的 planeWidth);垂直方向不设上限
+// 越多跨度越大,所以宽度由叶子数推出来(见 ui/rbt_layout.ts 的 planeWidth);垂直方向不设上限
 // (深一层就往下走一步),平面的高度由内容的实际包围盒给出.
 
 /**
@@ -267,7 +276,7 @@ export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
  *
  * 与 RBT_MIN_HORIZONTAL_GAP 的关系:两者都参与"每片叶子摊多宽",取大者 -- 节距是
  * **观感想要的**间距,最小间距是**几何必须的**下限(圆不重叠),叶子特别多时按后者
- * 兜底(见 rbt.ts 的 planeWidth).
+ * 兜底(见 ui/rbt_layout.ts 的 planeWidth).
  */
 export const RBT_LEAF_PITCH = 70;
 
@@ -362,8 +371,8 @@ export const RBT_CLAMP_TOLERANCE = 5;
 // 这正是不用 canvas 的最大收益:`ctx.fillStyle` 读不到 CSS 变量,从前那套红黑配色
 // 只能写死在 config 里.现在 config 只声明**类名**(选择器锚点),观感去样式表改.
 //
-// 类名同时是跨语言契约:scripts/smoke_home.mjs 在真浏览器里按 `.rbt-node--red`
-// 数红节点,按 `.rbt-edge` 数连线,所以它们不能只因为"CSS 里看着没用"就删.
+// 类名同时是跨语言契约:src/rbt/rbt.test.ts 按 `.rbt-node--red` 数红节点,
+// 按`.rbt-edge` 数连线,所以它们不能只因为"CSS 里看着没用"就删.
 
 /** 一个节点的组(位置在它的 `transform` 上;圆与文字是它的两个孩子) */
 export const RBT_NODE_CLASS = 'rbt-node';
@@ -424,8 +433,8 @@ export const RBT_OUTPUT_ERROR_CLASS = 'tree-error';
 
 /**
  * 单条性质的类名(行为代码每渲染一次清单就整批重建这些节点).
- * 消费方是 scripts/smoke_home.mjs:它在真浏览器里按 `#treeOutput .tree-property`
- * 数行数,所以这个类名是**跨语言契约**,不能只按"CSS 里没用到"就删.
+ * 消费方是 src/rbt/rbt.test.ts:它按 `#treeOutput .tree-property` 数行数,所以这个
+ * 类名是**跨语言契约**,不能只按"CSS 里没用到"就删.
  */
 export const RBT_DIAGNOSTICS_ROW_CLASS = 'tree-property';
 
@@ -452,8 +461,9 @@ export const RBT_PROPERTY_STATE_FAIL = 'FAIL';
 
 // ---------- 性质检查:逐条的出错文案 ----------
 //
-// 这几条是**出错位置**的模板,由 rbt_tree.ts 填占位符后显示在清单里.
-// 占位符有两种:`{node}` 换成"值+颜色"(如 `11R`),数字占位符换成算出来的数.
+// 这几条是**出错位置**的模板,由 ui/rbt_format.ts 从核心层的结构化违规结果填占位符
+// 后显示在清单里.占位符有两种:`{node}` 换成"值+颜色"(如 `11R`),数字占位符换成
+// 算出来的数.核心层(core/rbt_tree.ts)只给违规节点与两个黑高数字,不碰这些句子.
 
 /** 根节点是红色 */
 export const RBT_ROOT_RED_DETAIL = '根节点 {node} 是红色';
@@ -471,56 +481,38 @@ export const RBT_BLACK_HEIGHT_DETAIL =
 /** 二叉搜索树有序性不成立 */
 export const RBT_BST_ORDER_DETAIL = '以 {node} 为根的子树不满足左小右大';
 
-/** 性质定义(清单顺序 = 检查顺序 = 界面顺序) */
+/** 一条性质在界面上的定义:核心层的稳定 id + 界面上的中文名 */
 export interface RbtPropertySpec {
-    /** 稳定 id,行为代码按它取对应的检查函数(见 rbt_tree.ts 的 PROPERTY_CHECKS) */
-    readonly id: string;
+    /** 稳定 id,核心层的检查函数按它收口(见 core/rbt_tree.ts 的 PROPERTY_CHECKS) */
+    readonly id: RbtPropertyId;
     /** 界面上的性质名(可见文本) */
     readonly label: string;
 }
 
 /**
- * 四条性质,顺序即检查顺序.
+ * 性质 id -> 界面上的性质名(可见文本).
  *
- * 前三条是红黑树的定义(CLRS 那五条里会被表达式破坏的那些),第四条是"红黑树"
- * 这名字里的另一半:
- *
- * 1. 根是黑色;
- * 2. 红节点的孩子都是黑色(含"红节点直接接 nil" -- nil 是黑的,但那样这条路径
- *    上红节点底下没有黑节点,形状上已经不对);
- * 3. 任一节点到其后代 nil 叶子的所有路径上黑节点数相同(黑高一致);
- * 4. 二叉搜索树有序(左子树全部小于节点,右子树全部大于节点).
- *
- * 第 4 条不是红黑性质,是手打表达式最常见的错(层级对了而值乱序);单独列一条,
- * 文案写的是"二叉搜索树有序",不混进上面那三条.
- *
- * 少了 CLRS 里另外两条,原因不是"没实现"而是**结构上不可能违反**:
- * - "每个节点非红即黑":颜色写在表达式里,解析器只收 R / B;
- * - "nil 叶子是黑色":解析器不建 nil 节点(用 null 表示),颜色恒为黑;
- * - "每个节点要么两个子节点都不是 nil,要么都是":括号表达式必须写两个子树
- *   (`5B(1B,2B)`),单孩子写法 `5B(1B)` 在解析阶段就报"缺少逗号",到不了性质检查.
- * 列一条永远 PASS 的条目只会让清单看着更长,所以不列;哪天支持了单孩子写法,
- * 再把那条加回来.
- *
- * `as const` 让 id 收窄成字面量联合:`rbt_tree.ts` 的 PROPERTY_CHECKS 用
- * `Record<id 联合, 检查函数>` 收口,清单增删一条而检查函数没跟上会**编译报错**,
- * 而不是等到某个输入把它变成 undefined 调用.
+ * 用 `Record<RbtPropertyId, string>` 收口:核心层增删一条性质而这里没跟上会**编译
+ * 报错**(缺键 / 多键),不会出现"清单上少一行 / 多一行"却没人发现.
  */
-export const RBT_PROPERTIES = [
-    { id: 'root-black', label: '根节点为黑色' },
-    { id: 'red-no-red-child', label: '红色节点不可相邻' },
-    { id: 'black-height', label: '各路径黑色节点数量相同' },
-    { id: 'bst-order', label: '二叉搜索树有序' },
-] as const satisfies readonly RbtPropertySpec[];
+const RBT_PROPERTY_LABELS: Readonly<Record<RbtPropertyId, string>> = {
+    'root-black': '根节点为黑色',
+    'red-no-red-child': '红色节点不可相邻',
+    'black-height': '各路径黑色节点数量相同',
+    'bst-order': '二叉搜索树有序',
+};
 
 /**
- * 二叉搜索树有序性的比较容差.
+ * 界面上的性质清单(顺序 = 核心层 RBT_PROPERTY_IDS 的顺序 = 检查顺序).
  *
- * 只用来兜住浮点写法(如 `0.1 + 0.2` 那类值在字符串里看不出误差)与整数写法
- * 混用时的边界;相等值(左右子树出现和祖先同一个值)仍然判 FAIL,所以容差取
- * 极小值,不会把"值重复"放过.
+ * 顺序不在这里另写一遍:清单直接由核心层的 id 顺序生成,两边不可能对不上.性质
+ * 到底查什么 / 为什么只有四条,见 core/rbt_tree.ts 的 RBT_PROPERTY_IDS 说明 --
+ * 那是数据结构的事,这里只负责"界面上叫它什么".
  */
-export const RBT_COMPARISON_TOLERANCE = 1e-9;
+export const RBT_PROPERTIES: readonly RbtPropertySpec[] = RBT_PROPERTY_IDS.map((id) => ({
+    id,
+    label: RBT_PROPERTY_LABELS[id],
+}));
 
 // ---------- 占位文案 ----------
 
@@ -545,33 +537,11 @@ export const RBT_ERROR_UI_PREFIX = '错误: ';
 export const RBT_TREE_EXAMPLE =
     "15B(7R(3B(1R(0B,2B),5R(4B,6B)),11B(9R(8B,10B),13R(12B,14B))),23R(19B(17R(16B,18B),21R(20B,22B)),27B(25R(24B,26B),29R(28B,30B))))";
 
-// ---------- 解析器使用的字符与哨兵 ----------
-
-/** 表示空节点的字符串(小写) */
-export const RBT_NIL = 'nil';
-
-/** R/B 颜色标记字符(红) */
-export const RBT_COLOR_RED = 'R';
-
-/** R/B 颜色标记字符(黑) */
-export const RBT_COLOR_BLACK = 'B';
-
-/** 节点表达式里的左括号 */
-export const RBT_LEFT_PAREN = '(';
-
-/** 节点表达式里的右括号 */
-export const RBT_RIGHT_PAREN = ')';
-
-/** 左右子树的分隔逗号 */
-export const RBT_COMMA = ',';
-
-/** 简写叶子自动补全的后缀:值+颜色(nil,nil) */
-export const RBT_LEAF_SUFFIX = '(nil,nil)';
-
-/** 节点简写的最小长度(至少 1 位值 + 1 位颜色) */
-export const RBT_MIN_SHORTHAND_LENGTH = 2;
-
 // ---------- 可见文案(解析错误信息,与界面一字不差) ----------
+//
+// 解析器(core/rbt_parse.ts)只抛错误码 + 出错片段,句子由 ui/rbt_format.ts 用下面这些
+// 模板拼:改文案不碰核心逻辑.语法字符(`(`, `)`, `,`, R/B, nil)也不在这里 --
+// 那是输入格式的定义,在 core/rbt_parse.ts(词法高亮引的是同一份).
 
 /** 简写节点过短时的错误文案前缀 */
 export const RBT_ERR_SHORTHAND_TOO_SHORT = '无效节点简写: "';
