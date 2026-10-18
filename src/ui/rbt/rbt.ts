@@ -2,11 +2,15 @@
 2026.05.01.00:00:00
 红黑树桌面:装配 + 每轮输入的全流程.
 
-本文件只做挂载与串联:布局 / 落笔 / 文案 / 视口在 ui/rbt,树结构 / 性质检查 / 解析在
-src/datastruct/rbt.装配顺序:先建内容,再 mountDesktop 建桌面三层与窗口外壳.
+本文件只做挂载与串联:布局 / 文案 / 红黑语义在 ui/rbt,场景落笔 / 平面视口 / 绘制面在
+src/visual,树结构 / 性质检查 / 解析在 src/datastruct/rbt.装配顺序:先建内容,再
+mountDesktop 建桌面三层与窗口外壳.
 */
 
-// 本模块引入样式:tokens.css(设计令牌)与 rbt.css(编辑器 / 输出区 / 背景那棵树 / 桌面根)
+// 本模块引入样式:视觉层(visual.css:绘制面 / 节点 / 指针的通用观感)与红黑树自己的
+// tokens.css(设计令牌)与 rbt.css(编辑器 / 输出区 / 红黑变体).顺序即层叠顺序:
+// 视觉层的通用规则在前,红黑树的变体规则在后.
+import '@/visual/visual.css';
 import '@/ui/rbt/rbt.css';
 
 import {
@@ -35,12 +39,13 @@ import {
 } from '@/datastruct/rbt/rbt_tree';
 import { formatParseError, formatPropertyDetail, formatPropertySummary } from './rbt_format';
 import { layoutTree } from './rbt_layout';
-import { clearTree, drawTree } from './rbt_render';
+import { rbtScene } from './rbt_scene';
 import { createRbtViews } from './rbt_views';
+import { clearScene, renderScene } from '@/visual/render';
 import {
     mountPlaneViewport,
-    type RbtViewportHandle,
-} from './rbt_viewport';
+    type PlaneViewportHandle,
+} from '@/visual/viewport';
 import {
     DEFAULT_DESKTOP_CONFIG,
     create_element,
@@ -101,8 +106,8 @@ function propertyLines(report: RbtPropertyReport): HTMLElement[] {
 interface MountedRbt {
     readonly desktop: DesktopHandle;
     readonly editor: CodeEditorHandle;
-    /** 平面视口:拖动 / 滚轮监听与尺寸观察者都在它手里(见 ui/rbt/rbt_viewport.ts) */
-    readonly viewport: RbtViewportHandle;
+    /** 平面视口:拖动 / 滚轮监听与尺寸观察者都在它手里(见 src/visual/viewport.ts) */
+    readonly viewport: PlaneViewportHandle;
 }
 
 const mounted = new WeakMap<HTMLElement, MountedRbt>();
@@ -173,7 +178,7 @@ export function mountRBT(host: HTMLElement): void {
 
         if (expr === '') {
             renderOutput([textLine(RBT_OUTPUT_HINT_CLASS, RBT_EMPTY_HINT_TEXT)]);
-            clearTree(worldEl);
+            clearScene(worldEl);
             return;
         }
 
@@ -182,14 +187,14 @@ export function mountRBT(host: HTMLElement): void {
             const rootNode = buildTreeFromExpression(expr);
             if (rootNode === null) {
                 renderOutput([textLine(RBT_OUTPUT_HINT_CLASS, RBT_EMPTY_TREE_HINT_TEXT)]);
-                clearTree(worldEl);
+                clearScene(worldEl);
                 return;
             }
             // 性质检查写进输出区,平面里只画这棵树
             renderOutput(propertyLines(checkTreeProperties(rootNode)));
             // 落笔后把量到的实际包围盒报给视口;量不到(测试环境)就不动视角
             const layout = layoutTree(rootNode);
-            const bounds = drawTree(worldEl, layout);
+            const bounds = renderScene(worldEl, rbtScene(layout));
             if (bounds !== null) {
                 viewport.contentChanged(bounds);
             }
@@ -198,7 +203,7 @@ export function mountRBT(host: HTMLElement): void {
             renderOutput([
                 textLine(RBT_OUTPUT_ERROR_CLASS, `${RBT_ERROR_UI_PREFIX}${formatParseError(err)}`),
             ]);
-            clearTree(worldEl);
+            clearScene(worldEl);
         }
     };
 

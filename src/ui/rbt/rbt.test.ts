@@ -15,23 +15,24 @@ import {
     RBT_DIAGNOSTICS_STATE_CLASS,
     RBT_DIAGNOSTICS_SUMMARY_CLASS,
     RBT_DOM,
-    RBT_EDGE_CLASS,
     RBT_EMPTY_HINT_TEXT,
     RBT_EMPTY_TREE_HINT_TEXT,
     RBT_ERROR_UI_PREFIX,
     RBT_FIT_BUTTON_TEXT,
-    RBT_NODE_BLACK_CLASS,
-    RBT_NODE_CLASS,
-    RBT_NODE_LABEL_CLASS,
-    RBT_NODE_RED_CLASS,
-    RBT_NODE_SHAPE_CLASS,
     RBT_OUTPUT_ERROR_CLASS,
     RBT_OUTPUT_HINT_CLASS,
     RBT_PROPERTIES,
     RBT_TOKEN_VALUE_CLASS,
     RBT_TREE_EXAMPLE,
-    RBT_WORLD_CLASS,
 } from '@/ui/rbt/config';
+import {
+    VISUAL_NODE_CLASS,
+    VISUAL_NODE_LABEL_CLASS,
+    VISUAL_NODE_SHAPE_CLASS,
+    VISUAL_POINTER_CLASS,
+    VISUAL_WORLD_CLASS,
+    visualNodeVariantClass,
+} from '@/visual/config';
 import { mountRBT } from '@/ui/rbt/rbt';
 
 /** 按 id 取刚挂载出来的元素(取不到说明标记契约变了,直接抛错而不是让断言读 null) */
@@ -72,17 +73,17 @@ function mountPanel(): { input: HTMLTextAreaElement; output: HTMLElement; tree: 
 
 /** 树里当前画着的节点(按文档顺序) */
 function treeNodes(tree: SVGSVGElement): Element[] {
-    return [...tree.querySelectorAll(`.${RBT_NODE_CLASS}`)];
+    return [...tree.querySelectorAll(`.${VISUAL_NODE_CLASS}`)];
 }
 
 /** 树里当前画着的连线 */
 function treeEdges(tree: SVGSVGElement): Element[] {
-    return [...tree.querySelectorAll(`.${RBT_EDGE_CLASS}`)];
+    return [...tree.querySelectorAll(`.${VISUAL_POINTER_CLASS}`)];
 }
 
 /** 树上所有节点值(按文档顺序) */
 function treeLabels(tree: SVGSVGElement): string[] {
-    return [...tree.querySelectorAll(`.${RBT_NODE_LABEL_CLASS}`)].map((label) => label.textContent ?? '');
+    return [...tree.querySelectorAll(`.${VISUAL_NODE_LABEL_CLASS}`)].map((label) => label.textContent ?? '');
 }
 
 beforeEach(() => {
@@ -111,10 +112,10 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
             .toHaveLength(RBT_PROPERTIES.length);
 
         // 深度 4 的满树 31 个节点 => 31 个节点组,每个都是一颗圆 + 一个节点值;
-        // 每颗圆都带 .rbt-node__shape(半径 / 颜色由 CSS 给)
+        // 每颗圆都带视觉层的 .visual-node__shape(半径 / 颜色由 CSS 给)
         const nodes = treeNodes(tree);
         expect(nodes).toHaveLength(31);
-        expect(tree.querySelectorAll(`.${RBT_NODE_SHAPE_CLASS}`)).toHaveLength(31);
+        expect(tree.querySelectorAll(`.${VISUAL_NODE_SHAPE_CLASS}`)).toHaveLength(31);
         expect(treeLabels(tree).every((label) => /^\d+$/.test(label))).toBe(true);
     });
 
@@ -156,16 +157,16 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
 
     it('树画在世界层里,而且视口给这一层写了 transform(平面 -> 屏幕的换算只有这一处)', () => {
         const { tree } = mountPanel();
-        const world = tree.querySelector(`.${RBT_WORLD_CLASS}`);
+        const world = tree.querySelector(`.${VISUAL_WORLD_CLASS}`);
 
         expect(world).not.toBeNull();
         // 节点与连线都在世界层里:世界坐标 = 布局坐标,画布自己不再缩放
-        expect(world?.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
-        expect(world?.querySelectorAll(`.${RBT_EDGE_CLASS}`)).toHaveLength(31 - 1);
+        expect(world?.querySelectorAll(`.${VISUAL_NODE_CLASS}`)).toHaveLength(31);
+        expect(world?.querySelectorAll(`.${VISUAL_POINTER_CLASS}`)).toHaveLength(31 - 1);
         /*
           世界层的 transform 由视口句柄写.
 
-          happy-dom 不做排版:`world.getBBox()` 恒为空矩形,drawTree 交回 null,rbt.ts
+          happy-dom 不做排版:`world.getBBox()` 恒为空矩形,renderScene 交回 null,rbt.ts
           因此不报包围盒;就算报了,host.clientWidth 也是 0. 两层兜底叠在一起,世界层停在
           视口挂载时写的恒等视角上 -- 这里钉的是"属性一定被写过、格式就是 translate +
           scale",真机上的适应比例不在这里验.
@@ -181,11 +182,11 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         const nodes = treeNodes(tree);
         expect(nodes).toHaveLength(3);
         // 文档顺序是先根后子树(先序遍历),所以第一颗是根
-        expect(nodes[0].classList.contains(RBT_NODE_BLACK_CLASS)).toBe(true);
-        expect(nodes[0].classList.contains(RBT_NODE_RED_CLASS)).toBe(false);
-        expect(nodes[1].classList.contains(RBT_NODE_RED_CLASS)).toBe(true);
-        expect(nodes[2].classList.contains(RBT_NODE_RED_CLASS)).toBe(true);
-        expect(nodes.filter((node) => node.classList.contains(RBT_NODE_BLACK_CLASS))).toHaveLength(1);
+        expect(nodes[0].classList.contains(visualNodeVariantClass('black'))).toBe(true);
+        expect(nodes[0].classList.contains(visualNodeVariantClass('red'))).toBe(false);
+        expect(nodes[1].classList.contains(visualNodeVariantClass('red'))).toBe(true);
+        expect(nodes[2].classList.contains(visualNodeVariantClass('red'))).toBe(true);
+        expect(nodes.filter((node) => node.classList.contains(visualNodeVariantClass('black')))).toHaveLength(1);
     });
 
     it('清空输入:输出区换成一行提示,树上一个节点 / 一条线都不留', () => {
@@ -257,7 +258,7 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         // 标记同样只有一份(宿主由本模块独占)
         expect(host.querySelectorAll(`#${RBT_DOM.treeId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`#${RBT_DOM.editorId}`)).toHaveLength(1);
-        expect(host.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
+        expect(host.querySelectorAll(`.${VISUAL_NODE_CLASS}`)).toHaveLength(31);
         // 回正按钮也只有一枚:动作由库按上一份桌面的 dockActions 建,随旧任务栏一起离场
         expect([...host.querySelectorAll('.dock button')]
             .filter((button) => button.textContent === RBT_FIT_BUTTON_TEXT)).toHaveLength(1);
@@ -280,7 +281,7 @@ describe('红黑树:回正按钮', () => {
             .mockReturnValue(new DOMRect(0, 0, 200, 100));
         try {
             const { tree } = mountPanel();
-            const world = tree.querySelector(`.${RBT_WORLD_CLASS}`);
+            const world = tree.querySelector(`.${VISUAL_WORLD_CLASS}`);
             if (!world) throw new Error('树里找不到世界层');
             const fitted = world.getAttribute('transform');
 

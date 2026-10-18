@@ -20,8 +20,8 @@ import {
     RBT_INPUT_PLACEHOLDER,
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
-    RBT_WORLD_CLASS,
 } from '@/ui/rbt/config';
+import { VISUAL_SURFACE_CLASS, VISUAL_VIEWPORT_CLASS, VISUAL_WORLD_CLASS } from '@/visual/config';
 import { mountRBT } from '@/ui/rbt/rbt';
 import { createRbtViews, type RbtViews } from '@/ui/rbt/rbt_views';
 import { expectNoDuplicateIds, renderHost } from '@/test_support/desktop_test_helpers';
@@ -110,21 +110,24 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         expect(views.output.textContent).toBe('');
     });
 
-    it('背景是 视口 div > svg#rbtTree > 世界层 g,画布不再有 viewBox / 宽高属性', () => {
+    it('背景是 视口 div > svg#rbtTree > 世界层 g,绘制面不再有 viewBox / 宽高属性', () => {
         const { views } = buildViews();
 
-        // 视口是库要的背景节点(`.desktop-background` 给定位与底色)
+        // 视口是库要的背景节点(`.desktop-background` 给定位与底色),同时挂视觉层的
+        // 视口类(裁切 / 手势归视觉层的样式)
         expect(views.viewport.tagName.toLowerCase()).toBe('div');
         expect(views.viewport.id).toBe(RBT_DOM.viewportId);
         expect(views.viewport.classList.contains('desktop-background')).toBe(true);
+        expect(views.viewport.classList.contains(VISUAL_VIEWPORT_CLASS)).toBe(true);
         expect(views.viewport.children).toHaveLength(1);
 
-        // 标签名一起断言:换成 canvas 而只改 id 的话,这一条会红
+        // 标签名一起断言:换成 HTML `<canvas>` 而只改 id 的话,这一条会红
         expect(views.viewport.children[0]).toBe(views.tree);
         expect(views.tree.tagName.toLowerCase()).toBe('svg');
         expect(views.tree.id).toBe(RBT_DOM.treeId);
+        expect(views.tree.classList.contains(VISUAL_SURFACE_CLASS)).toBe(true);
         /*
-          画布是 1:1 的像素面:
+          绘制面(svg)是 1:1 的像素面:
           - 没有 `viewBox`:一个用户单位 = 一个 CSS 像素,世界坐标 -> 屏幕像素的缩放
             只由世界层 transform 表达;
           - 没有 `width` / `height`:显示尺寸由 CSS 给 100%,SVG 自己不缩放.
@@ -137,7 +140,7 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         // 世界层是 SVG 里唯一一层,树的坐标只在这里被 transform 换算
         expect(views.tree.children).toHaveLength(1);
         expect(views.world.tagName.toLowerCase()).toBe('g');
-        expect(views.world.classList.contains(RBT_WORLD_CLASS)).toBe(true);
+        expect(views.world.classList.contains(VISUAL_WORLD_CLASS)).toBe(true);
         // 空:每轮画什么由 rbt.ts 重建,这一层不认识树
         expect(views.world.children).toHaveLength(0);
     });

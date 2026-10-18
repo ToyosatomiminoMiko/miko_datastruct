@@ -1,0 +1,27 @@
+/*
+ * 视觉层的设计令牌:平面画布 / 节点 / 指针的可调数值都集中在这里,visual.css 只引用
+ * `var(--visual-*)`,选择器里不写死色值与尺寸.
+ *
+ * 这里只放"所有结构共用"的观感:节点形状 / 值文字 / 指针对比度.语义色(红黑树的红 / 黑,
+ * 将来的"当前节点""已删除")不属于这一层 -- 它们由结构自己的令牌与变体规则给,见
+ * src/ui/<结构>/tokens.css.
+ *
+ * 跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):`--visual-node-radius`
+ * 只在 CSS 这一侧定义,TS 不读它(内容占多大由渲染层向浏览器要 `getBBox()`);每个结构的
+ * 布局必须保证同层相邻节点的中心距大于 2 × 这个半径,否则两个圆会叠在一起(红黑树这一条
+ * 在 src/ui/rbt/config.ts 的 `RBT_MIN_HORIZONTAL_GAP`).进入动画的时长也只有 CSS 一处
+ * (纯 CSS 动画,TS 侧不参与).
+ */
+:root {
+    /* 节点:半径 / 默认填充(没有语义变体时用)/ 值文字颜色与字号 */
+    --visual-node-radius: 22px;
+    --visual-node-fill: #334155;
+    --visual-node-text: #ffffff;
+    /* 值字号:半径 22px × 0.75 向下取整 = 16 */
+    --visual-node-font-size: 16px;
+    /* 指针:颜色(浅灰蓝)与线宽(无描边单位,直接进 SVG stroke-width) */
+    --visual-pointer-color: #94a3b8;
+    --visual-pointer-width: 2;
+    /* 节点进入动画时长:每轮整批重建,所以每个节点都会重新播一次 */
+    --visual-node-enter-duration: 220ms;
+}

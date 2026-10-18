@@ -1,7 +1,7 @@
 /*
-红黑树工具的**桌面视图组件**(声明式):按 config.ts 的声明产出桌面背景(平面视口 + 树
-的 `<svg>` + 世界层)与两扇窗口的正文节点,由 src/ui/rbt/rbt.ts 的 `mountRBT` 交给库的
-`mountDesktop` 装配.
+红黑树工具的**桌面视图组件**(声明式):按 config.ts 的声明产出桌面背景(平面绘制面的标记
+由视觉层 visual/surface.ts 建)与两扇窗口的正文节点,由 src/ui/rbt/rbt.ts 的 `mountRBT`
+交给库的 `mountDesktop` 装配.
 
 本模块是纯函数:不读页面,不改全局,不绑业务事件,只把"描述"变成元素并把行为代码要用
 的引用一起交回;装配桌面、绑视口手势都是 rbt.ts 的事.
@@ -9,7 +9,6 @@
 
 import {
     create_element,
-    create_svg_element,
     createCodeEditor,
     type Child,
     type CodeEditorHandle,
@@ -25,12 +24,12 @@ import {
     RBT_INPUT_PLACEHOLDER,
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
-    RBT_WORLD_CLASS,
     type RbtWindowId,
 } from '@/ui/rbt/config';
 import { highlightRbtExpression } from '@/ui/rbt/rbt_highlight';
+import { createVisualSurface } from '@/visual/surface';
 
-/** 树那块画布的读屏标签(它不是纯装饰:画的是这一轮解析出来的树). */
+/** 树那块绘制面的读屏标签(它不是纯装饰:画的是这一轮解析出来的树). */
 const RBT_TREE_LABEL = '红黑树结构图';
 
 /** 红黑树桌面视图:桌面背景 + 两扇窗口的正文 + 行为代码要用的元素引用 */
@@ -44,18 +43,19 @@ export interface RbtViews {
      */
     readonly viewport: HTMLElement;
     /**
-     * 那棵树的 `<svg>` 根 #rbtTree(1:1 的像素画布,没有 viewBox).
+     * 那棵树的 `<svg>` 根 #rbtTree(1:1 的像素绘制面,没有 viewBox).
      *
      * 它长在视口里,自己**不做缩放**:世界坐标 -> 屏幕像素的缩放全归世界层的
      * `transform`.树上的结构(节点 / 连线)不在这里,见 `world`.
      */
     readonly tree: SVGSVGElement;
     /**
-     * 世界层 `<g class="rbt-world">`:树上一切(连线 / 节点)的父节点,也是视口唯一
+     * 世界层(视觉层的 `VISUAL_WORLD_CLASS`):场景里所有节点 / 指针的父节点,也是视口唯一
      * 改动的那一层(`transform = translate(x y) scale(k)`).
      *
-     * 行为代码每轮 `replaceChildren` 整批重建它的子节点;视口句柄改它的 transform.
-     * 这里只给一个**空的** `<g>`:标记里不带任何结构,画什么由 rbt.ts 按布局结果给.
+     * 行为代码每轮 `replaceChildren` 整批重建它的子节点(交给视觉层的 `renderScene`);视口
+     * 句柄改它的 transform.这里只给一个**空的** `<g>`:标记里不带任何结构,画什么由 rbt.ts
+     * 按布局结果交给视觉层.
      */
     readonly world: SVGGElement;
     /**
@@ -103,33 +103,17 @@ export function createRbtViews(): RbtViews {
     const output = create_element({ tag: 'div' }, { id: RBT_DOM.outputId, hidden: 'hidden' });
 
     /*
-      桌面背景:平面视口(#rbtViewport)→ 画布(svg#rbtTree)→ 世界层(g.rbt-world).
-
-      三层各只有一件事:**视口**铺满桌面、裁切、收指针事件(定位与底色来自库的
-      `.desktop-background`,画什么与尺寸归我们);**画布**是 1:1 的像素面 -- 没有
-      viewBox,也没有 width/height 属性(尺寸由 CSS 给 100%,一个用户单位就是一个
-      CSS 像素),所以布局算出来的坐标就是屏幕像素;**世界层**是树上一切的父节点,
-      世界坐标只在这一层的 transform 里被换算.空着建出来,是因为"层"属于标记结构
-      (视口要长期引用它),而"画什么"属于每轮重建的内容.
-
-      `role` / `aria-label` 挂在整颗背景 svg 上:视口是可交互的(拖动 / 缩放),而它
-      画的是这一轮解析出来的树,读屏该说清"这里是什么".
+      桌面背景:平面视口 -> 绘制面 -> 世界层的标记由视觉层(visual/surface.ts)按正式定义建.
+      这里只做三件红黑树自己的事:把视口交给桌面当背景节点(`.desktop-background` 的定位
+      与底色归库)、给两个 id(本应用的 DOM 契约)、给读屏标签.世界层空着建出来 --
+      "画什么"每轮由 rbt.ts 交给视觉层落笔,这一层不认识红黑树.
     */
-    const world = create_svg_element({ tag: 'g' }, { class: RBT_WORLD_CLASS });
-    const tree = create_svg_element(
-        { tag: 'svg' },
-        {
-            id: RBT_DOM.treeId,
-            role: 'img',
-            'aria-label': RBT_TREE_LABEL,
-        },
-        world,
-    );
-    const viewport = create_element(
-        { tag: 'div' },
-        { id: RBT_DOM.viewportId, class: 'desktop-background' },
-        tree,
-    );
+    const { viewport, svg: tree, world } = createVisualSurface({
+        viewportId: RBT_DOM.viewportId,
+        svgId: RBT_DOM.treeId,
+        svgLabel: RBT_TREE_LABEL,
+        viewportClass: 'desktop-background',
+    });
 
     /*
       提示区:静态说明,外框认 config 的 RBT_HINT_BOX_CLASS.

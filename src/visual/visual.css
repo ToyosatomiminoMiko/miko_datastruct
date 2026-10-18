@@ -1,0 +1,149 @@
+@import '@/visual/tokens.css';
+
+/*
+ * 视觉层的观感:平面视口(裁切 / 光标 / 手势)、1:1 绘制面、场景里的节点与指针.
+ *
+ * 这一层的选择器只命中 `visual-*` 类名,不认识任何一种数据结构:
+ * - 节点的基础形状 / 值文字 / 进入动画在这里;
+ * - 语义变体(红黑树的 red / black 等)由结构自己的样式表接住,选择器形如
+ *   `.visual-node--red .visual-node__shape`,特异性高于这里的基础规则.
+ *
+ * 绘制面与视口的具体 id 归各结构的 DOM 契约(样式 / 测试按 id 定位),这一层只按类名命中.
+ */
+
+/*
+ * 平面视口 = 图上可交互的那块矩形.定位与底色通常由宿主给的类(桌面背景)负责,这里补三件
+ * 与"看图"有关的事:
+ * - **裁切**:世界层比视口大得多,边上不该画到视口外面去;
+ * - **光标**:抓 / 抓取中,库的拖动实现读的就是宿主自己的计算样式,只能写在 CSS 里;
+ * - **手势归视口**:`touch-action: none` 让触屏上的单指拖动是平移而不是滚动页面,
+ *   `user-select: none` 免得拖动时选中节点值、拖完留下一片蓝色选区.
+ */
+.visual-viewport {
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+/* 拖动态:类名 `is-dragging` 由库的拖动实现挂,这里只接住它换光标 */
+.visual-viewport.is-dragging {
+    cursor: grabbing;
+}
+
+/*
+ * 绘制面(那块 `<svg>`)是 **1:1 的像素面**:没有 viewBox,一个用户单位就是一个 CSS 像素,世界坐标到屏幕的
+ * 缩放全在世界层的 transform 里,布局算出来的坐标不用换算.
+ *
+ * `overflow: hidden` 是**显式**写出来的:场景的坐标范围远超视口,不能靠 UA 默认值承担(各
+ * 引擎的默认值历史上不一样).`display: block` 是本应用要的 -- SVG 默认 inline,不写会在
+ * 图下面留出基线缝.
+ */
+.visual-surface {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/*
+ * 世界层(`.visual-world`)在样式表里没有规则:它是纯坐标层,`transform` 由
+ * src/visual/viewport.ts 写在属性上,场景里各元素的观感各归各的类.
+ */
+
+/* 指针:描边色与线宽(当前画法是无箭头线段) */
+.visual-surface .visual-pointer {
+    stroke: var(--visual-pointer-color);
+    stroke-width: var(--visual-pointer-width);
+}
+
+/* 节点形状:只有半径与填充,没有描边(深色平面上那一圈同色描边只是视觉噪声) */
+.visual-surface .visual-node__shape {
+    r: var(--visual-node-radius);
+    fill: var(--visual-node-fill);
+}
+
+/*
+ * 节点值:水平 / 垂直都以节点圆心为中心.`text-anchor: middle` 与 `dominant-baseline:
+ * central` 两个都要写,少一个整段文字会偏出圆心半个行高,而且不会有任何报错.
+ *
+ * 文字色直接引令牌,不走 `color` + `fill: currentColor`:少一层间接就少一处能写错的地方.
+ */
+.visual-surface .visual-node__label {
+    font-family: var(--font-code);
+    font-size: var(--visual-node-font-size);
+    font-weight: bold;
+    fill: var(--visual-node-text);
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+/*
+ * 进入动画:场景每次重建就重播一次.
+ *
+ * **动画挂在形状与值文字上,不挂在节点组上**:节点的位置写在组的 `transform` **属性**上,
+ * 而 CSS 的 `transform` 与属性是同一个属性 -- 动画一动组的 transform,属性里那个
+ * `translate` 就被盖掉,动画期间所有节点叠在**世界原点**那一处,整幅图看着"散架".形状与
+ * 文字各自动自己的 `scale` 则不碰位置.
+ *
+ * `transform-box: fill-box` + `transform-origin: center` 让缩放以元素自己的包围盒为中心:
+ * 默认的 `50% 50%` 是相对 `<svg>` 视口的,那样每个圆会从整块绘制面的中心缩放出去,看着像整幅
+ * 图在抖.填充盒则让每个圆从自己圆心、每段文字从自己的中心长出来(文字的包围盒中心就是
+ * 圆心:上面那条 `text-anchor: middle` + `dominant-baseline: central` 保证的).
+ *
+ * 只动 opacity 与 transform(这里是各自的 scale):都是合成层属性,不会触发布局重排.
+ */
+@keyframes visual-node-enter {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.visual-surface .visual-node__shape,
+.visual-surface .visual-node__label {
+    transform-box: fill-box;
+    transform-origin: center;
+    /*
+      这里**不能写 `both`**(也不写 `forwards`):那两个值会把 from 那一帧的
+      `transform: scale(...)` 永久留在元素上,于是形状与值文字长期停在"从自己中心缩过
+      一点点"的状态,而且不会有任何报错.要改"从多小长出来"就只动 keyframes 里的 scale.
+    */
+    animation: visual-node-enter var(--visual-node-enter-duration) ease-out;
+}
+
+/*
+ * 系统设了"减少动态效果"就把动画关掉:元素本来就在最终态(动画没有 fill 模式,不播就等于
+ * 没写过),所以 `animation: none` 就够.
+ */
+@media (prefers-reduced-motion: reduce) {
+    .visual-surface .visual-node__shape,
+    .visual-surface .visual-node__label {
+        animation: none;
+    }
+}
+
+/*
+ * 强制颜色模式(Windows 高对比度这类):**只让这幅图不参与强制改写**.
+ *
+ * 强制颜色会把 `fill` / `stroke` 的**用值**改成系统色(不是改级联),节点形状的填充与
+ * 值文字的填充会被改成同一个系统色,圆和数字**同色**、读不出来;颜色即语义的变体区分
+ * (红 / 黑、即"这是红节点")也一并消失.
+ *
+ * 为什么是 `forced-color-adjust: none`:`!important` 没用(强制发生在 used value 阶段,
+ * 级联那时已经算完了,作者写什么都会被改写);写系统色(`Canvas` / `CanvasText`)会被尊重,
+ * 但那要先放弃配色、改用别的画法表达语义.
+ *
+ * 口子只开在绘制面上:窗口 / 任务栏 / 输出区的配色照旧交给系统色.代价说清楚:这幅图的配色
+ * 不跟随用户的高对比度主题.对一个"颜色就是数据"的图这是刻意的取舍.
+ */
+@media (forced-colors: active) {
+    .visual-surface {
+        forced-color-adjust: none;
+    }
+}

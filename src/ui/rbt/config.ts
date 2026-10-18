@@ -1,8 +1,10 @@
 // 红黑树工具的显示层配置:DOM 契约、桌面窗口清单、提示文案、布局几何参数与输出区文案.
 //
-// 这里只放"显示"这一侧的值:性质 id 的顺序归核心层(src/datastruct/rbt/rbt_tree.ts),
-// 本文件只为 id 配中文名;配色 / 字号 / 线宽在 src/ui/rbt/tokens.css 与 rbt.css 的
-// `--rbt-*` 令牌里,本文件不含色值.
+// 这里只放**红黑树这一种结构**自己的显示值:性质 id 的顺序归核心层
+// (src/datastruct/rbt/rbt_tree.ts),本文件只为 id 配中文名;节点 / 指针 / 画布 / 视口这些
+// **所有结构共用**的词汇与取景参数在视觉层(src/visual/config.ts),不在这里重复.
+// 观感里所有结构共用的(节点半径 / 值文字 / 指针线宽)在视觉层 tokens.css 与 visual.css;
+// 红黑树自己的语义色与窗口观感在本目录 tokens.css 与 rbt.css.本文件不含色值.
 
 import type { DockActionSpec, WindowConfigEntry } from 'miko_ui';
 import { RBT_PROPERTY_IDS, type RbtPropertyId } from '@/datastruct/rbt/rbt_tree';
@@ -21,9 +23,9 @@ export const RBT_DOM = {
     /**
      * 平面视口 `#rbtViewport`:桌面背景那一层,里面只有那棵树的 `<svg>`.
      *
-     * 裁切、光标、指针手势(拖动 / 滚轮)都归这一层,svg 则是 1:1 的绘制面:库要求
-     * 背景节点挂 `.desktop-background`,而 div 的裁切与 `touch-action` 比 SVG 根更
-     * 少歧义.
+     * 标记由视觉层(visual/surface.ts)按"视口 -> 绘制面 -> 世界层"建出来;裁切、光标、
+     * 指针手势(拖动 / 滚轮)都归这一层,svg 则是 1:1 的绘制面:库要求背景节点挂
+     * `.desktop-background`,而 div 的裁切与 `touch-action` 比 SVG 根更少歧义.
      */
     viewportId: 'rbtViewport',
     /**
@@ -43,12 +45,12 @@ export const RBT_DOM = {
      */
     outputId: 'treeOutput',
     /**
-     * 树绘制 `<svg>` 根的 id:世界坐标的画布,不是视口.
+     * 树绘制 `<svg>` 根的 id:世界坐标的绘制面,不是视口.
      *
      * 没有 viewBox,宽高由视口那一层给(`100%`),一个用户单位就是一个 CSS 像素;树挂
-     * 在里面唯一的世界层 `<g>` 上,视口改的是那一层的 transform(见 RBT_WORLD_CLASS).
-     * 用 SVG 而不是 canvas:节点与连线是文档里的元素,命中检测 / pointer 事件 /
-     * CSS transition 与令牌着色都由浏览器给.
+     * 在里面唯一的世界层 `<g>` 上,视口改的是那一层的 transform(见视觉层的
+     * VISUAL_WORLD_CLASS).用 SVG 而不是 HTML `<canvas>`:节点与连线是文档里的元素,命中检测 /
+     * pointer 事件 / CSS transition 与令牌着色都由浏览器给.
      */
     treeId: 'rbtTree',
     /**
@@ -150,7 +152,7 @@ export const RBT_DESKTOP_WINDOWS = [
 /**
  * 回正按钮的文案(可见文本).
  *
- * "回正"是应用层叫法,语义由 ui/rbt/rbt_viewport.ts 的 `fitViewport()` 定义:
+ * "回正"是应用层叫法,语义由视觉层 src/visual/viewport.ts 的 `fitViewport()` 定义:
  * 按最近一次内容包围盒重新适应视口,并把自动适应接回来.
  */
 export const RBT_FIT_BUTTON_TEXT = '回正视图';
@@ -229,70 +231,15 @@ export const RBT_INPUT_PLACEHOLDER =
  */
 export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
 
-// 平面与视口(世界坐标 -> 屏幕像素)
-//
-// 布局算出来的 x / y 就是平面坐标(单位 = 屏幕像素 @ k=1):`<svg>` 没有 viewBox,
-// 1 用户单位 = 1 CSS 像素.树上的一切(连线 / 节点)挂在一层 `<g class="rbt-world">`
-// 里,视口只改这一层的 `transform = translate(x y) scale(k)`;世界坐标是内容自己的
-// 坐标,与"桌面多大"无关,所以平面是无限大的(裁剪由视口给).不画网格 / 轴 / 刻度,
-// 平面的底色就是桌面底色(见 rbt.css).
-//
-// 布局**不需要知道平面多大**:它只保证"同层相邻节点的中心距不小于
-// RBT_MIN_HORIZONTAL_GAP"(见 ui/rbt/rbt_layout.ts);内容实际占多大由渲染层落笔后
-// 向浏览器要 `getBBox()`(见 ui/rbt/rbt_render.ts),视口再按它适应.
-
-/** 适应视口时内容四周的留白(px,屏幕像素):树不贴着视口边缘 */
-export const RBT_PLANE_FIT_PADDING = 48;
-
-/**
- * 自动适应(fit)时允许的最大缩放:1 = 不放大.
- *
- * 三节点的小树,包围盒比视口小得多,不设上限的话首屏会把它吹成一屏大的三个圆.
- * 1:1 是这类结构图最自然的默认观感.
- *
- * 已知的坑:窗口是浮在背景上的,适应算不进窗口,所以"装得下"不等于"看得见" --
- * 放大到填满时,左右两端的节点会钻到两侧窗口底下;1:1 反而让整棵树落在两扇窗口
- * 中间那条可见带上.要看大就自己滚轮放大(手动缩放的窗口见 RBT_MIN_ZOOM /
- * RBT_MAX_ZOOM).
- */
-export const RBT_FIT_MAX_ZOOM = 1;
-
-/** 手动缩放的上下限:下限够看很深的树(256 片叶子 ≈ 0.08),上限够盯一个节点 */
-export const RBT_MIN_ZOOM = 0.05;
-export const RBT_MAX_ZOOM = 4;
-
-/**
- * 滚轮灵敏度:像素 delta 每 1px,缩放 `e^(-delta × 这个值)` 倍.
- *
- * 用指数而不是加法:缩放是**乘性**的,同样一格滚轮在 0.1 与 2 两档下该放大同样的
- * 比例(加法在 0.1 档下一格跳一大截,在 2 档下几乎不动).0.0015 让一格 100px 的
- * 滚轮 ≈ 1.16 倍.
- */
-export const RBT_WHEEL_ZOOM_SENSITIVITY = 0.0015;
-
-/**
- * wheel 事件的 deltaMode 归一化:把"行 / 页"折算成像素.
- *
- * 为什么必须折:同一个滚轮在 Chrome 上是 `deltaMode = 0`(像素,一格约 100),在
- * Firefox 上是 `deltaMode = 1`(行,一格 3) -- 不折的话 Firefox 上一格只放大
- * 0.5%,等于不响应.两个数按各自的常见约定取值,不追求精确,只求量级一致.
- */
-export const RBT_WHEEL_LINE_PIXELS = 16;
-export const RBT_WHEEL_PAGE_PIXELS = 800;
-
-/**
- * 世界层的类名:树上所有连线 / 节点都挂在这一层 `<g>` 里,视口只改它的 transform.
- *
- * 它是**跨语言契约**:ui/rbt/rbt_views.ts 建它,测试按它断言"结构与世界坐标对得
- * 上";样式表对世界层没有规则,那是刻意的.
- */
-export const RBT_WORLD_CLASS = 'rbt-world';
-
 // 布局几何(单位:平面坐标 = 屏幕像素 @ 缩放 1)
 //
-// 只有两个数:层距、同层最小中心距.没有画布尺寸 / 安全边距 / 越界钳制:布局只回答
-// "节点彼此别撞";圆多大是 CSS(`--rbt-node-radius`)的事,内容实际占多大由渲染层
-// 落笔后向浏览器要 `getBBox()`(见 ui/rbt/rbt_render.ts).
+// 平面 / 视口的取景参数(适应留白、缩放上下限、滚轮灵敏度)、绘制面的三层标记与节点 / 指针的
+// 类名都属于**视觉层**(src/visual/config.ts),不属于红黑树 -- 所有结构共用同一套.
+//
+// 这里只留红黑树自己的布局几何:层距、同层最小中心距.没有画布尺寸 / 安全边距 / 越界钳制:
+// 布局只回答"节点彼此别撞";圆多大是视觉层 CSS(`--visual-node-radius` 在
+// src/visual/tokens.css)的事,内容实际占多大由视觉层落笔后向浏览器要 `getBBox()`
+// (见 src/visual/render.ts).
 
 /** 相邻两层的垂直步长(px):根在 y = 0,深一层加一个步长 */
 export const RBT_Y_STEP = 70;
@@ -305,37 +252,18 @@ export const RBT_Y_STEP = 70;
  * 它,圆不会相叠.它同时是"轮廓错开量"的唯一下限,所以越大树越疏、越小树越挤,
  * 没有第二个旋钮.
  *
- * **必须大于圆的直径**:圆的大小只写在 CSS(`--rbt-node-radius`,直径 44),布局
- * 已经不知道半径了,所以这是一条"改 CSS 时要回来看一眼"的约束.70 与 RBT_Y_STEP
- * 同值(水平 / 垂直留白一致:1:1 时圆与圆之间 26px 空气).
+ * **必须大于圆的直径**:圆的大小只写在视觉层的 CSS(`--visual-node-radius`,直径 44),
+ * 布局已经不知道半径了,所以这是一条"改视觉层令牌时要回来看一眼"的约束.70 与
+ * RBT_Y_STEP 同值(水平 / 垂直留白一致:1:1 时圆与圆之间 26px 空气).
  */
 export const RBT_MIN_HORIZONTAL_GAP = 70;
 
-// 节点与连线:类名契约(观感全在 CSS)
+// 节点与指针的观感(红 / 黑、值文字颜色)
 //
-// TS 侧只声明**类名**(选择器锚点):颜色 / 字号 / 线宽在 src/ui/rbt/tokens.css 的
-// `--rbt-*` 令牌与 rbt.css 里,config 不含色值.
-//
-// 类名同时是跨语言契约:src/ui/rbt/rbt.test.ts 按 `.rbt-node--red` 数红节点、
-// 按 `.rbt-edge` 数连线,所以它们不能只因为"CSS 里看着没用"就删.
-
-/** 一个节点的组(位置在它的 `transform` 上;圆与文字是它的两个孩子) */
-export const RBT_NODE_CLASS = 'rbt-node';
-
-/** 节点圆的类名(半径 / 描边 / 填充 / 进入动画都在它上面) */
-export const RBT_NODE_SHAPE_CLASS = 'rbt-node__shape';
-
-/** 节点值的类名(字体 / 字号 / 对齐 / 文字色) */
-export const RBT_NODE_LABEL_CLASS = 'rbt-node__label';
-
-/** 红节点的修饰类(挂在节点组上,不挂在圆上:组是"这个节点"的语义单位) */
-export const RBT_NODE_RED_CLASS = 'rbt-node--red';
-
-/** 黑节点的修饰类 */
-export const RBT_NODE_BLACK_CLASS = 'rbt-node--black';
-
-/** 父子连线的类名(`<line>` 的描边与线宽在 CSS) */
-export const RBT_EDGE_CLASS = 'rbt-edge';
+// 类名契约在视觉层(src/visual/config.ts):节点带 `.visual-node`,语义变体挂
+// `.visual-node--<variant>`;红黑树只负责把颜色翻译成 `red` / `black` 两个变体
+// (见 ui/rbt/rbt_scene.ts),并在 ui/rbt/rbt.css 里给这两个变体上色.视觉层的 token 里
+// 没有红 / 黑 -- 那是红黑树的语义,不是"节点"这个概念的通用观感.
 
 // 表达式词法着色:类名契约(样式在 src/ui/rbt/rbt.css)
 //

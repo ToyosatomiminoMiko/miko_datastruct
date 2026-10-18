@@ -1,15 +1,18 @@
 @import '@/ui/rbt/tokens.css';
 
 /*
- * 红黑树工具样式:表达式编辑器 / 唯一输出区 / 桌面背景那块平面视口.
+ * 红黑树工具样式:表达式编辑器 / 唯一输出区 / 红黑节点的语义变体.
  *
- * 六个 id 的标记由 ui/rbt/rbt_views.ts 生成,文案与结构类名在 config.ts;窗口外壳与编辑器外框
- * 内部的观感都归库的 miko_ui/styles/{desktop,editor}.css,本文件只补窗口正文的滚动与内边距、
- * 编辑器宿主尺寸、视口的裁切与手势、词法高亮的颜色.
+ * 标记由 ui/rbt/rbt_views.ts 生成(绘制面三层由视觉层 visual/surface.ts 建),文案与结构类名在
+ * config.ts;窗口外壳与编辑器外框内部的观感都归库的 miko_ui/styles/{desktop,editor}.css,
+ * 本文件只补窗口正文的滚动与内边距、编辑器宿主尺寸、词法高亮的颜色.
  *
- * 可调数值全部走本目录 tokens.css 的 `--rbt-*`,唯一字面量是 `#treeOutput` 的
- * `line-height: 1.4`(排版本地的结构性值).css/app.css 的 body 字体基线对 SVG 的 `<text>`
- * 一样生效,所以节点值的 font-family / font-size / fill 必须显式写.
+ * 平面绘制面 / 节点形状 / 值文字 / 指针线段 / 进入动画 / 视口手势这些**所有结构共用**的观感
+ * 在 src/visual/visual.css;本文件只剩下红黑树的语义变体(`.visual-node--red/black`).
+ * 两份样式的层叠顺序由 ui/rbt/rbt.ts 的 import 顺序给:视觉层在前,本文件在后.
+ *
+ * 可调数值全部走本目录 tokens.css 的 `--rbt-*`(视觉层共用数值另有 `--visual-*`),唯一
+ * 字面量是 `#treeOutput` 的 `line-height: 1.4`(排版本地的结构性值).
  */
 
 /*
@@ -150,156 +153,18 @@
 }
 
 /*
- * 树本身(平面视口里的 #rbtTree):节点与连线的观感全在这里,颜色引本目录 tokens.css 的
- * `--rbt-node-*` / `--rbt-edge-*`(换配色不用碰 TS).
+ * 红黑树的节点配色:颜色是数据,红 / 黑两个语义变体由视觉层的节点类接住.
  *
- * 圆的大小按 `--rbt-node-radius` 画,TS 侧只算"圆该在哪"、不算"围多大"(内容包围盒由浏览器
- * 用 getBBox 量).半径与布局唯一的约束是直径要小于 config.ts 的 `RBT_MIN_HORIZONTAL_GAP`,
- * 见 tokens.css 该令牌上方.缩放交给世界层的 transform,不必管 dpr:SVG 是矢量.
+ * 基础形状 / 半径 / 值文字 / 进入动画 / 指针线段都在视觉层(src/visual/visual.css 与
+ * tokens.css);这里只补红黑树自己的"变体长什么样":
+ * - 变体选择器带 `#rbtTree`:红 / 黑是红黑树的语义,别的结构即使用了同名变体也不该被
+ *   这份样式命中;
+ * - 填充色引本目录 tokens.css 的 `--rbt-node-red-fill` / `--rbt-node-black-fill`.
  */
-
-/*
- * 平面视口 = **桌面背景**(挂着库的 `.desktop-background` 的那颗节点;定位与桌面底色归库的
- * styles/desktop.css).应用这一侧只补三件库不规定的:
- * - **裁切**:世界层比视口大得多,边上不该画到桌面外面去;
- * - **光标**:抓 / 抓取中,库的拖动实现读的就是 handle 自己的计算样式,只能写在 CSS 里;
- * - **手势归视口**:`touch-action: none` 让触屏上的单指拖动是平移而不是滚动页面,
- *   `user-select: none` 免得拖动时选中节点值、拖完留下一片蓝色选区.
- */
-#rbtViewport {
-    overflow: hidden;
-    cursor: grab;
-    touch-action: none;
-    user-select: none;
-}
-
-/* 拖动态:类名 `is-dragging` 由库的拖动实现挂,这里只接住它换光标 */
-#rbtViewport.is-dragging {
-    cursor: grabbing;
-}
-
-/*
- * 视口里那颗 `<svg>` 是 **1:1 的像素画布**:没有 viewBox,一个用户单位就是一个 CSS 像素,
- * 世界坐标到屏幕的缩放全在世界层的 transform 里,布局算出来的坐标不用换算.
- *
- * `overflow: hidden` 是**显式**写出来的:树的坐标范围远超视口,不能靠 UA 默认值承担(各引擎
- * 的默认值历史上不一样).`display: block` 是本应用要的 -- SVG 默认 inline,不写会在树下面
- * 留出基线缝.
- */
-#rbtTree {
-    display: block;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-}
-
-/*
- * 世界层(`#rbtTree .rbt-world`)在样式表里没有规则:它是纯坐标层,`transform` 由
- * ui/rbt/rbt_viewport.ts 写在属性上,连线与节点的观感各归各的类.
- */
-
-/* 父子连线:描边色与线宽 */
-#rbtTree .rbt-edge {
-    stroke: var(--rbt-edge-color);
-    stroke-width: var(--rbt-edge-width);
-}
-
-/* 节点圆:只有半径与填充,没有描边(深色窗格上那一圈同色描边只是视觉噪声) */
-#rbtTree .rbt-node__shape {
-    r: var(--rbt-node-radius);
-}
-
-/* 红节点 / 黑节点:只有填充色不同 */
-#rbtTree .rbt-node--red .rbt-node__shape {
+#rbtTree .visual-node--red .visual-node__shape {
     fill: var(--rbt-node-red-fill);
 }
 
-#rbtTree .rbt-node--black .rbt-node__shape {
+#rbtTree .visual-node--black .visual-node__shape {
     fill: var(--rbt-node-black-fill);
-}
-
-/*
- * 节点值:水平 / 垂直都以节点圆心为中心.`text-anchor: middle` 与 `dominant-baseline:
- * central` 两个都要写,少一个整段文字会偏出圆心半个行高,而且不会有任何报错.
- *
- * 文字色直接引令牌,不走 `color` + `fill: currentColor`:红黑现在是同一个白,少一层间接就
- * 少一处能写错的地方.
- */
-#rbtTree .rbt-node__label {
-    font-family: var(--font-code);
-    font-size: var(--rbt-node-font-size);
-    font-weight: bold;
-    fill: var(--rbt-node-text);
-    text-anchor: middle;
-    dominant-baseline: central;
-}
-
-/*
- * 进入动画:树每次重建就重播一次.
- *
- * **动画挂在圆与节点值上,不挂在节点组上**:节点的位置写在组的 `transform` **属性**上,而
- * CSS 的 `transform` 与属性是同一个属性 -- 动画一动组的 transform,属性里那个 `translate`
- * 就被盖掉,动画期间所有节点叠在**世界原点**那一处,整棵树看着"散架".圆与文字各自动自己
- * 的 `scale` 则不碰位置.
- *
- * `transform-box: fill-box` + `transform-origin: center` 让缩放以元素自己的包围盒为中心:
- * 默认的 `50% 50%` 是相对 `<svg>` 视口的,那样每个圆会从整块画布的中心缩放出去,看着像整棵
- * 树在抖.填充盒则让每个圆从自己圆心、每段文字从自己的中心长出来(文字的包围盒中心就是圆心:
- * 上面那条 `text-anchor: middle` + `dominant-baseline: central` 保证的).
- *
- * 只动 opacity 与 transform(这里是各自的 scale):都是合成层属性,不会触发布局重排.
- */
-@keyframes rbt-node-enter {
-    from {
-        opacity: 0;
-        transform: scale(0.9);
-    }
-
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-#rbtTree .rbt-node__shape,
-#rbtTree .rbt-node__label {
-    transform-box: fill-box;
-    transform-origin: center;
-    /*
-      这里**不能写 `both`**(也不写 `forwards`):那两个值会把 from 那一帧的
-      `transform: scale(...)` 永久留在元素上,于是圆与节点值长期停在"从自己中心缩过
-      一点点"的状态,而且不会有任何报错.要改"从多小长出来"就只动 keyframes 里的 scale.
-    */
-    animation: rbt-node-enter var(--rbt-node-enter-duration) ease-out;
-}
-
-/*
- * 系统设了"减少动态效果"就把动画关掉:元素本来就在最终态(动画没有 fill 模式,不播就等于
- * 没写过),所以 `animation: none` 就够.
- */
-@media (prefers-reduced-motion: reduce) {
-    #rbtTree .rbt-node__shape,
-    #rbtTree .rbt-node__label {
-        animation: none;
-    }
-}
-
-/*
- * 强制颜色模式(Windows 高对比度这类):**只让这棵树不参与强制改写**.
- *
- * 强制颜色会把 `fill` / `stroke` 的**用值**改成系统色(不是改级联),圆的填充与节点值的填充
- * 会被改成同一个系统色,节点和数字**同色**、读不出来;红 / 黑这两种"颜色即语义"的区分也一并
- * 消失.
- *
- * 为什么是 `forced-color-adjust: none`:`!important` 没用(强制发生在 used value 阶段,级联
- * 那时已经算完了,作者写什么都会被改写);写系统色(`Canvas` / `CanvasText`)会被尊重,但那要
- * 先放弃红黑配色、改用"实心 / 空心"表达红黑,是换一套画法.这个口子(`inherit: yes`)写在
- * #rbtTree 上,窗口 / 任务栏 / 输出区的配色照旧交给系统色.
- *
- * 代价说清楚:这棵树的配色不跟随用户的高对比度主题.对一个"颜色就是数据"的图这是刻意的取舍.
- */
-@media (forced-colors: active) {
-    #rbtTree {
-        forced-color-adjust: none;
-    }
 }

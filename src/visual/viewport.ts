@@ -1,22 +1,24 @@
 /*
-平面视口:无限平面上的一块可取景窗口,屏幕上的内容由世界坐标经一层仿射变换得来.
-
-树上所有东西挂在 `<g class="rbt-world">` 里,视口只改这一层的 `transform = translate(x y)
-scale(k)`;不改 `<svg>` 的 viewBox,否则用户单位一起被缩放,stroke-width / r 等几何量就与
-屏幕像素脱钩.拖动复用 miko_ui 的 bindDragGesture,抓取光标写在 rbt.css 的 #rbtViewport
-与 .is-dragging(库读 handle 的计算样式).
-*/
+ * 平面视口:无限平面上的一块可取景窗口,屏幕上的内容由世界坐标经一层仿射变换得来.
+ *
+ * 这一层是**所有结构共用**的取景器:它只管"世界坐标 -> 屏幕像素",不认识节点 / 指针 /
+ * 内存块.场景里所有东西挂在 `<g class="visual-world">` 里,视口只改这一层的
+ * `transform = translate(x y) scale(k)`;不改 `<svg>` 的 viewBox,否则用户单位一起被缩放,
+ * stroke-width / r 等几何量就与屏幕像素脱钩.拖动复用 miko_ui 的 bindDragGesture,
+ * 抓取光标写在 src/visual/visual.css 的 `.visual-viewport` 与 `.is-dragging`(库读
+ * handle 的计算样式).
+ */
 
 import { bindDragGesture } from 'miko_ui';
 import {
-    RBT_FIT_MAX_ZOOM,
-    RBT_MAX_ZOOM,
-    RBT_MIN_ZOOM,
-    RBT_PLANE_FIT_PADDING,
-    RBT_WHEEL_LINE_PIXELS,
-    RBT_WHEEL_PAGE_PIXELS,
-    RBT_WHEEL_ZOOM_SENSITIVITY,
-} from '@/ui/rbt/config';
+    VISUAL_FIT_MAX_ZOOM,
+    VISUAL_MAX_ZOOM,
+    VISUAL_MIN_ZOOM,
+    VISUAL_PLANE_FIT_PADDING,
+    VISUAL_WHEEL_LINE_PIXELS,
+    VISUAL_WHEEL_PAGE_PIXELS,
+    VISUAL_WHEEL_ZOOM_SENSITIVITY,
+} from '@/visual/config';
 
 // 状态与变换(纯函数:数字进,数字出,可单测)
 
@@ -26,7 +28,7 @@ import {
  * x / y 是**世界原点画在屏幕上的位置**,不是世界点的平移量:变换保持"右乘缩放",
  * 所以 k 变了 x / y 跟着变(见 zoomPlaneView).
  */
-export interface RbtViewState {
+export interface PlaneViewState {
     /** 缩放:1 = 世界单位与 CSS 像素 1:1 */
     readonly k: number;
     readonly x: number;
@@ -37,7 +39,7 @@ export interface RbtViewState {
  * 平面上的一块矩形(世界坐标或屏幕像素,由调用方决定;本模块只用它的算术).
  * 作为视口输入时 minX / minY 恒为 0(它的原点就是它自己).
  */
-export interface RbtPlaneBox {
+export interface PlaneBox {
     readonly minX: number;
     readonly minY: number;
     readonly width: number;
@@ -45,7 +47,7 @@ export interface RbtPlaneBox {
 }
 
 /** 世界层的 `<g>` 要的 transform 属性值 */
-export function planeViewTransform(view: RbtViewState): string {
+export function planeViewTransform(view: PlaneViewState): string {
     /*
       三位小数足够(亚像素看不出来),属性值短而稳定:这个字符串每帧都在写.
       `-0` 归一成 `0`:两者数值相等但字符串不同,归一之后只有一种写法.
@@ -58,7 +60,7 @@ export function planeViewTransform(view: RbtViewState): string {
 }
 
 /** 平移:屏幕像素增量直接加到偏移上(k 不变) */
-export function panPlaneView(view: RbtViewState, deltaX: number, deltaY: number): RbtViewState {
+export function panPlaneView(view: PlaneViewState, deltaX: number, deltaY: number): PlaneViewState {
     return { k: view.k, x: view.x + deltaX, y: view.y + deltaY };
 }
 
@@ -75,12 +77,12 @@ export function panPlaneView(view: RbtViewState, deltaX: number, deltaY: number)
  * 比率是 1,锚点一样不动,不会出现"缩不动了但画面还在漂".
  */
 export function zoomPlaneView(
-    view: RbtViewState,
+    view: PlaneViewState,
     factor: number,
     cursorX: number,
     cursorY: number,
-): RbtViewState {
-    const k = clamp(view.k * factor, RBT_MIN_ZOOM, RBT_MAX_ZOOM);
+): PlaneViewState {
+    const k = clamp(view.k * factor, VISUAL_MIN_ZOOM, VISUAL_MAX_ZOOM);
     const ratio = k / view.k;
     return {
         k,
@@ -92,26 +94,26 @@ export function zoomPlaneView(
 /**
  * 适应:把内容整块装进视口并居中(缩放取"装得下"与"不放大"里小的那个).
  *
- * `padding` 四周都算;`topInset` 只从上沿扣(库的任务栏压在桌面顶上,树顶不该藏在它后面).
+ * `padding` 四周都算;`topInset` 只从上沿扣(桌面任务栏压在顶上,内容顶部不该藏在它后面).
  *
  * 内容为空 / 视口还没量出尺寸(`clientWidth` 为 0,如 happy-dom 里)时给不出比例,
  * 直接回一个恒等视角:调用方不必先判断,拿到的一定是能用的状态.
  */
 export function fitPlaneView(
-    content: RbtPlaneBox,
-    viewport: RbtPlaneBox,
+    content: PlaneBox,
+    viewport: PlaneBox,
     topInset: number,
-): RbtViewState {
-    const usableWidth = viewport.width - RBT_PLANE_FIT_PADDING * 2;
-    const usableHeight = viewport.height - topInset - RBT_PLANE_FIT_PADDING * 2;
+): PlaneViewState {
+    const usableWidth = viewport.width - VISUAL_PLANE_FIT_PADDING * 2;
+    const usableHeight = viewport.height - topInset - VISUAL_PLANE_FIT_PADDING * 2;
     if (content.width <= 0 || content.height <= 0 || usableWidth <= 0 || usableHeight <= 0) {
-        return { k: RBT_FIT_MAX_ZOOM, x: 0, y: 0 };
+        return { k: VISUAL_FIT_MAX_ZOOM, x: 0, y: 0 };
     }
 
     const k = clamp(
-        Math.min(usableWidth / content.width, usableHeight / content.height, RBT_FIT_MAX_ZOOM),
-        RBT_MIN_ZOOM,
-        RBT_MAX_ZOOM,
+        Math.min(usableWidth / content.width, usableHeight / content.height, VISUAL_FIT_MAX_ZOOM),
+        VISUAL_MIN_ZOOM,
+        VISUAL_MAX_ZOOM,
     );
     // 居中:内容中心对到可用区中心;两项都减去 content 起点 × k,把世界坐标的原点
     // 从"内容左上角"挪到"视口左上角"(否则 minX / minY 不为 0 的内容会整体偏出去)
@@ -128,11 +130,11 @@ export function fitPlaneView(
  */
 export function wheelZoomFactor(deltaY: number, deltaMode: number): number {
     const pixels = deltaMode === 1
-        ? deltaY * RBT_WHEEL_LINE_PIXELS
+        ? deltaY * VISUAL_WHEEL_LINE_PIXELS
         : deltaMode === 2
-            ? deltaY * RBT_WHEEL_PAGE_PIXELS
+            ? deltaY * VISUAL_WHEEL_PAGE_PIXELS
             : deltaY;
-    return Math.exp(-pixels * RBT_WHEEL_ZOOM_SENSITIVITY);
+    return Math.exp(-pixels * VISUAL_WHEEL_ZOOM_SENSITIVITY);
 }
 
 /** 夹到区间里(缩放上下限共用) */
@@ -143,7 +145,7 @@ function clamp(value: number, min: number, max: number): number {
 // 绑定:把手势接到视口上
 
 /** `mountPlaneViewport()` 的输入 */
-export interface RbtPlaneViewportOptions {
+export interface PlaneViewportOptions {
     /**
      * 视口上沿要避开的固定带(px),适应时内容居中在这条带之下.
      *
@@ -153,15 +155,15 @@ export interface RbtPlaneViewportOptions {
 }
 
 /** 挂好的视口句柄:内容报账 + 拆卸 */
-export interface RbtViewportHandle {
+export interface PlaneViewportHandle {
     /**
      * 内容重画之后报一次它的包围盒(世界坐标).
      * 自动模式下按它重新适应;手动模式(用户挪过)下**一个字都不动**:视角是用户的.
      */
-    contentChanged(bounds: RbtPlaneBox): void;
+    contentChanged(bounds: PlaneBox): void;
     /**
      * 回正:把 `manual` 复位成假,再按最近一次的内容包围盒适应.
-     * 内容还没报过(如空输入 / 测试环境量不到包围盒)时什么都不做.
+     * 内容还没报过(如场景为空 / 测试环境量不到包围盒)时什么都不做.
      */
     fitViewport(): void;
     /** 拆掉监听与观察者 */
@@ -177,12 +179,12 @@ export interface RbtViewportHandle {
 export function mountPlaneViewport(
     host: HTMLElement,
     world: SVGGElement,
-    options: RbtPlaneViewportOptions,
-): RbtViewportHandle {
+    options: PlaneViewportOptions,
+): PlaneViewportHandle {
     // 初值恒等:首屏内容还没画;第一次 contentChanged 才按内容适应
-    let view: RbtViewState = { k: 1, x: 0, y: 0 };
+    let view: PlaneViewState = { k: 1, x: 0, y: 0 };
     /** 最近一次报来的内容包围盒(回正要它) */
-    let content: RbtPlaneBox | null = null;
+    let content: PlaneBox | null = null;
     /** 用户是否手动挪过视角:自动模式下重绘会重新适应 */
     let manual = false;
 
@@ -196,7 +198,7 @@ export function mountPlaneViewport(
     };
 
     /** 视口矩形(原点即 minX / minY = 0) */
-    const viewportBox = (): RbtPlaneBox => ({
+    const viewportBox = (): PlaneBox => ({
         minX: 0,
         minY: 0,
         width: host.clientWidth,
@@ -272,7 +274,7 @@ export function mountPlaneViewport(
     apply();
 
     return {
-        contentChanged(bounds: RbtPlaneBox): void {
+        contentChanged(bounds: PlaneBox): void {
             content = bounds;
             if (!manual) fit();
         },

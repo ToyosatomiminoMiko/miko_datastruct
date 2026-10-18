@@ -1,5 +1,5 @@
 /**
- * 平面视口(rbt_viewport.ts)的契约:变换数学的算术事实 + 两种手势与回正.
+ * 平面视口(visual/viewport.ts)的契约:变换数学的算术事实 + 两种手势与回正.
  * 手势层在 happy-dom 里挂真视口;manual(自动 / 手动适应)状态机单独验.
  * happy-dom 不做布局,视口尺寸要自己种,顺带钉住"量不出尺寸时给恒等视角"的兜底.
  *
@@ -9,13 +9,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { create_svg_element } from 'miko_ui';
 
 import {
-    RBT_FIT_MAX_ZOOM,
-    RBT_MAX_ZOOM,
-    RBT_MIN_ZOOM,
-    RBT_WHEEL_LINE_PIXELS,
-    RBT_WHEEL_PAGE_PIXELS,
-    RBT_WHEEL_ZOOM_SENSITIVITY,
-} from '@/ui/rbt/config';
+    VISUAL_FIT_MAX_ZOOM,
+    VISUAL_MAX_ZOOM,
+    VISUAL_MIN_ZOOM,
+    VISUAL_WHEEL_LINE_PIXELS,
+    VISUAL_WHEEL_PAGE_PIXELS,
+    VISUAL_WHEEL_ZOOM_SENSITIVITY,
+} from '@/visual/config';
 import {
     fitPlaneView,
     mountPlaneViewport,
@@ -23,20 +23,20 @@ import {
     planeViewTransform,
     wheelZoomFactor,
     zoomPlaneView,
-    type RbtPlaneBox,
-    type RbtViewState,
-    type RbtViewportHandle,
-} from '@/ui/rbt/rbt_viewport';
+    type PlaneBox,
+    type PlaneViewState,
+    type PlaneViewportHandle,
+} from '@/visual/viewport';
 
 // 变换数学
 
 /** 一块内容包围盒(与布局交回的同一形状) */
-function box(minX: number, minY: number, width: number, height: number): RbtPlaneBox {
+function box(minX: number, minY: number, width: number, height: number): PlaneBox {
     return { minX, minY, width, height };
 }
 
 /** 视口矩形(原点即 minX / minY = 0) */
-function viewportBox(width: number, height: number): RbtPlaneBox {
+function viewportBox(width: number, height: number): PlaneBox {
     return { minX: 0, minY: 0, width, height };
 }
 
@@ -46,7 +46,7 @@ describe('平面视口:变换数学', () => {
         const content = box(38, 43, 850, 350);
         const view = fitPlaneView(content, viewportBox(1400, 860), 40);
 
-        expect(view.k).toBe(RBT_FIT_MAX_ZOOM);
+        expect(view.k).toBe(VISUAL_FIT_MAX_ZOOM);
         // 居中:内容中心对到可用区中心,再减去 content 起点 × k 得到视口偏移
         expect(view.x).toBeCloseTo((1400 - 850) / 2 - 38, 6);
         expect(view.y).toBeCloseTo(40 + (860 - 40 - 350) / 2 - 43, 6);
@@ -57,21 +57,21 @@ describe('平面视口:变换数学', () => {
 
         // min(1304/4000, 724/400, 1) -- 宽度是瓶颈
         expect(view.k).toBeCloseTo(1304 / 4000, 6);
-        expect(view.k).toBeGreaterThan(RBT_MIN_ZOOM);
-        expect(view.k).toBeLessThanOrEqual(RBT_MAX_ZOOM);
+        expect(view.k).toBeGreaterThan(VISUAL_MIN_ZOOM);
+        expect(view.k).toBeLessThanOrEqual(VISUAL_MAX_ZOOM);
     });
 
     it('适应:内容为空 / 视口量不出尺寸时给恒等视角(调用方不必先判断)', () => {
         // happy-dom 那种 clientWidth 为 0 的视口
         expect(fitPlaneView(box(0, 0, 100, 100), viewportBox(0, 0), 0))
-            .toEqual({ k: RBT_FIT_MAX_ZOOM, x: 0, y: 0 });
+            .toEqual({ k: VISUAL_FIT_MAX_ZOOM, x: 0, y: 0 });
         // 空内容(调用方只画非空树,理论上不会出现)
         expect(fitPlaneView(box(0, 0, 0, 0), viewportBox(1000, 800), 0))
-            .toEqual({ k: RBT_FIT_MAX_ZOOM, x: 0, y: 0 });
+            .toEqual({ k: VISUAL_FIT_MAX_ZOOM, x: 0, y: 0 });
     });
 
     it('以指针为锚缩放:指针下那个世界点原地不动', () => {
-        const before: RbtViewState = { k: 1, x: 0, y: 0 };
+        const before: PlaneViewState = { k: 1, x: 0, y: 0 };
         const cursor = { x: 100, y: 50 };
         // 锚点下的世界坐标(缩放前)
         const worldX = (cursor.x - before.x) / before.k;
@@ -88,17 +88,17 @@ describe('平面视口:变换数学', () => {
     });
 
     it('缩放夹在上下限里:顶到限上时锚点仍不动,已经在限上时一点都不动', () => {
-        // 从 1 倍一次冲到上限:夹到 RBT_MAX_ZOOM,但锚点下的世界点仍不动
+        // 从 1 倍一次冲到上限:夹到 VISUAL_MAX_ZOOM,但锚点下的世界点仍不动
         const zoomed = zoomPlaneView({ k: 1, x: 10, y: 20 }, 1e9, 300, 200);
-        expect(zoomed.k).toBe(RBT_MAX_ZOOM);
+        expect(zoomed.k).toBe(VISUAL_MAX_ZOOM);
         const worldX = (300 - 10) / 1;
         expect(zoomed.x + worldX * zoomed.k).toBeCloseTo(300, 6);
 
         // 已在限上再往同方向缩:比率是 1,偏移照旧,画面不漂
-        expect(zoomPlaneView({ k: RBT_MAX_ZOOM, x: 10, y: 20 }, 1e9, 300, 200))
-            .toEqual({ k: RBT_MAX_ZOOM, x: 10, y: 20 });
-        expect(zoomPlaneView({ k: RBT_MIN_ZOOM, x: 10, y: 20 }, 1e-9, 300, 200))
-            .toEqual({ k: RBT_MIN_ZOOM, x: 10, y: 20 });
+        expect(zoomPlaneView({ k: VISUAL_MAX_ZOOM, x: 10, y: 20 }, 1e9, 300, 200))
+            .toEqual({ k: VISUAL_MAX_ZOOM, x: 10, y: 20 });
+        expect(zoomPlaneView({ k: VISUAL_MIN_ZOOM, x: 10, y: 20 }, 1e-9, 300, 200))
+            .toEqual({ k: VISUAL_MIN_ZOOM, x: 10, y: 20 });
     });
 
     it('平移:屏幕像素增量直接加到偏移上,k 不变', () => {
@@ -116,15 +116,15 @@ describe('平面视口:变换数学', () => {
         // 一格 100px(Chrome)与一格 3 行(Firefox)应该落在同一个量级上
         const pixelNotch = wheelZoomFactor(100, 0);
         const lineNotch = wheelZoomFactor(3, 1);
-        expect(pixelNotch).toBeCloseTo(Math.exp(-100 * RBT_WHEEL_ZOOM_SENSITIVITY), 9);
-        expect(lineNotch).toBeCloseTo(Math.exp(-3 * RBT_WHEEL_LINE_PIXELS * RBT_WHEEL_ZOOM_SENSITIVITY), 9);
+        expect(pixelNotch).toBeCloseTo(Math.exp(-100 * VISUAL_WHEEL_ZOOM_SENSITIVITY), 9);
+        expect(lineNotch).toBeCloseTo(Math.exp(-3 * VISUAL_WHEEL_LINE_PIXELS * VISUAL_WHEEL_ZOOM_SENSITIVITY), 9);
         // 一格缩小百分之十上下,不会滚了等于没滚
         expect(pixelNotch).toBeGreaterThan(0.8);
         expect(pixelNotch).toBeLessThan(1);
         expect(lineNotch).toBeGreaterThan(0.9);
         expect(lineNotch).toBeLessThan(1);
         expect(wheelZoomFactor(1, 2))
-            .toBeCloseTo(Math.exp(-RBT_WHEEL_PAGE_PIXELS * RBT_WHEEL_ZOOM_SENSITIVITY), 9);
+            .toBeCloseTo(Math.exp(-VISUAL_WHEEL_PAGE_PIXELS * VISUAL_WHEEL_ZOOM_SENSITIVITY), 9);
         // 向下滚(deltaY 正)= 缩小,向上滚 = 放大
         expect(pixelNotch).toBeLessThan(1);
         expect(wheelZoomFactor(-100, 0)).toBeGreaterThan(1);
@@ -137,11 +137,11 @@ describe('平面视口:变换数学', () => {
 interface Fixture {
     readonly host: HTMLElement;
     readonly world: SVGGElement;
-    readonly viewport: RbtViewportHandle;
+    readonly viewport: PlaneViewportHandle;
 }
 
 /** 读世界层当前视角(属性值 -> 数字;格式由 planeViewTransform 保证) */
-function readTransform(world: SVGGElement): RbtViewState {
+function readTransform(world: SVGGElement): PlaneViewState {
     const attribute = world.getAttribute('transform') ?? '';
     const matched = /^translate\((-?[\d.]+) (-?[\d.]+)\) scale\(([\d.]+)\)$/.exec(attribute);
     if (!matched) throw new Error(`世界层的 transform 不是视口写的形状: ${attribute}`);
@@ -207,7 +207,7 @@ describe('平面视口:手势绑定', () => {
 
         const view = readTransform(world);
         // 400×200 装进 1000×800(上沿留 40)不会被放大超过 1
-        expect(view.k).toBe(RBT_FIT_MAX_ZOOM);
+        expect(view.k).toBe(VISUAL_FIT_MAX_ZOOM);
         expect(view.x).toBeCloseTo((1000 - 400) / 2, 6);
         expect(view.y).toBeCloseTo(40 + (800 - 40 - 200) / 2, 6);
     });
@@ -273,7 +273,7 @@ describe('平面视口:手势绑定', () => {
         viewport.fitViewport();
 
         const refitted = readTransform(world);
-        expect(refitted.k).toBe(RBT_FIT_MAX_ZOOM);
+        expect(refitted.k).toBe(VISUAL_FIT_MAX_ZOOM);
         expect(refitted.x).toBeCloseTo((1000 - 40) / 2, 6);
         expect(refitted.y).toBeCloseTo(40 + (800 - 40 - 40) / 2, 6);
 
