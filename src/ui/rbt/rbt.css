@@ -1,4 +1,4 @@
-@import '@/rbt/tokens.css';
+@import '@/ui/rbt/tokens.css';
 
 /*
 红黑树工具样式(表达式编辑器 / 唯一输出区 / 桌面背景那块平面视口).
@@ -6,7 +6,7 @@
 六个 id 都在这里:`#rbtViewport`(桌面背景:平面视口,窗口层之下那一层),
 `#rbtTree`(视口里那棵 SVG,1:1 画布),`#rbtEditorPanel` / `#rbtOutputPanel`
 (两扇窗口的正文根,各自是滚动容器),`#rbtEditor`(miko_ui 编辑器的宿主),
-`#treeOutput`(提示 / 错误 / 性质清单的唯一输出区).标记由 ui/rbt_views.ts 生成,
+`#treeOutput`(提示 / 错误 / 性质清单的唯一输出区).标记由 ui/rbt/rbt_views.ts 生成,
 文案与结构类名在 config.ts;窗口外壳(标题栏 / 正文容器 / 任务栏)的观感归库的
 miko_ui/styles/desktop.css,这里一条都不覆盖.
 
@@ -14,7 +14,7 @@ miko_ui/styles/desktop.css,这里一条都不覆盖.
 的严格重叠)也全归库的 miko_ui/styles/editor.css,这里不改:这一层只做库不做的那几件
 事 -- 给窗口正文根该有的滚动与内边距(见下面"窗口正文"),给编辑器宿主外边距与最小
 高度,给平面视口的裁切 / 光标 / 指针手势,给词法高亮的颜色(库的口径就是"分词与配色归
-消费者",见 ui/rbt_highlight.ts).
+消费者",见 ui/rbt/rbt_highlight.ts).
 
 可调数值全部走本目录 tokens.css 的 `--rbt-*`(选择器里不写死色值与尺寸,换配色不用
 碰 TS);唯一的例外是 `#treeOutput` 的 `line-height: 1.4`,它是排版本地的结构性字面量.
@@ -92,7 +92,7 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 }
 
 /*
- * 表达式词法着色:类名由 src/rbt/ui/rbt_highlight.ts 产出(契约写在 config.ts 的
+ * 表达式词法着色:类名由 src/ui/rbt/rbt_highlight.ts 产出(契约写在 config.ts 的
  * "表达式词法着色"一节),颜色引 tokens.css 的 --rbt-token-*.
  *
  * 这些规则全部是**新增**的,没有一条覆盖库:高亮层只负责把注入的 HTML 显示在
@@ -119,7 +119,7 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 }
 
 /*
- * 提示区:静态说明,排在性质检查窗口正文的最前(输出区之上,见 ui/rbt_views.ts).
+ * 提示区:静态说明,排在性质检查窗口正文的最前(输出区之上,见 ui/rbt/rbt_views.ts).
  *
  * 色用 `--rbt-hint-color`(中性说明那一档,与 #treeOutput 里的空输入 / 空树提示同色):
  * 它说的是"这套表达式怎么读",不该和下面的性质清单抢注意力,所以也不吃正文色.
@@ -188,15 +188,15 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  *
  * 这一块是 2026-10 从 canvas 换过来的结果,同月又从"面板里的一块画布"变成**桌面
  * 背景**,再到"一块可拖动缩放的**平面视口**".从前树的每一笔都要自己算:配色写死在
- * src/rbt/config.ts(ctx.fillStyle 读不到 CSS 变量),字号按半径手算,窄屏上还要处理
+ * src/ui/rbt/config.ts(ctx.fillStyle 读不到 CSS 变量),字号按半径手算,窄屏上还要处理
  * devicePixelRatio 否则糊.现在节点与连线都是文档里的元素:
  *
  *   - 观感全在这一块里,颜色引本目录 tokens.css 的 --rbt-node-* / --rbt-edge-*(换配色
  *     不用碰 TS);
  *   - 圆的大小按 --rbt-node-radius 画,而 TS 侧只算"圆该在哪"(布局)、不再算"围多大"
- *     (内容包围盒由浏览器 getBBox 量,见 ui/rbt_render.ts).半径与布局唯一的约束是
+ *     (内容包围盒由浏览器 getBBox 量,见 ui/rbt/rbt_render.ts).半径与布局唯一的约束是
  *     "直径要小于 RBT_MIN_HORIZONTAL_GAP",见 tokens.css 的 --rbt-node-radius 上方;
- *   - 缩放交给世界层的 transform(见 ui/rbt_viewport.ts 的 planeViewTransform),
+ *   - 缩放交给世界层的 transform(见 ui/rbt/rbt_viewport.ts 的 planeViewTransform),
  *     不必再管 dpr:SVG 是矢量,放大多少都是浏览器重新光栅化.
  *
  * 节点值的字体是**必须显式写**的:css/app.css 的 body 基线把正文统一成
@@ -255,7 +255,7 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 
 /*
  * 世界层(`#rbtTree .rbt-world`)在样式表里**没有规则**:它是纯坐标层,`transform` 由
- * ui/rbt_viewport.ts 写在属性上,连线与节点的观感各归各的类.这里留一段话而不是一条
+ * ui/rbt/rbt_viewport.ts 写在属性上,连线与节点的观感各归各的类.这里留一段话而不是一条
  * 空规则:空的 `{}` 只会让下一个人以为"这里该有点什么".
  */
 

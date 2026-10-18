@@ -1,5 +1,5 @@
 /**
- * 平面视口(ui/rbt_viewport.ts)的契约:**变换数学**与**三种手势**.
+ * 平面视口(ui/rbt/rbt_viewport.ts)的契约:**变换数学**与**三种手势**.
  *
  * 这一层分两段,因为"算得对"与"接得上"是两件事:
  *
@@ -32,7 +32,7 @@ import {
     RBT_WHEEL_LINE_PIXELS,
     RBT_WHEEL_PAGE_PIXELS,
     RBT_WHEEL_ZOOM_SENSITIVITY,
-} from '@/rbt/config';
+} from '@/ui/rbt/config';
 import {
     fitPlaneView,
     mountPlaneViewport,
@@ -43,7 +43,7 @@ import {
     type RbtPlaneBox,
     type RbtViewState,
     type RbtViewportHandle,
-} from '@/rbt/ui/rbt_viewport';
+} from '@/ui/rbt/rbt_viewport';
 
 // ============================================================
 // 变换数学

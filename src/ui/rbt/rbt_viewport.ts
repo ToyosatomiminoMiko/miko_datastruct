@@ -53,8 +53,8 @@ preventDefault 掉的是那串兼容鼠标事件(dblclick 正在其中,能不能
 ## 分工与不做的事
 
 本模块不认识树:它只认识"一块内容包围盒 + 一块视口矩形 + 三种手势".包围盒由
-ui/rbt_render.ts 落笔后向浏览器 `getBBox()` 量来(见 drawTree),`<g>` 由
-ui/rbt_views.ts 建,绑在谁身上、什么时候拆由 rbt.ts 的 mountRBT 管.
+ui/rbt/rbt_render.ts 落笔后向浏览器 `getBBox()` 量来(见 drawTree),`<g>` 由
+ui/rbt/rbt_views.ts 建,绑在谁身上、什么时候拆由 rbt.ts 的 mountRBT 管.
 
 不做(留作后续,真要时再加):触摸双指捏合(需要自己管多指针,库的拖动是单指针)、
 小地图 / 比例尺、缩放到某个节点、惯性滑动.
@@ -70,7 +70,7 @@ import {
     RBT_WHEEL_LINE_PIXELS,
     RBT_WHEEL_PAGE_PIXELS,
     RBT_WHEEL_ZOOM_SENSITIVITY,
-} from '@/rbt/config';
+} from '@/ui/rbt/config';
 
 // ============================================================
 // 状态与变换(纯函数:数字进,数字出,可单测)

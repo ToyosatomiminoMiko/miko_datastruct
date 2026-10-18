@@ -6,16 +6,16 @@
 - 不碰 DOM;
 - 不引用显示层的任何常量;
 - 节点上**不挂布局坐标** -- 布局算出来的 x / y 属于"这棵树画在哪",存在
-  src/rbt/ui/rbt_layout.ts 的 `RbtPlacedNode` 里,核心节点保持只有结构.
+  src/ui/rbt/rbt_layout.ts 的 `RbtPlacedNode` 里,核心节点保持只有结构.
 
 于是本文件可以脱离这个项目单独读:它是一棵(只读)红黑树的定义.表达式写法(用户
-输入的那串 `13B(8R(1B,11R),...)`)由 core/rbt_parse.ts 解析,中文文案(性质名 /
-出错说明)由显示层的 src/rbt/ui/rbt_format.ts 拼 -- 这里只回答"过没过、错在哪个
+输入的那串 `13B(8R(1B,11R),...)`)由 datastruct/rbt/rbt_parse.ts 解析,中文文案(性质名 /
+出错说明)由显示层的 src/ui/rbt/rbt_format.ts 拼 -- 这里只回答"过没过、错在哪个
 节点、两侧黑高各是多少".
 
 数据形状:
 - `RbtNode` 是这棵树的全部状态,**字段只读**:解析之后没有任何一处再改它(布局要
-  坐标就另存一份,见 ui/rbt_layout.ts).从前把 `x?` / `y?` 写在节点上,于是"数据
+  坐标就另存一份,见 ui/rbt/rbt_layout.ts).从前把 `x?` / `y?` 写在节点上,于是"数据
   结构"里混进了显示状态 -- 那是这次拆分要拆掉的东西.
 - nil 叶子**不建节点**:用 `null` 表示,颜色恒为黑(所以"nil 叶子是黑色"这条性质
   结构上不会违反,不列进清单,理由见下面 RBT_PROPERTY_IDS 的说明).
@@ -24,7 +24,7 @@
 - 顺序 = `RBT_PROPERTY_IDS` 的顺序;每条对应的检查函数按 id 从 PROPERTY_CHECKS 里取
   (清单增删而这里没跟上会编译报错);
 - 结论是**结构化**的:违规节点交回节点引用,黑高那条另外交回两个数;把节点写成
-  `11R` 这种给人看的字符串是显示层的事(见 ui/rbt_format.ts),这里不拼任何文案.
+  `11R` 这种给人看的字符串是显示层的事(见 ui/rbt/rbt_format.ts),这里不拼任何文案.
 */
 
 // ============================================================
@@ -71,8 +71,8 @@ export interface RbtNode {
  *
  * `as const` 让 id 收窄成字面量联合:PROPERTY_CHECKS 用 `Record<id 联合, 检查函数>`
  * 收口,清单增删一条而检查函数没跟上会**编译报错**,而不是等到某个输入把它变成
- * undefined 调用.显示层的性质名 / 出错文案按同一批 id 收口(见 src/rbt/config.ts
- * 与 src/rbt/ui/rbt_format.ts).
+ * undefined 调用.显示层的性质名 / 出错文案按同一批 id 收口(见 src/ui/rbt/config.ts
+ * 与 src/ui/rbt/rbt_format.ts).
  */
 export const RBT_PROPERTY_IDS = [
     'root-black',

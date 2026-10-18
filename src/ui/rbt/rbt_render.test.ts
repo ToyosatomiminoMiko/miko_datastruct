@@ -1,5 +1,5 @@
 /**
- * 世界层落笔(ui/rbt_render.ts)的契约(进程内,跑在 happy-dom 里).
+ * 世界层落笔(ui/rbt/rbt_render.ts)的契约(进程内,跑在 happy-dom 里).
  *
  * 这一层现在多做一件事:**量内容实际占多大**.布局只管坐标,包围盒改成落笔后向浏览器
  * 要 `getBBox()` -- 于是节点半径只写在 CSS、TS 侧不再有"圆半径"这个常量.
@@ -19,12 +19,12 @@ import {
     RBT_EDGE_CLASS,
     RBT_NODE_CLASS,
     RBT_WORLD_CLASS,
-} from '@/rbt/config';
-import { buildTreeFromExpression } from '@/rbt/core/rbt_parse';
-import { layoutTree } from '@/rbt/ui/rbt_layout';
-import { clearTree, drawTree } from '@/rbt/ui/rbt_render';
+} from '@/ui/rbt/config';
+import { buildTreeFromExpression } from '@/datastruct/rbt/rbt_parse';
+import { layoutTree } from '@/ui/rbt/rbt_layout';
+import { clearTree, drawTree } from '@/ui/rbt/rbt_render';
 
-/** 世界层 `<g>`(与 ui/rbt_views.ts 建的同形) */
+/** 世界层 `<g>`(与 ui/rbt/rbt_views.ts 建的同形) */
 function createWorld(): SVGGElement {
     return create_svg_element({ tag: 'g' }, { class: RBT_WORLD_CLASS });
 }

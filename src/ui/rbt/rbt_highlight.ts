@@ -6,7 +6,7 @@
 editor/EditorHighlight 文件头).库因此不认识"红黑树表达式"这门语言,也不知道
 任何词法类名 -- 分词与配色都是消费者的事,这一个文件就是那份分词.
 
-词法口径与解析器一致(见 src/rbt/core/rbt_parse.ts):表达式被 `(` / `)` / `,` 切成
+词法口径与解析器一致(见 src/datastruct/rbt/rbt_parse.ts):表达式被 `(` / `)` / `,` 切成
 一段段"节点词",每段去掉首尾空白后,末位字符若是 R / B 就是颜色标记,前面是节点值;
 整段(不分大小写)是 `nil` 就是空树写法.所以高亮不引入第二套语法:解析器认什么,
 这里就按什么着色 -- 语法字符本身也直接引解析器那一份,不在这里另抄一遍.
@@ -31,14 +31,14 @@ import {
     RBT_MIN_SHORTHAND_LENGTH,
     RBT_NIL,
     RBT_RIGHT_PAREN,
-} from '@/rbt/core/rbt_parse';
+} from '@/datastruct/rbt/rbt_parse';
 import {
     RBT_TOKEN_BLACK_CLASS,
     RBT_TOKEN_NIL_CLASS,
     RBT_TOKEN_PUNCT_CLASS,
     RBT_TOKEN_RED_CLASS,
     RBT_TOKEN_VALUE_CLASS,
-} from '@/rbt/config';
+} from '@/ui/rbt/config';
 
 /** 切分节点词的三个字符(与解析器的切分口径一致,见文件头) */
 const RBT_DELIMITERS: readonly string[] = [RBT_LEFT_PAREN, RBT_RIGHT_PAREN, RBT_COMMA];

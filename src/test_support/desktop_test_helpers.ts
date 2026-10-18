@@ -14,7 +14,7 @@
  * 那一份就是 `doc.createElement(tag)` + 逐个 `setAttribute`,本条只是少写一次 `append`.
  *
  * 只有 `*.test.ts` 会被 vitest 收集,本文件是普通模块,由
- * `src/rbt/ui/rbt_views.test.ts` 显式 import(与主站 oled / calendar 那两份测试同一个用法).
+ * `src/ui/rbt/rbt_views.test.ts` 显式 import(与主站 oled / calendar 那两份测试同一个用法).
  */
 import { expect } from 'vitest';
 import { create_element } from 'miko_ui';

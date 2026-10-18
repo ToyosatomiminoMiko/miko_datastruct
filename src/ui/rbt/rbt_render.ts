@@ -2,8 +2,8 @@
 把布局结果**落成 SVG**:每个节点一个 `<g>`(位置写在组的 `transform` 上,圆与节点值
 是它的两个孩子),每条父子连线一个 `<line>`.
 
-这一层只管"建元素":坐标由 ui/rbt_layout.ts 的 `RbtTreeLayout` 给,视口的缩放由整层
-世界层 `<g class="rbt-world">` 的 `transform` 表达(见 ui/rbt_viewport.ts),所以这里
+这一层只管"建元素":坐标由 ui/rbt/rbt_layout.ts 的 `RbtTreeLayout` 给,视口的缩放由整层
+世界层 `<g class="rbt-world">` 的 `transform` 表达(见 ui/rbt/rbt_viewport.ts),所以这里
 一个坐标都不用换算 -- 布局坐标就是世界坐标.
 
 **内容实际占多大也在这里量**(2026-10 删掉布局里的包围盒):`drawTree` 落笔之后向
@@ -28,9 +28,9 @@ import {
     RBT_NODE_LABEL_CLASS,
     RBT_NODE_RED_CLASS,
     RBT_NODE_SHAPE_CLASS,
-} from '@/rbt/config';
-import type { RbtPlacedEdge, RbtPlacedNode, RbtTreeLayout } from '@/rbt/ui/rbt_layout';
-import type { RbtPlaneBox } from '@/rbt/ui/rbt_viewport';
+} from '@/ui/rbt/config';
+import type { RbtPlacedEdge, RbtPlacedNode, RbtTreeLayout } from '@/ui/rbt/rbt_layout';
+import type { RbtPlaneBox } from '@/ui/rbt/rbt_viewport';
 
 /** 一个节点组:位置 + 颜色修饰类 + 圆 + 节点值 */
 function createNodeElement(placed: RbtPlacedNode): SVGGElement {
@@ -89,7 +89,7 @@ function measureWorldBounds(world: SVGGElement): RbtPlaneBox | null {
  *
  * 不另包一层"图层" `<g>`:节点本来就带 `.rbt-node`,连线带 `.rbt-edge`,样式与冒烟
  * 脚本都按类名命中,再套一层只是多一个不起作用的元素;世界层是唯一必要的那一层
- * (视口要长期改它的 transform,见 ui/rbt_viewport.ts).
+ * (视口要长期改它的 transform,见 ui/rbt/rbt_viewport.ts).
  *
  * 子节点走库的 `childNodes()`(与 `replaceChildren` 同一套"字符串落成文本节点,假值
  * 跳过"的规则),不自己拼 innerHTML.

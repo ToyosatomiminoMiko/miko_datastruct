@@ -1,7 +1,7 @@
 /*
 红黑树工具的**桌面视图组件**(声明式).
 
-整块界面按 config.ts 的声明在这里生成,由 src/rbt/rbt.ts 的 `mountRBT` 交给库的
+整块界面按 config.ts 的声明在这里生成,由 src/ui/rbt/rbt.ts 的 `mountRBT` 交给库的
 `mountDesktop` 装配.这一层不认识窗口系统:它只产出四样东西 -- 一块**桌面背景**
 (平面视口 + 那棵 `<svg>` 树 + 它的世界层)和两扇窗口的**正文节点**,再由 `content()`
 按窗口 id 交回去(与库 `mountDesktop` 的分工一致:库建容器并把节点搬进去,消费者只管
@@ -29,8 +29,8 @@
 **表达式输入是 miko_ui 的 `createCodeEditor`,不是裸 `<textarea>`**:
 库交回的是一整块外框 `.code-editor`,里面仍是**真 textarea**(光标 / 选区 / 撤销栈 /
 IME 照旧是浏览器原生的,高亮只是一层 pointer-events: none 的背景),外加行号槽与
-高亮层.高亮用什么词法、什么颜色由我们注入:分词在 ui/rbt_highlight.ts,类名在
-config.ts,配色在 src/rbt/tokens.css 的 `--rbt-token-*`.
+高亮层.高亮用什么词法、什么颜色由我们注入:分词在 ui/rbt/rbt_highlight.ts,类名在
+config.ts,配色在 src/ui/rbt/tokens.css 的 `--rbt-token-*`.
 
 **为什么要自带一格宿主 `#rbtEditor`**:库的编辑器**自己不滚** -- 外框的宽高都由内容
 给出(高亮内容那个 `white-space: pre` 的 `<pre>`),滚动归装它的那一层.桌面化之前那
@@ -52,7 +52,7 @@ API;而且宿主在 CSS 里还有别的活干(外边距 / 最小高度,见 rbt.c
 **平面化(2026-10 起):背景是一块"可拖动缩放的平面视口",不是一块定尺画布**.
 从前 `<svg>` 自己带 `viewBox="0 0 1200 640"` 与 `preserveAspectRatio`,整棵树被等比
 缩到桌面;现在 `<svg>` 没有 viewBox(1 用户单位 = 1 CSS 像素),树挂在里面唯一的世界层
-`<g class="rbt-world">` 上,视口只改这一层的 `transform`(见 ui/rbt_viewport.ts).
+`<g class="rbt-world">` 上,视口只改这一层的 `transform`(见 ui/rbt/rbt_viewport.ts).
 
 为什么多一层 div 当视口:`#rbtViewport` 是库要的那颗**背景节点**(挂
 `.desktop-background`,见 miko_ui 的 styles/desktop.css,与库示例里的 `#viewport`
@@ -86,8 +86,8 @@ import {
     RBT_WINDOW_PROPERTIES,
     RBT_WORLD_CLASS,
     type RbtWindowId,
-} from '@/rbt/config';
-import { highlightRbtExpression } from '@/rbt/ui/rbt_highlight';
+} from '@/ui/rbt/config';
+import { highlightRbtExpression } from '@/ui/rbt/rbt_highlight';
 
 /** 树这块画布的读屏标签(它不是纯装饰:画的是这一轮解析出来的树). */
 const RBT_TREE_LABEL = '红黑树结构图';
@@ -99,7 +99,7 @@ export interface RbtViews {
      *
      * 它**不在任何窗口里**,由 `mountDesktop` 直接 append 到桌面根上 -- 这就是"树是
      * 背景"这句话在 DOM 上的全部含义.裁切 / 光标 / 指针手势(拖动平移、滚轮缩放)都
-     * 归这一层,见 ui/rbt_viewport.ts 与 rbt.css 的 `#rbtViewport`.
+     * 归这一层,见 ui/rbt/rbt_viewport.ts 与 rbt.css 的 `#rbtViewport`.
      */
     readonly viewport: HTMLElement;
     /**
@@ -175,7 +175,7 @@ export function createRbtViews(): RbtViews {
         给 100%,一个用户单位就是一个 CSS 像素).所以布局算出来的坐标就是屏幕像素,
         缩放由世界层的 transform 表达;
       - **世界层**:树上一切的父节点,树的世界坐标只在这一层的 transform 里被换算
-        (见 ui/rbt_viewport.ts 的 planeViewTransform).空着建出来,是因为"层"属于
+        (见 ui/rbt/rbt_viewport.ts 的 planeViewTransform).空着建出来,是因为"层"属于
         标记结构(视口要长期引用它),而"画什么"属于每轮重建的内容.
 
       `role` / `aria-label` 挂在整个背景那一层:视口是可交互的(拖动 / 缩放),但它
@@ -228,7 +228,7 @@ export function createRbtViews(): RbtViews {
       其余窗口同一条口径,见 miko_ui 的 README "编辑器不滚,宿主滚").
 
       两扇窗口各一根正文根,不合并:库按窗口 id 分别 append,而"一扇窗口一条滑条"
-      要求滑条就在窗口边上(见 src/rbt/rbt.css 的"窗口正文"一节).
+      要求滑条就在窗口边上(见 src/ui/rbt/rbt.css 的"窗口正文"一节).
     */
     const editorPanel = create_element(
         { tag: 'div' },

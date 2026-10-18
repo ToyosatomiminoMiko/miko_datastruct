@@ -1,5 +1,5 @@
 /**
- * 显示层**平面布局**(ui/rbt_layout.ts)的契约:纯几何,默认 node 环境.
+ * 显示层**平面布局**(ui/rbt/rbt_layout.ts)的契约:纯几何,默认 node 环境.
  *
  * 这一层钉三件事:
  *
@@ -12,15 +12,15 @@
  *    同 x(父子连线是竖线).
  *
  * 内容包围盒**不在这一层**:布局不知道节点半径,实际占多大由渲染层落笔后向浏览器要
- * `getBBox()`(见 ui/rbt_render.test.ts).真机上的像素观感更不在这一层验;树在 DOM 里
- * 的形状在 rbt.test.ts.表达式解析在 core/rbt_parse.test.ts.
+ * `getBBox()`(见 ui/rbt/rbt_render.test.ts).真机上的像素观感更不在这一层验;树在 DOM 里
+ * 的形状在 rbt.test.ts.表达式解析在 datastruct/rbt/rbt_parse.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 
-import { buildTreeFromExpression } from '@/rbt/core/rbt_parse';
-import { type RbtNode } from '@/rbt/core/rbt_tree';
-import { RBT_MIN_HORIZONTAL_GAP, RBT_TREE_EXAMPLE, RBT_Y_STEP } from '@/rbt/config';
-import { layoutTree, type RbtPlacedNode, type RbtTreeLayout } from '@/rbt/ui/rbt_layout';
+import { buildTreeFromExpression } from '@/datastruct/rbt/rbt_parse';
+import { type RbtNode } from '@/datastruct/rbt/rbt_tree';
+import { RBT_MIN_HORIZONTAL_GAP, RBT_TREE_EXAMPLE, RBT_Y_STEP } from '@/ui/rbt/config';
+import { layoutTree, type RbtPlacedNode, type RbtTreeLayout } from '@/ui/rbt/rbt_layout';
 
 /** 表达式 -> 布局(解析成空树就说明测试写错了,直接抛) */
 function laidOut(expression: string): RbtTreeLayout {

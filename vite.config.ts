@@ -84,7 +84,7 @@ export default defineConfig({
     test: {
         // 单测分两层,文件都叫 `src/**/*.test.ts`:
         //   - 纯数据 / 纯函数单测:默认的 node 环境
-        //     (core/ 下的解析与性质检查,以及显示层的布局 / 文案拼装);
+        //     (datastruct/ 下的解析与性质检查,以及 ui/ 下的布局 / 文案拼装);
         //   - **标记契约 / 行为**单测:文件头写 `@vitest-environment happy-dom` 的那些,
         //     在进程内建一个真 DOM,断言生成的标签 / 类名 / id 与 CSS 对得上.
         include: ['src/**/*.test.ts'],

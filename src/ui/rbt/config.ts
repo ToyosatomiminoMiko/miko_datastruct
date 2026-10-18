@@ -2,34 +2,34 @@
 // 红黑树工具的**显示层**配置
 //
 // 集中显示层所有"设计参数":DOM 契约,窗口清单,提示文案,布局几何,结构类名与
-// 输出区文案.红黑树本身(节点形状 / 性质检查 / 表达式解析)在 src/rbt/core/,那里
+// 输出区文案.红黑树本身(节点形状 / 性质检查 / 表达式解析)在 src/datastruct/rbt/,那里
 // 一个界面字、一个显示常量都不引 -- 本文件是"显示"这一侧的集中地,改文案 / 改
 // 观感 / 改布局参数都只到这一层为止.
 //
 // **不再有配色与字体**:树从 canvas 换成 SVG 之后,每一笔都是文档里的元素,颜色 /
-// 字号 / 线宽全部回到 CSS(src/rbt/tokens.css 的 `--rbt-*` 令牌 +
-// src/rbt/rbt.css 的 `#rbtTree` 区块).从前 `ctx.fillStyle` 读不到 CSS 变量,
+// 字号 / 线宽全部回到 CSS(src/ui/rbt/tokens.css 的 `--rbt-*` 令牌 +
+// src/ui/rbt/rbt.css 的 `#rbtTree` 区块).从前 `ctx.fillStyle` 读不到 CSS 变量,
 // 这套配色只能写死在这里,那是 canvas 的固有代价.
 //
 // 桌面化(2026-10)之后这里还多一节**窗口清单**:哪些窗口 / 标题叫什么 / 默认几何.
 // 那份数据是库的 `mountDesktop` 的构造参数(类型 `WindowConfigEntry`),所以本文件
 // 只做一次 type-only 导入 -- 类型归库,值归应用,运行时没有依赖.
 //
-// 性质清单的**性质 id** 不在这里:那是核心层的事实(core/rbt_tree.ts 的
+// 性质清单的**性质 id** 不在这里:那是核心层的事实(datastruct/rbt/rbt_tree.ts 的
 // RBT_PROPERTY_IDS 定顺序,PROPERTY_CHECKS 按 id 收口);这里只给 id 配中文名,
 // 并按核心层的顺序生成界面清单(见 RBT_PROPERTIES).
 // ================================================================
 
 import type { WindowConfigEntry } from 'miko_ui';
-import { RBT_PROPERTY_IDS, type RbtPropertyId } from './core/rbt_tree';
+import { RBT_PROPERTY_IDS, type RbtPropertyId } from '@/datastruct/rbt/rbt_tree';
 
 
-// ---------- DOM 契约(id,src/rbt/rbt.css 按它命中) ----------
+// ---------- DOM 契约(id,src/ui/rbt/rbt.css 按它命中) ----------
 
 /**
  * 红黑树控件用到的 DOM 元素 id.
- * 标记由 src/rbt/ui/rbt_views.ts 按本文件的声明生成(id 写入元素再由组件
- * 交回引用);这些常量同时给样式(src/rbt/rbt.css 的 `#rbtEditor` /
+ * 标记由 src/ui/rbt/rbt_views.ts 按本文件的声明生成(id 写入元素再由组件
+ * 交回引用);这些常量同时给样式(src/ui/rbt/rbt.css 的 `#rbtEditor` /
  * `#treeOutput` / `#rbtViewport` / `#rbtTree` 等)与组件共用.
  *
  * 六个 id 里只有 `#rbtEditor` 是**库组件的宿主**:表达式输入从裸 textarea 换成
@@ -39,14 +39,14 @@ import { RBT_PROPERTY_IDS, type RbtPropertyId } from './core/rbt_tree';
  * 消费者的 id 变成库的公开 API(见 miko_ui 的 styles/styles.css 文件头).
  *
  * 另外两个 `*PanelId` 是**窗口正文根**:桌面化之后滚动归窗口正文
- * (见 src/rbt/rbt.css 的"滚动归属"一节),它们是各自窗口里唯一会滚的那一层.
+ * (见 src/ui/rbt/rbt.css 的"滚动归属"一节),它们是各自窗口里唯一会滚的那一层.
  */
 export const RBT_DOM = {
     /**
      * 平面视口 `#rbtViewport`:桌面背景那一层,里面只有那棵树的 `<svg>`.
      *
      * 它是**视口**,`#rbtTree` 是**画布**:裁切、光标、指针手势(拖动 / 滚轮)都归这一
-     * 层,svg 退回 1:1 的绘制面(理由见本文件"平面与视口"一节,以及 ui/rbt_views.ts).
+     * 层,svg 退回 1:1 的绘制面(理由见本文件"平面与视口"一节,以及 ui/rbt/rbt_views.ts).
      * 为什么不让 svg 自己当视口:库的口径是"背景节点挂 `.desktop-background`,绘制与
      * 尺寸归消费者",而一根 div 的裁切 / 光标 / `touch-action` 比 SVG 根更少歧义;将来
      * 视口上要加的浮层(比例 / 复位按钮)也有现成的父亲.
@@ -56,7 +56,7 @@ export const RBT_DOM = {
      * 表达式编辑器宿主 `#rbtEditor`(库的 `.code-editor` 外框长在它里面).
      *
      * 它承担库不给的一件事:**占满窗口正文的高度**.编辑器外框的 `min-height: 100%`
-     * 要有"高度确定"的宿主才解析得出(见 src/rbt/rbt.css 的 `#rbtEditor`).
+     * 要有"高度确定"的宿主才解析得出(见 src/ui/rbt/rbt.css 的 `#rbtEditor`).
      * 滚动**不在**这里 -- 桌面化之后滚的是窗口正文根(`editorPanelId`),行号槽
      * `position: sticky; left: 0` 钉在那个滚动区左边,这正是库要的宿主形态
      * (见 miko_ui 的 styles/editor.css 的"滚动归属").
@@ -77,7 +77,7 @@ export const RBT_DOM = {
      *
      * 从前这里是 `rbCanvas`(canvas 2D).换成 SVG 之后树是**文档里的元素**:
      * 命中检测 / pointer 事件 / CSS transition 全部由浏览器给,颜色能直接引 CSS
-     * 令牌(见 src/rbt/tokens.css 的 `--rbt-node-*`),`canvas` 那条路整个不要了.
+     * 令牌(见 src/ui/rbt/tokens.css 的 `--rbt-node-*`),`canvas` 那条路整个不要了.
      * id 由 `canvasId` 改成 `treeId`:名字跟着它现在是什么走,不留一个名不副实的旧 id.
      *
      * 平面化(2026-10)之后它**不再自己缩放**:没有 viewBox,宽高由视口那一层给
@@ -93,7 +93,7 @@ export const RBT_DOM = {
      * 所以 `#rbtEditor` 只负责占满窗口高度.
      *
      * 提示区不在这里:那是静态说明,与"这一轮输入"无关,已经搬到性质检查窗口
-     * 的正文最前(见下面的 RBT_HINT_BOX_CLASS 与 ui/rbt_views.ts 的 outputPanel).
+     * 的正文最前(见下面的 RBT_HINT_BOX_CLASS 与 ui/rbt/rbt_views.ts 的 outputPanel).
      */
     editorPanelId: 'rbtEditorPanel',
     /**
@@ -113,7 +113,7 @@ export const RBT_DOM = {
 // `background` 参数):窗口层浮在背景之上,背景铺满整块桌面,窗口没盖住的地方
 // 看到的就是它.
 //
-// 两扇窗口各装什么(见 ui/rbt_views.ts):
+// 两扇窗口各装什么(见 ui/rbt/rbt_views.ts):
 // - 表达式窗口:只有编辑器宿主.输入是这一扇窗口唯一要做的事,窗口高度全给输入区;
 // - 性质检查窗口:提示区(静态说明)在上,唯一输出区 #treeOutput 在下.
 //   静态说明与"这一轮的结果"同处一窗,读结论时语法就在同一栏顶部.
@@ -129,7 +129,7 @@ export const RBT_DOM = {
 /** 表达式窗口的 id(库只把它当 Map 的键,值本身在本文件里当字面量用) */
 export const RBT_WINDOW_EDITOR = 'editor';
 
-/** 性质检查窗口的 id(与 RBT_WINDOW_EDITOR 成对,见 ui/rbt_views.ts 的 content) */
+/** 性质检查窗口的 id(与 RBT_WINDOW_EDITOR 成对,见 ui/rbt/rbt_views.ts 的 content) */
 export const RBT_WINDOW_PROPERTIES = 'properties';
 
 /** 应用自己的窗口 id 联合:窗口内容表按它收口,漏一扇窗口编译期就报错 */
@@ -188,13 +188,13 @@ export const RBT_DESKTOP_WINDOWS = [
 //
 // 提示区是**静态文案**:简写语法与配色图例说的是"这套表达式怎么读",与这一轮的输入
 // 无关,所以它不进 #treeOutput(那里每轮整批重建),而是自己一块元素,排在性质检查
-// 窗口正文的最前、输出区之上(见 ui/rbt_views.ts 的 outputPanel).
+// 窗口正文的最前、输出区之上(见 ui/rbt/rbt_views.ts 的 outputPanel).
 //
 // 为什么不在表达式窗口:那个窗口只留编辑器 -- 整扇窗口的高度都给输入区,光标与
 // 选区不被说明挤开;说明挪到"看结果"的那扇窗口里,读结论时语法就在同一栏顶部.
 
 /**
- * 提示区外框的类名(样式见 src/rbt/rbt.css 的 `.rbt-hints`).
+ * 提示区外框的类名(样式见 src/ui/rbt/rbt.css 的 `.rbt-hints`).
  *
  * 不能复用 `RBT_OUTPUT_HINT_CLASS`(`tree-hint`):那个类名是"这一轮的输出是一行提示"
  * 的语义,行为测试按它数 #treeOutput 里的行数(见 rbt.test.ts),挂到这块静态说明上
@@ -226,7 +226,7 @@ export const RBT_HINT_VIEWPORT = '背景平面:拖动平移、滚轮缩放、双
  * 表达式编辑器的占位文案(可见文本).
  *
  * 库的 `createCodeEditor` 没有 placeholder 选项(它只认 value / spellcheck /
- * highlight / gutterMinWidth),所以这条由 ui/rbt_views.ts 写在库交回的 textarea 上
+ * highlight / gutterMinWidth),所以这条由 ui/rbt/rbt_views.ts 写在库交回的 textarea 上
  * (`setAttribute`):换掉的是输入控件,提示文案不变.
  */
 export const RBT_INPUT_PLACEHOLDER =
@@ -252,7 +252,7 @@ export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
 // 桌面.两个后果:深一点的树被钳到挤在一起,小树却在一整块空框里显小 -- 画布尺寸
 // 与树的内容无关.
 //
-// 现在的口径(实现见 ui/rbt_viewport.ts):
+// 现在的口径(实现见 ui/rbt/rbt_viewport.ts):
 //   - **布局算出来的 x / y 就是平面坐标**(单位 = 屏幕像素 @ k=1);`<svg>` 不再有
 //     viewBox,它是 1:1 的画布,一个用户单位就是一个 CSS 像素;
 //   - 树上的一切(连线 / 节点)挂在一层 `<g class="rbt-world">` 里,视口只改这一层的
@@ -264,8 +264,8 @@ export const RBT_EDITOR_GUTTER_MIN_WIDTH = 32;
 // 与任务栏压在它上面,窗口没盖住的地方就是平面本身.
 //
 // 布局**不需要知道平面多大**:它只保证"同层相邻节点的中心距不小于
-// RBT_MIN_HORIZONTAL_GAP"(见 ui/rbt_layout.ts);内容实际占多大由渲染层落笔后向
-// 浏览器要 `getBBox()`(见 ui/rbt_render.ts),视口再按它适应.所以这里没有画布宽 / 高,
+// RBT_MIN_HORIZONTAL_GAP"(见 ui/rbt/rbt_layout.ts);内容实际占多大由渲染层落笔后向
+// 浏览器要 `getBBox()`(见 ui/rbt/rbt_render.ts),视口再按它适应.所以这里没有画布宽 / 高,
 // 也没有"把树压进某块框"的参数 -- 平面无限大,看得见多少全由视口那一层决定.
 
 /** 适应视口时内容四周的留白(px,屏幕像素):树不贴着视口边缘 */
@@ -319,7 +319,7 @@ export const RBT_DOUBLE_PRESS_MS = 320;
 /**
  * 世界层的类名:树上所有连线 / 节点都挂在这一层 `<g>` 里,视口只改它的 transform.
  *
- * 它是**跨语言契约**:ui/rbt_views.ts 建它,测试按它断言"结构与世界坐标对得上",
+ * 它是**跨语言契约**:ui/rbt/rbt_views.ts 建它,测试按它断言"结构与世界坐标对得上",
  * rbt.css 里另有它一段说明(样式表对世界层没有规则,那是刻意的).
  */
 export const RBT_WORLD_CLASS = 'rbt-world';
@@ -329,7 +329,7 @@ export const RBT_WORLD_CLASS = 'rbt-world';
 // 只有两个数:层距、同层最小中心距.没有"平面宽度 / 画布尺寸 / 安全边距 / 越界钳制":
 // 那套参数是为"把树压进一块定尺画布"服务的.也没有节点半径:圆多大是 CSS
 // (`--rbt-node-radius`)的事,内容实际占多大由渲染层落笔后向浏览器要 `getBBox()`
-// (见 ui/rbt_render.ts),布局只回答"节点彼此别撞".
+// (见 ui/rbt/rbt_render.ts),布局只回答"节点彼此别撞".
 
 /** 相邻两层的垂直步长(px):根在 y = 0,深一层加一个步长 */
 export const RBT_Y_STEP = 70;
@@ -337,7 +337,7 @@ export const RBT_Y_STEP = 70;
 /**
  * 同层相邻节点的最小中心距(px).
  *
- * 整齐布局(ui/rbt_layout.ts)拿它当**打包单位**:合并左右子树时,每一层都保证左子树
+ * 整齐布局(ui/rbt/rbt_layout.ts)拿它当**打包单位**:合并左右子树时,每一层都保证左子树
  * 最右节点与右子树最左节点至少差这么多;于是同层任意两节点的中心距都不小于它,圆不会
  * 相叠.它同时是"轮廓错开量"的唯一下限,所以越大树越疏、越小树越挤,没有第二个旋钮.
  *
@@ -351,11 +351,11 @@ export const RBT_MIN_HORIZONTAL_GAP = 70;
 // ---------- 节点与连线:类名契约(观感全在 CSS) ----------
 //
 // 从 canvas 换成 SVG 之后,**树的每一笔都是文档里的元素**,于是配色 / 字号 / 线宽
-// 全部回到 CSS(引 src/rbt/tokens.css 的 `--rbt-*` 令牌),TS 侧一个色值都不留 --
+// 全部回到 CSS(引 src/ui/rbt/tokens.css 的 `--rbt-*` 令牌),TS 侧一个色值都不留 --
 // 这正是不用 canvas 的最大收益:`ctx.fillStyle` 读不到 CSS 变量,从前那套红黑配色
 // 只能写死在 config 里.现在 config 只声明**类名**(选择器锚点),观感去样式表改.
 //
-// 类名同时是跨语言契约:src/rbt/rbt.test.ts 按 `.rbt-node--red` 数红节点,
+// 类名同时是跨语言契约:src/ui/rbt/rbt.test.ts 按 `.rbt-node--red` 数红节点,
 // 按`.rbt-edge` 数连线,所以它们不能只因为"CSS 里看着没用"就删.
 
 /** 一个节点的组(位置在它的 `transform` 上;圆与文字是它的两个孩子) */
@@ -376,13 +376,13 @@ export const RBT_NODE_BLACK_CLASS = 'rbt-node--black';
 /** 父子连线的类名(`<line>` 的描边与线宽在 CSS) */
 export const RBT_EDGE_CLASS = 'rbt-edge';
 
-// ---------- 表达式词法着色:类名契约(样式在 src/rbt/rbt.css) ----------
+// ---------- 表达式词法着色:类名契约(样式在 src/ui/rbt/rbt.css) ----------
 //
-// 表达式编辑器的高亮 HTML 由 ui/rbt_highlight.ts 产出,注入给 miko_ui 的 CodeEditor.
+// 表达式编辑器的高亮 HTML 由 ui/rbt/rbt_highlight.ts 产出,注入给 miko_ui 的 CodeEditor.
 // 库的高亮层只做一件事:把注入的 `highlight(source)` 产物显示在透明 textarea 背后
 // (见 miko_ui 的 editor/EditorHighlight 文件头)-- 它不认识任何语言的词法,也知道
 // 自己不该认识,所以"哪个词是什么"与"它是什么颜色"都在我们这一侧:类名在这里声明,
-// 配色在 src/rbt/tokens.css 的 `--rbt-token-*`.
+// 配色在 src/ui/rbt/tokens.css 的 `--rbt-token-*`.
 //
 // 这几个类名是**跨语言契约**:rbt_highlight.ts 产出它们,rbt.css 按它们命中,
 // rbt_highlight.test.ts 断言它们,改名要三处一起改(没有编译期保护).
@@ -407,17 +407,17 @@ export const RBT_TOKEN_PUNCT_CLASS = 'rbt-token--punct';
 // 表达式先过**格式检查**(解析器):过了才有树可查性质,没过就在输出区出一行错误.
 // 输出区只有一个(#treeOutput),下面这些类名决定每一行的角色与颜色.
 
-/** 中性提示行的类名(空输入 / 空树;颜色见 src/rbt/rbt.css 的 .tree-hint) */
+/** 中性提示行的类名(空输入 / 空树;颜色见 src/ui/rbt/rbt.css 的 .tree-hint) */
 export const RBT_OUTPUT_HINT_CLASS = 'tree-hint';
 
-/** 错误行的类名(解析失败;颜色见 src/rbt/rbt.css 的 .tree-error) */
+/** 错误行的类名(解析失败;颜色见 src/ui/rbt/rbt.css 的 .tree-error) */
 export const RBT_OUTPUT_ERROR_CLASS = 'tree-error';
 
 // ---------- 性质检查(清单行) ----------
 
 /**
  * 单条性质的类名(行为代码每渲染一次清单就整批重建这些节点).
- * 消费方是 src/rbt/rbt.test.ts:它按 `#treeOutput .tree-property` 数行数,所以这个
+ * 消费方是 src/ui/rbt/rbt.test.ts:它按 `#treeOutput .tree-property` 数行数,所以这个
  * 类名是**跨语言契约**,不能只按"CSS 里没用到"就删.
  */
 export const RBT_DIAGNOSTICS_ROW_CLASS = 'tree-property';
@@ -425,7 +425,7 @@ export const RBT_DIAGNOSTICS_ROW_CLASS = 'tree-property';
 /** 单条性质里"结论"那一段的类名(状态色挂在它上面) */
 export const RBT_DIAGNOSTICS_STATE_CLASS = 'tree-property-state';
 
-/** 清单抬头那一段的类名(样式见 src/rbt/rbt.css 的 `#treeOutput`) */
+/** 清单抬头那一段的类名(样式见 src/ui/rbt/rbt.css 的 `#treeOutput`) */
 export const RBT_DIAGNOSTICS_SUMMARY_CLASS = 'tree-property-summary';
 
 /**
@@ -445,9 +445,9 @@ export const RBT_PROPERTY_STATE_FAIL = 'FAIL';
 
 // ---------- 性质检查:逐条的出错文案 ----------
 //
-// 这几条是**出错位置**的模板,由 ui/rbt_format.ts 从核心层的结构化违规结果填占位符
+// 这几条是**出错位置**的模板,由 ui/rbt/rbt_format.ts 从核心层的结构化违规结果填占位符
 // 后显示在清单里.占位符有两种:`{node}` 换成"值+颜色"(如 `11R`),数字占位符换成
-// 算出来的数.核心层(core/rbt_tree.ts)只给违规节点与两个黑高数字,不碰这些句子.
+// 算出来的数.核心层(datastruct/rbt/rbt_tree.ts)只给违规节点与两个黑高数字,不碰这些句子.
 
 /** 根节点是红色 */
 export const RBT_ROOT_RED_DETAIL = '根节点 {node} 是红色';
@@ -467,7 +467,7 @@ export const RBT_BST_ORDER_DETAIL = '以 {node} 为根的子树不满足左小�
 
 /** 一条性质在界面上的定义:核心层的稳定 id + 界面上的中文名 */
 export interface RbtPropertySpec {
-    /** 稳定 id,核心层的检查函数按它收口(见 core/rbt_tree.ts 的 PROPERTY_CHECKS) */
+    /** 稳定 id,核心层的检查函数按它收口(见 datastruct/rbt/rbt_tree.ts 的 PROPERTY_CHECKS) */
     readonly id: RbtPropertyId;
     /** 界面上的性质名(可见文本) */
     readonly label: string;
@@ -490,7 +490,7 @@ const RBT_PROPERTY_LABELS: Readonly<Record<RbtPropertyId, string>> = {
  * 界面上的性质清单(顺序 = 核心层 RBT_PROPERTY_IDS 的顺序 = 检查顺序).
  *
  * 顺序不在这里另写一遍:清单直接由核心层的 id 顺序生成,两边不可能对不上.性质
- * 到底查什么 / 为什么只有四条,见 core/rbt_tree.ts 的 RBT_PROPERTY_IDS 说明 --
+ * 到底查什么 / 为什么只有四条,见 datastruct/rbt/rbt_tree.ts 的 RBT_PROPERTY_IDS 说明 --
  * 那是数据结构的事,这里只负责"界面上叫它什么".
  */
 export const RBT_PROPERTIES: readonly RbtPropertySpec[] = RBT_PROPERTY_IDS.map((id) => ({
@@ -523,9 +523,9 @@ export const RBT_TREE_EXAMPLE =
 
 // ---------- 可见文案(解析错误信息,与界面一字不差) ----------
 //
-// 解析器(core/rbt_parse.ts)只抛错误码 + 出错片段,句子由 ui/rbt_format.ts 用下面这些
+// 解析器(datastruct/rbt/rbt_parse.ts)只抛错误码 + 出错片段,句子由 ui/rbt/rbt_format.ts 用下面这些
 // 模板拼:改文案不碰核心逻辑.语法字符(`(`, `)`, `,`, R/B, nil)也不在这里 --
-// 那是输入格式的定义,在 core/rbt_parse.ts(词法高亮引的是同一份).
+// 那是输入格式的定义,在 datastruct/rbt/rbt_parse.ts(词法高亮引的是同一份).
 
 /** 简写节点过短时的错误文案前缀 */
 export const RBT_ERR_SHORTHAND_TOO_SHORT = '无效节点简写: "';

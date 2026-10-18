@@ -9,8 +9,8 @@ miko_ui/styles/editor.css 与它读的库令牌,本项目一条都不覆盖(见 
 
 跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):
   - `--rbt-node-radius` 只在 CSS 这一侧定义:TS 已经不关心半径(内容实际占多大由
-    渲染层落笔后向浏览器要 `getBBox()`,见 ui/rbt_render.ts).唯一要守住的是
-    `src/rbt/config.ts` 的 `RBT_MIN_HORIZONTAL_GAP` 必须大于 2 × 这个半径,否则
+    渲染层落笔后向浏览器要 `getBBox()`,见 ui/rbt/rbt_render.ts).唯一要守住的是
+    `src/ui/rbt/config.ts` 的 `RBT_MIN_HORIZONTAL_GAP` 必须大于 2 × 这个半径,否则
     同层相邻的两个圆会叠在一起.
 
 进入动画的时长**只有 CSS 一处**(`--rbt-node-enter-duration`):动画是纯 CSS 的(挂在
@@ -37,7 +37,7 @@ config.ts 里那条同名常量是同一件事",那条常量早已不存在,别�
     --rbt-hint-margin: 10px;
     --rbt-input-min-height: 100px;
     /*
-     * 表达式词法着色(高亮 HTML 由 src/rbt/ui/rbt_highlight.ts 产出,类名在 config.ts).
+     * 表达式词法着色(高亮 HTML 由 src/ui/rbt/rbt_highlight.ts 产出,类名在 config.ts).
      *
      * 值沿用输入框时代的荧光绿;颜色标记 R / B 与树上红黑节点同色系(但**不共用**
      * --rbt-node-*-fill:那是圆的填充,在深色编辑区上直接当文字色偏暗);
@@ -63,7 +63,7 @@ config.ts 里那条同名常量是同一件事",那条常量早已不存在,别�
     /*
      * 树从 canvas 换成 SVG 之后,这些值第一次真正落在 CSS 里:元素是自己的,
      * fill / stroke / font 都吃令牌(canvas 的 ctx.fillStyle 读不到自定义属性,
-     * 从前这套配色只能写死在 src/rbt/config.ts).
+     * 从前这套配色只能写死在 src/ui/rbt/config.ts).
      *
      * 半径只写在 CSS 这一侧:TS 不读它(内容占多大由浏览器 getBBox 量,节点彼此
      * 离多远由 config 的 RBT_MIN_HORIZONTAL_GAP 管).零成本的一致性检查只有一条:

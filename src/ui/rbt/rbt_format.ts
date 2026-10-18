@@ -1,28 +1,28 @@
 /*
 核心层的**结构化结果** -> 界面上给人看的中文文案.
 
-核心层(src/rbt/core/)只回答"过没过 / 错在哪个节点 / 两侧黑高各是多少",一个界面
+核心层(src/datastruct/rbt/)只回答"过没过 / 错在哪个节点 / 两侧黑高各是多少",一个界面
 字都不写;而界面上要显示的是完整句子(`11R`, `较浅一侧 2`).把两者拼起来的地方就是
 本文件 -- 它是**唯一**知道"哪个错误码对应哪句文案、哪条性质用哪个模板"的一层:
 
-- 解析失败:`RbtParseError.code`(见 core/rbt_parse.ts)按模板填出错片段;
+- 解析失败:`RbtParseError.code`(见 datastruct/rbt/rbt_parse.ts)按模板填出错片段;
 - 性质违规:按性质 id 取模板,把违规节点写成"值+颜色",黑高那条再填两个数;
 - 抬头:总条数 / FAIL 条数换成数字.
 
-文案模板本身在 src/rbt/config.ts(那是"看得见的字"的集中地,改文案不碰逻辑);
-本文件只做映射与占位符替换.测试见 ui/rbt_format.test.ts(纯字符串,不需要 DOM).
+文案模板本身在 src/ui/rbt/config.ts(那是"看得见的字"的集中地,改文案不碰逻辑);
+本文件只做映射与占位符替换.测试见 ui/rbt/rbt_format.test.ts(纯字符串,不需要 DOM).
 */
 import {
     RbtParseError,
     type RbtParseErrorCode,
-} from '@/rbt/core/rbt_parse';
+} from '@/datastruct/rbt/rbt_parse';
 import type {
     RbtNode,
     RbtPropertyId,
     RbtPropertyReport,
     RbtPropertyResult,
     RbtPropertyViolation,
-} from '@/rbt/core/rbt_tree';
+} from '@/datastruct/rbt/rbt_tree';
 import {
     RBT_BLACK_HEIGHT_DETAIL,
     RBT_BST_ORDER_DETAIL,
@@ -38,7 +38,7 @@ import {
     RBT_PROPERTY_SUMMARY,
     RBT_RED_CHILD_DETAIL,
     RBT_ROOT_RED_DETAIL,
-} from '@/rbt/config';
+} from '@/ui/rbt/config';
 
 /** 节点在提示里的写法:值 + 颜色(如 `11R`);只在本文件拼句子时用 */
 function describeNode(node: RbtNode): string {

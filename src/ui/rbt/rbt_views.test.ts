@@ -13,12 +13,12 @@
  *    里**(这就是"树是桌面背景"这句话的全部可断言内容),两扇窗口的正文根各挂库的
  *    `ui-scrollbar`,窗口标题与任务栏文案来自 config 的窗口清单.
  *
- * `src/rbt/rbt.css` 按 `#rbtViewport` / `#rbtTree` / `#rbtEditorPanel` /
+ * `src/ui/rbt/rbt.css` 按 `#rbtViewport` / `#rbtTree` / `#rbtEditorPanel` /
  * `#rbtOutputPanel` / `#rbtEditor` / `#treeOutput` 命中;平面几何(布局参数 / 视口参数)与
  * 窗口清单都来自 config.逐字文案(三行提示里的 U+00A0 与「黒」)一并钉住:顺手改掉就会
  * 变成静默的文案漂移.
  *
- * 表达式输入从裸 textarea 换成 miko_ui 的 CodeEditor(见 ui/rbt_views.ts)之后,这一层
+ * 表达式输入从裸 textarea 换成 miko_ui 的 CodeEditor(见 ui/rbt/rbt_views.ts)之后,这一层
  * 钉的是**装配契约**,不是库的内部结构:
  * - 我们那一格宿主 `#rbtEditor` 在正文里,库的外框 `.code-editor` 长在它里面;
  * - textarea 是库建的,但 spellcheck 与 placeholder 由我们给(库没有 placeholder 选项);
@@ -41,9 +41,9 @@ import {
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
     RBT_WORLD_CLASS,
-} from '@/rbt/config';
-import { mountRBT } from '@/rbt/rbt';
-import { createRbtViews, type RbtViews } from '@/rbt/ui/rbt_views';
+} from '@/ui/rbt/config';
+import { mountRBT } from '@/ui/rbt/rbt';
+import { createRbtViews, type RbtViews } from '@/ui/rbt/rbt_views';
 import { expectNoDuplicateIds, renderHost } from '@/test_support/desktop_test_helpers';
 
 /** 建一次视图并取好两扇窗口的正文根(还没挂进文档) */

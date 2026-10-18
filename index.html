@@ -17,7 +17,7 @@
   1. 浏览器 / 系统的强制深色(Chrome 自动深色那种亮度反转)
      -> `css/app.css` 的 `:root { color-scheme: dark }`;
   2. 系统高对比度(forced-colors,按系统色改写 fill / stroke)
-     -> `src/rbt/rbt.css` 的 `@media (forced-colors: active)` 里给 #rbtTree 的
+     -> `src/ui/rbt/rbt.css` 的 `@media (forced-colors: active)` 里给 #rbtTree 的
         `forced-color-adjust: none`(颜色就是这棵树的数据,不能被改写);
   3. **Dark Reader 这类扩展**:它们不认规范,只认自己的一套注入样式(`!important`
      + 它自己的变量),规范级的两条对它无效 —— 所以要用它自己的"锁"。Dark Reader 的

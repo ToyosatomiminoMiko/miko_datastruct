@@ -2,9 +2,9 @@
 **平面布局**:给一棵红黑树算每个节点在平面上的坐标,以及父子连线.
 
 这是**显示层**的纯几何(数字进,数字出,不碰 DOM):层距 / 同层最小间距都是从
-src/rbt/config.ts 的几何常量推出来的观感参数,与"这棵树是什么"无关.所以坐标**不写回
-核心节点**(core/rbt_tree.ts 的 `RbtNode` 只有结构、且字段只读):布局交回的是一份
-`RbtPlacedNode` 表,渲染层(ui/rbt_render.ts)按这张表落笔.
+src/ui/rbt/config.ts 的几何常量推出来的观感参数,与"这棵树是什么"无关.所以坐标**不写回
+核心节点**(datastruct/rbt/rbt_tree.ts 的 `RbtNode` 只有结构、且字段只读):布局交回的是一份
+`RbtPlacedNode` 表,渲染层(ui/rbt/rbt_render.ts)按这张表落笔.
 
 为什么坐标不该挂在节点上:挂了之后"数据结构"里就混进了显示状态 -- 换一种画法(比如
 环形布局)要在节点上再挂一批坐标字段,而核心逻辑(性质检查)却从不读它们.拆开之后
@@ -19,14 +19,14 @@ src/rbt/config.ts 的几何常量推出来的观感参数,与"这棵树是什么
 3. 子树之间不交叉:左子树的每个节点都在右子树对应层的左边.
 
 这个算法里**没有"平面有多宽"这个概念**:布局不知道视口多大,也不需要一块定尺画布 --
-它只回答"节点彼此别撞".内容实际占多大**不在这里算**:落笔之后由 ui/rbt_render.ts 向
+它只回答"节点彼此别撞".内容实际占多大**不在这里算**:落笔之后由 ui/rbt/rbt_render.ts 向
 浏览器要 `<g>` 的 `getBBox()`(见那里的 drawTree),再交给视口适应 -- 布局不必知道节点
 半径,也就没有"TS 半径与 CSS 半径必须相等"那条跨语言契约.视口能拖动缩放,内容再宽再深
 也只是看得见 / 看不见,不需要压进某块框.所以从前那套"按叶子数推水平跨度 -> 分配区间
 -> 越界钳制"的参数与代码整体删掉了(见 README 的分层一节).
 */
-import type { RbtNode } from '@/rbt/core/rbt_tree';
-import { RBT_MIN_HORIZONTAL_GAP, RBT_Y_STEP } from '@/rbt/config';
+import type { RbtNode } from '@/datastruct/rbt/rbt_tree';
+import { RBT_MIN_HORIZONTAL_GAP, RBT_Y_STEP } from '@/ui/rbt/config';
 
 // ============================================================
 // 布局结果的形状

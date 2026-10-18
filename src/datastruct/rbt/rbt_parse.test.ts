@@ -1,5 +1,5 @@
 /**
- * 红黑树**表达式解析**(core/rbt_parse.ts)的契约:纯函数,默认 node 环境.
+ * 红黑树**表达式解析**(datastruct/rbt/rbt_parse.ts)的契约:纯函数,默认 node 环境.
  *
  * 这一层只钉两件事:
  *
@@ -7,15 +7,15 @@
  *    nil 与空串给 null);
  * 2. **失败时的原因码**:`RbtParseError.code` 与出错片段对得上.
  *
- * 给人看的中文句子是显示层的事(ui/rbt_format.ts),这里一个文案断言都没有 --
+ * 给人看的中文句子是显示层的事(ui/rbt/rbt_format.ts),这里一个文案断言都没有 --
  * 两件事分开测,以后改一句错误提示就不必动核心层的测试.
  *
- * 挂载后的行为在 rbt.test.ts;四条性质检查在 core/rbt_tree.test.ts.
+ * 挂载后的行为在 ui/rbt/rbt.test.ts;四条性质检查在 datastruct/rbt/rbt_tree.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 
-import { RbtParseError, buildTreeFromExpression } from '@/rbt/core/rbt_parse';
-import type { RbtNode } from '@/rbt/core/rbt_tree';
+import { RbtParseError, buildTreeFromExpression } from '@/datastruct/rbt/rbt_parse';
+import type { RbtNode } from '@/datastruct/rbt/rbt_tree';
 
 /** 解析失败时取错误(没抛就说明契约变了,直接抛错而不是让断言读 null) */
 function parseError(expression: string): RbtParseError {

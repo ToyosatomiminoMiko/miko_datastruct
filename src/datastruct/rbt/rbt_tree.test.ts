@@ -1,18 +1,18 @@
 /**
- * 红黑树**数据结构与四条性质**(core/rbt_tree.ts)的契约:纯函数,默认 node 环境.
+ * 红黑树**数据结构与四条性质**(datastruct/rbt/rbt_tree.ts)的契约:纯函数,默认 node 环境.
  *
  * 每条性质单独喂一棵"专门坏在这一条上"的树:拿表达式当输入(与用户实际敲的是同一条
  * 路径),用 findPropertyResult 只断言那一条,免得"根是红的"顺带把红红相接也弄红了,
  * 断言写成 `failedCount === 1` 就很难维护.
  *
  * 这一层断言的是**结构化结论**(违规节点 / 两侧黑高),不是文案:核心层不知道
- * `10R` 会显示成"根节点 10R 是红色",那是 ui/rbt_format.ts 的事(见 rbt_format.test.ts).
+ * `10R` 会显示成"根节点 10R 是红色",那是 ui/rbt/rbt_format.ts 的事(见 rbt_format.test.ts).
  *
- * 解析本身在 core/rbt_parse.test.ts;挂载与背景树在 rbt.test.ts.
+ * 解析本身在 datastruct/rbt/rbt_parse.test.ts;挂载与背景树在 ui/rbt/rbt.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 
-import { buildTreeFromExpression } from '@/rbt/core/rbt_parse';
+import { buildTreeFromExpression } from '@/datastruct/rbt/rbt_parse';
 import {
     RBT_COMPARISON_TOLERANCE,
     RBT_PROPERTY_IDS,
@@ -20,8 +20,17 @@ import {
     findPropertyResult,
     type RbtPropertyId,
     type RbtPropertyViolation,
-} from '@/rbt/core/rbt_tree';
-import { RBT_TREE_EXAMPLE } from '@/rbt/config';
+} from '@/datastruct/rbt/rbt_tree';
+
+/**
+ * 一棵深度 4 的满二叉树(31 个节点),四条性质都合法.
+ *
+ * 为什么不直接用显示层的示例(`ui/rbt/config.ts` 的 RBT_TREE_EXAMPLE):依赖方向只有
+ * 显示 -> 核心一个,核心层的测试反过去 import 显示层会把这条线倒过来.示例本身是否
+ * 合法由显示层在挂载后断言(见 `ui/rbt/rbt.test.ts`),这里要的只是"一棵合法的满树".
+ */
+const VALID_FULL_TREE =
+    '18B(9R(4B(2R(1B,3B),6R(5B,7B)),13B(11R(10B,12B),15R(14B,16B))),27R(22B(20R(19B,21B),24R(23B,25B)),31B(29R(28B,30B),33R(32B,34B))))';
 
 /** 各条性质的稳定 id(与 RBT_PROPERTY_IDS 一一对应) */
 const PROPERTY_IDS = {
@@ -58,16 +67,14 @@ describe('红黑树:性质清单', () => {
             expect(RBT_PROPERTY_IDS, id).toContain(id);
         }
         // "nil 叶子黑" / "非红即黑" / "两孩子或都是 nil" 三条结构上不可能违反,
-        // 不列进清单(理由见 core/rbt_tree.ts 的 RBT_PROPERTY_IDS);这里钉住"没混进来"
+        // 不列进清单(理由见 datastruct/rbt/rbt_tree.ts 的 RBT_PROPERTY_IDS);这里钉住"没混进来"
         expect(RBT_PROPERTY_IDS as readonly string[]).not.toContain('nil-leaf-black');
     });
 });
 
 describe('红黑树:性质检查', () => {
-    it('合法红黑树(站点默认示例)四条全过', () => {
-        // 用的就是挂载时灌进输入框的那一份(config 的 RBT_TREE_EXAMPLE),
-        // 不在测试里手抄一遍字符串:常量改了这里跟着变.
-        const report = check(RBT_TREE_EXAMPLE);
+    it('合法红黑树(深度 4 满树)四条全过', () => {
+        const report = check(VALID_FULL_TREE);
         expect(report.results.map((result) => result.pass)).toEqual([true, true, true, true]);
         expect(report.failedCount).toBe(0);
         expect(report.total).toBe(RBT_PROPERTY_IDS.length);

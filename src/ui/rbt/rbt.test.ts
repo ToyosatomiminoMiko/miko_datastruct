@@ -1,5 +1,5 @@
 /**
- * 红黑树**行为层**(rbt/rbt.ts 的 mountRBT)的契约(进程内,跑在 happy-dom 里).
+ * 红黑树**行为层**(ui/rbt/rbt.ts 的 mountRBT)的契约(进程内,跑在 happy-dom 里).
  *
  * 这里钉三条分工:
  *
@@ -27,6 +27,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
     RBT_DIAGNOSTICS_ROW_CLASS,
+    RBT_DIAGNOSTICS_STATE_CLASS,
     RBT_DIAGNOSTICS_SUMMARY_CLASS,
     RBT_DOM,
     RBT_EDGE_CLASS,
@@ -44,8 +45,8 @@ import {
     RBT_TOKEN_VALUE_CLASS,
     RBT_TREE_EXAMPLE,
     RBT_WORLD_CLASS,
-} from '@/rbt/config';
-import { mountRBT } from '@/rbt/rbt';
+} from '@/ui/rbt/config';
+import { mountRBT } from '@/ui/rbt/rbt';
 
 /** 按 id 取刚挂载出来的元素(取不到说明标记契约变了,直接抛错而不是让断言读 null) */
 function byId<T extends Element>(id: string): T {
@@ -115,9 +116,18 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_SUMMARY_CLASS}`)).toHaveLength(1);
         expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_ROW_CLASS}`))
             .toHaveLength(RBT_PROPERTIES.length);
+        /*
+          站点默认示例是一棵合法红黑树:四条全 PASS.
+
+          核心层测试不 import 显示层的示例(依赖方向只有显示 -> 核心),所以"示例本身合法"
+          这一条在挂载之后从 DOM 上钉:状态文字全部落在 is-pass 上,一条 is-fail 都没有.
+        */
+        expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_STATE_CLASS}.is-fail`)).toHaveLength(0);
+        expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_STATE_CLASS}.is-pass`))
+            .toHaveLength(RBT_PROPERTIES.length);
 
         // 深度 4 的满树 31 个节点 => 31 个节点组,且每个都是一颗圆 + 一个节点值.
-        // 每颗圆都带 .rbt-node__shape(半径 / 颜色由 CSS 给它,见 src/rbt/rbt.css).
+        // 每颗圆都带 .rbt-node__shape(半径 / 颜色由 CSS 给它,见 src/ui/rbt/rbt.css).
         const nodes = treeNodes(tree);
         expect(nodes).toHaveLength(31);
         expect(tree.querySelectorAll(`.${RBT_NODE_SHAPE_CLASS}`)).toHaveLength(31);
@@ -171,10 +181,10 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(world?.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
         expect(world?.querySelectorAll(`.${RBT_EDGE_CLASS}`)).toHaveLength(31 - 1);
         /*
-          世界层的 transform 由视口句柄写(见 ui/rbt_viewport.ts).
+          世界层的 transform 由视口句柄写(见 ui/rbt/rbt_viewport.ts).
 
           happy-dom 不做排版:`world.getBBox()` 恒为空矩形,drawTree 交回 null,rbt.ts
-          因此不报包围盒(见 ui/rbt_render.test.ts);就算报了,host.clientWidth 也是 0.
+          因此不报包围盒(见 ui/rbt/rbt_render.test.ts);就算报了,host.clientWidth 也是 0.
           两层兜底叠在一起,世界层停在视口挂载时写的恒等视角上 -- 这一层钉的是"属性
           一定被写过、格式就是 translate + scale",真机上的适应比例不在这一层验.
         */

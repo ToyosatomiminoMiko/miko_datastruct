@@ -1,14 +1,14 @@
 /*
 红黑树**表达式写法**的解析:一段字符串 -> `RbtNode | null`.
 
-这是"输入格式"的逻辑,不是树的逻辑 -- 树本身的形状与性质检查在 core/rbt_tree.ts.
+这是"输入格式"的逻辑,不是树的逻辑 -- 树本身的形状与性质检查在 datastruct/rbt/rbt_tree.ts.
 单独一份的原因:
 
 - 纯函数(字符串进,节点出),能在进程内直接单测;
-- 用户在编辑器里敲的是它认的语法,词法高亮(ui/rbt_highlight.ts)按**同一批**语法
+- 用户在编辑器里敲的是它认的语法,词法高亮(ui/rbt/rbt_highlight.ts)按**同一批**语法
   字符分词 -- 语法只有这一处定义,高亮不另写一套;
 - 解析失败只交回**结构化原因**(错误码 + 出错片段),中文文案由显示层的
-  src/rbt/ui/rbt_format.ts 拼:这里一个给人看的句子都不写,换文案不必碰解析器.
+  src/ui/rbt/rbt_format.ts 拼:这里一个给人看的句子都不写,换文案不必碰解析器.
 
 语法口径(与提示区的说明一致):
 
@@ -79,7 +79,7 @@ export type RbtParseErrorCode =
  * 解析失败(带错误码与出错片段).
  *
  * 继承 Error 而不是抛一个普通对象:调用方要 `instanceof` 区分"用户输入错了"与
- * "程序真出了别的错"(见 ui/rbt_format.ts 的 formatParseError),而且 Error 自带
+ * "程序真出了别的错"(见 ui/rbt/rbt_format.ts 的 formatParseError),而且 Error 自带
  * 栈信息.`message` 只给调试 / 测试看,**不是**界面上显示的那句话:界面上那句话
  * 由显示层拼,所以这里可以保持与文案无关的写法(错误码 + 片段).
  */
@@ -189,7 +189,7 @@ function parseNode(str: string): RbtNode | null {
  * 把表达式解析成一棵树;空表达式给 `null`(空树).
  *
  * 失败一律抛 `RbtParseError`(带错误码与出错片段):调用方(挂载函数)把它交给
- * ui/rbt_format.ts 的 `formatParseError` 变成输出区里的一行错误 -- 画布只画树,
+ * ui/rbt/rbt_format.ts 的 `formatParseError` 变成输出区里的一行错误 -- 画布只画树,
  * 不写任何文案.
  *
  * 不在这里包一层 `console.error`:解析失败是**预期内的用户输入错误**,不是异常

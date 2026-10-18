@@ -4,11 +4,11 @@
 
 本文件只剩"挂载与串联",三层分工各不相同:
 
-- **核心**(src/rbt/core/):数据结构的形状 / 四条性质检查 / 表达式解析.纯逻辑,
+- **核心**(src/datastruct/rbt/):数据结构的形状 / 四条性质检查 / 表达式解析.纯逻辑,
   不碰 DOM,不引用任何显示常量,也不写一句给人看的文案;
-- **显示**(src/rbt/ui/ 与 src/rbt/config.ts):布局(ui/rbt_layout.ts)、SVG 落笔
-  (ui/rbt_render.ts)、中文文案(ui/rbt_format.ts)、桌面视图(ui/rbt_views.ts)、
-  平面视口(ui/rbt_viewport.ts);
+- **显示**(src/ui/rbt/ 与 src/ui/rbt/config.ts):布局(ui/rbt/rbt_layout.ts)、SVG 落笔
+  (ui/rbt/rbt_render.ts)、中文文案(ui/rbt/rbt_format.ts)、桌面视图(ui/rbt/rbt_views.ts)、
+  平面视口(ui/rbt/rbt_viewport.ts);
 - **挂载**(本文件):用库的 `mountDesktop` 立起桌面(背景 = 那棵树,两扇窗口 =
   表达式与性质检查),把"格式检查 -> 性质检查 -> 重绘"接到编辑器 textarea 的
   input 事件上.
@@ -18,8 +18,8 @@
 
 **树画在"平面"里,平面由一块可拖动缩放的视口看着**(2026-10 起):布局算出来的
 x / y 是**平面坐标**(单位 = 屏幕像素 @ 缩放 1),平面本身无限大 -- 布局只保证同层节点
-彼此不撞(见 ui/rbt_layout.ts),不预设画布多大.树上的东西全部落进世界层
-`<g class="rbt-world">`,视口只改这一层的 `transform`(见 ui/rbt_viewport.ts);
+彼此不撞(见 ui/rbt/rbt_layout.ts),不预设画布多大.树上的东西全部落进世界层
+`<g class="rbt-world">`,视口只改这一层的 `transform`(见 ui/rbt/rbt_viewport.ts);
 画完一次把内容的**包围盒**交给视口,由它决定"装进视口并居中"(用户没手动挪过视角
 时).
 
@@ -42,7 +42,7 @@ x / y 是**平面坐标**(单位 = 屏幕像素 @ 缩放 1),平面本身无限�
 样式:`tokens.css`(设计令牌)与 `rbt.css`(编辑器 / 输出区 / 背景那棵树 / 桌面根)在
 本模块引入(与 SETTING 页 / 地铁车窗同一条做法).
 */
-import '@/rbt/rbt.css';
+import '@/ui/rbt/rbt.css';
 
 import {
     RBT_DESKTOP_INSET,
@@ -60,20 +60,20 @@ import {
     RBT_PROPERTY_STATE_PASS,
     RBT_TREE_EXAMPLE,
 } from './config';
-import { buildTreeFromExpression } from './core/rbt_parse';
+import { buildTreeFromExpression } from '@/datastruct/rbt/rbt_parse';
 import {
     checkTreeProperties,
     findPropertyResult,
     type RbtPropertyReport,
-} from './core/rbt_tree';
-import { formatParseError, formatPropertyDetail, formatPropertySummary } from './ui/rbt_format';
-import { layoutTree } from './ui/rbt_layout';
-import { clearTree, drawTree } from './ui/rbt_render';
-import { createRbtViews } from './ui/rbt_views';
+} from '@/datastruct/rbt/rbt_tree';
+import { formatParseError, formatPropertyDetail, formatPropertySummary } from './rbt_format';
+import { layoutTree } from './rbt_layout';
+import { clearTree, drawTree } from './rbt_render';
+import { createRbtViews } from './rbt_views';
 import {
     mountPlaneViewport,
     type RbtViewportHandle,
-} from './ui/rbt_viewport';
+} from './rbt_viewport';
 import {
     DEFAULT_DESKTOP_CONFIG,
     create_element,
@@ -99,7 +99,7 @@ function textLine(className: string, text: string): HTMLElement {
  *
  * 条数与文案都由 config 的 RBT_PROPERTIES 决定(顺序又是核心层的 RBT_PROPERTY_IDS),
  * 逐条建完交给 renderOutput 整批换掉.性质名与出错说明都是显示层文本:核心层交回的
- * 是结构化结论(见 core/rbt_tree.ts),句子由 ui/rbt_format.ts 拼.
+ * 是结构化结论(见 datastruct/rbt/rbt_tree.ts),句子由 ui/rbt/rbt_format.ts 拼.
  */
 function propertyLines(report: RbtPropertyReport): HTMLElement[] {
     const rows = RBT_PROPERTIES.map((spec) => {
@@ -146,7 +146,7 @@ function propertyLines(report: RbtPropertyReport): HTMLElement[] {
 interface MountedRbt {
     readonly desktop: DesktopHandle;
     readonly editor: CodeEditorHandle;
-    /** 平面视口:拖动 / 滚轮监听与尺寸观察者都在它手里(见 ui/rbt_viewport.ts) */
+    /** 平面视口:拖动 / 滚轮监听与尺寸观察者都在它手里(见 ui/rbt/rbt_viewport.ts) */
     readonly viewport: RbtViewportHandle;
 }
 
@@ -155,10 +155,10 @@ const mounted = new WeakMap<HTMLElement, MountedRbt>();
 /**
  * 把红黑树桌面挂到宿主(页面那唯一一颗手写宿主 `#app`)上.
  *
- * 分两步(与 ui/rbt_views.ts 的分工一致):先建内容(平面视口 + 树 + 逐窗口正文),
+ * 分两步(与 ui/rbt/rbt_views.ts 的分工一致):先建内容(平面视口 + 树 + 逐窗口正文),
  * 再交给库的 `mountDesktop` 建三层容器与窗口外壳.所以这里只按引用操作元素,
- * 不查 DOM,也没有"找不到元素"的失败路径;落笔在 ui/rbt_render.ts,布局在
- * ui/rbt_layout.ts,平面视口在 ui/rbt_viewport.ts,核心逻辑在 src/rbt/core/.
+ * 不查 DOM,也没有"找不到元素"的失败路径;落笔在 ui/rbt/rbt_render.ts,布局在
+ * ui/rbt/rbt_layout.ts,平面视口在 ui/rbt/rbt_viewport.ts,核心逻辑在 src/datastruct/rbt/.
  */
 export function mountRBT(host: HTMLElement): void {
     // 重复挂载同一颗宿主:先拆掉上一份桌面、编辑器与视口(见 MountedRbt)
@@ -173,7 +173,7 @@ export function mountRBT(host: HTMLElement): void {
 
     const views = createRbtViews();
     /*
-      平面视口:绑在那颗背景节点上,改的是世界层的 transform(见 ui/rbt_viewport.ts).
+      平面视口:绑在那颗背景节点上,改的是世界层的 transform(见 ui/rbt/rbt_viewport.ts).
       `topInset` 传库的任务栏高度:适应视口时内容居中在这条带之下,树顶不会被任务栏
       压住(那个数只有库的桌面配置一个来源,这里不抄一遍 40).
     */
@@ -262,7 +262,7 @@ export function mountRBT(host: HTMLElement): void {
       走库的 `seedTextareaSource` 而不是直接赋值:它是"首屏种子"那条路(编辑器本来
       是空的,没有撤销历史要保,也不抢焦点),语义比 `input.value = ...` 清楚;
       赋值本身不会派发 input 事件,所以装饰层与输出区都得自己叫一次:
-      先 `editor.refresh()`(重算行号 + 重绘高亮,见 ui/rbt_views.ts 的 editor 说明),
+      先 `editor.refresh()`(重算行号 + 重绘高亮,见 ui/rbt/rbt_views.ts 的 editor 说明),
       再 renderTree().
     */
     seedTextareaSource(input, RBT_TREE_EXAMPLE);
