@@ -1,47 +1,28 @@
 /*
-红黑树工具的设计令牌.
-
-表达式编辑器 / 唯一输出区 / 桌面背景那块平面视口里那棵树的可调数值都集中在这里,`rbt.css`
-只引用 `var(--rbt-*)`,选择器里不写死色值与尺寸(换配色不用碰 TS).
-
-编辑器**外框自己**的观感(底色 / 描边 / 圆角 / 行号槽色)不在这里:那是库的
-miko_ui/styles/editor.css 与它读的库令牌,本项目一条都不覆盖(见 rbt.css 的说明).
-
-跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):
-  - `--rbt-node-radius` 只在 CSS 这一侧定义:TS 已经不关心半径(内容实际占多大由
-    渲染层落笔后向浏览器要 `getBBox()`,见 ui/rbt/rbt_render.ts).唯一要守住的是
-    `src/ui/rbt/config.ts` 的 `RBT_MIN_HORIZONTAL_GAP` 必须大于 2 × 这个半径,否则
-    同层相邻的两个圆会叠在一起.
-
-进入动画的时长**只有 CSS 一处**(`--rbt-node-enter-duration`):动画是纯 CSS 的(挂在
-圆与节点值上,见 rbt.css),TS 侧不参与,所以它不是跨语言契约 -- 从前这里写着"与
-config.ts 里那条同名常量是同一件事",那条常量早已不存在,别照旧描述去找它.
-
-搬迁的原委见 public/css/index.css 顶部那段说明.
-*/
+ * 红黑树工具的设计令牌:表达式编辑器 / 唯一输出区 / 平面视口里那棵树的可调数值都集中在这里,
+ * rbt.css 只引用 `var(--rbt-*)`,选择器里不写死色值与尺寸.编辑器外框自己(底色 / 描边 /
+ * 圆角 / 行号槽色)的观感归库的 miko_ui/styles/editor.css 与它读的库令牌,这里一条都不覆盖.
+ *
+ * 跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):`--rbt-node-radius` 只在 CSS
+ * 这一侧定义,TS 不读它(内容占多大由渲染层向浏览器要 `getBBox()`),唯一要守住的是
+ * src/ui/rbt/config.ts 的 `RBT_MIN_HORIZONTAL_GAP` 必须大于 2 × 这个半径,否则同层相邻的两个
+ * 圆会叠在一起.进入动画的时长也只有 CSS 一处(纯 CSS 动画,TS 侧不参与).
+ */
 :root {
-    /* ---------- 红黑树 ---------- */
-    /*
-     * 窗口正文根的内边距(px):两扇窗口(表达式 / 性质检查)各自正文那一圈的留白.
-     *
-     * 库把 `.window-body` 的内边距显式压成 0(窗口边框就是内容框,见 miko_ui 的
-     * styles/desktop.css),所以"留多少白"是应用的选择,写在这里一处.
-     */
+    /* 窗口正文根的内边距(px):两扇窗口(表达式 / 性质检查)各自正文那一圈的留白 */
     --rbt-window-padding: 12px;
     /*
      * 提示区与输出区之间的间距(px),以及编辑器的最小高度(px).
-     * 提示区排在性质检查窗口正文的最前(见 config 的 RBT_HINT_BOX_CLASS),这条间距
-     * 由它自己的 `margin-bottom` 给;编辑器外框的底色 / 描边 / 圆角归库(见文件头),
-     * 这里只给库不给的尺寸.
+     * 提示区排在性质检查窗口正文的最前,这条间距由它自己的 `margin-bottom` 给.
      */
     --rbt-hint-margin: 10px;
     --rbt-input-min-height: 100px;
     /*
-     * 表达式词法着色(高亮 HTML 由 src/ui/rbt/rbt_highlight.ts 产出,类名在 config.ts).
+     * 表达式词法着色(类名由 src/ui/rbt/rbt_highlight.ts 产出,契约在 config.ts).
      *
-     * 值沿用输入框时代的荧光绿;颜色标记 R / B 与树上红黑节点同色系(但**不共用**
-     * --rbt-node-*-fill:那是圆的填充,在深色编辑区上直接当文字色偏暗);
-     * nil 与解析不了的部分走中性提示色,括号与逗号弱化(结构符号不该抢值的注意力).
+     * 颜色标记 R / B 与树上红黑节点同色系,但**不共用**
+     * `--rbt-node-*-fill`:那是圆的填充,在深色编辑区上直接当文字色偏暗.nil 与解析不了的
+     * 部分走中性提示色,括号与逗号弱化(结构符号不该抢值的注意力).
      */
     --rbt-token-value-color: #00FF00FF;
     --rbt-token-red-color: #ff5555;
@@ -59,32 +40,18 @@ config.ts 里那条同名常量是同一件事",那条常量早已不存在,别�
     /* 解析错误提示(玫红,与性质 FAIL 同色:都是"这棵树不对") */
     --rbt-error-color: #e11d48;
 
-    /* ---------- 红黑树:树本身(SVG) ---------- */
-    /*
-     * 树从 canvas 换成 SVG 之后,这些值第一次真正落在 CSS 里:元素是自己的,
-     * fill / stroke / font 都吃令牌(canvas 的 ctx.fillStyle 读不到自定义属性,
-     * 从前这套配色只能写死在 src/ui/rbt/config.ts).
-     *
-     * 半径只写在 CSS 这一侧:TS 不读它(内容占多大由浏览器 getBBox 量,节点彼此
-     * 离多远由 config 的 RBT_MIN_HORIZONTAL_GAP 管).零成本的一致性检查只有一条:
-     * 直径 2 × 22px 要小于 RBT_MIN_HORIZONTAL_GAP(70),否则圆会叠.
-     */
+    /* 树本身(SVG);节点半径与 RBT_MIN_HORIZONTAL_GAP 的约束见文件头 */
     --rbt-node-radius: 22px;
-    /*
-     * 红节点 / 黑节点:各一条填充色.
-     *
-     * 只有填充,没有描边:描边那套(两条线宽 + 两条描边色)已经整个删掉 --
-     * 真需要描边时再加 `--rbt-node-stroke-width` 与 `stroke`,别提前留着.
-     */
+    /* 红节点 / 黑节点:各一条填充色,只有填充没有描边 */
     --rbt-node-red-fill: #ff0000;
     --rbt-node-black-fill: #000000;
     /* 节点值文字色:红黑同一个白(红底上黑字看不清,黑底上更是) */
     --rbt-node-text: #ffffff;
-    /* 节点值字号(圆半径 22px × 0.75 向下取整 = 16,与 canvas 时代的算式同源) */
+    /* 节点值字号:半径 22px × 0.75 向下取整 = 16 */
     --rbt-node-font-size: 16px;
     /* 父子连线:颜色(浅灰蓝)与线宽 */
     --rbt-edge-color: #94a3b8;
     --rbt-edge-width: 2;
-    /* 节点出现的时长(每次输入整批重建,所以每个节点都会重新播一次) */
+    /* 进入动画时长(每次输入整批重建,所以每个节点都会重新播一次) */
     --rbt-node-enter-duration: 220ms;
 }

@@ -1,17 +1,14 @@
 /**
  * 表达式分词(ui/rbt/rbt_highlight.ts)的契约:纯函数,不碰编辑器外壳.
  *
- * 高亮层是把 `highlight(source)` 的产物用 `innerHTML` 写进页面的(见 miko_ui 的
- * editor/EditorHighlight),所以这一层要钉三件事:
+ * round-trip 要用真 DOM 解析这段 HTML -- 自己写正则去标签等于把"浏览器怎么解析
+ * HTML"猜一遍,那就不是在测转义了.
  *
- * 1. **文本不变**:去掉标签后的文本必须逐字等于源码("源码行 == 视觉行"是行号与
- *    光标对齐的前提,高亮层多一个字少一个字都会整体错位,而且不报错);
- * 2. **必须转义**:源码是用户敲进来的,`<` / `&` 拼进 innerHTML 就是注入点;
- * 3. **类名对口**:值与 R / B / nil / 结构符号各自挂上 config 里的类名(样式在
- *    src/ui/rbt/rbt.css 按同一批类名命中,改名两边一起改).
+ * @vitest-environment happy-dom
  *
- * 文件头写 `@vitest-environment happy-dom`:round-trip 要用真 DOM 解析这段 HTML,
- * 自己写正则去标签等于把"浏览器怎么解析 HTML"猜一遍,那就不是在测转义了.
+ * 要钉三件事:去掉标签后文本逐字等于源码(否则行号 / 光标整体错位且不报错);源码里
+ * 的 HTML 必须转义(高亮层用 innerHTML 写入);值与 R / B / nil / 结构符号各挂
+ * config 里的类名(样式在 src/ui/rbt/rbt.css 按同一批类名命中,改名两边一起改).
  */
 import { describe, expect, it } from 'vitest';
 

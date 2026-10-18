@@ -1,25 +1,10 @@
 /**
- * 红黑树**行为层**(ui/rbt/rbt.ts 的 mountRBT)的契约(进程内,跑在 happy-dom 里).
+ * 红黑树行为层(ui/rbt/rbt.ts 的 mountRBT)的契约(进程内,跑在 happy-dom 里).
  *
- * 这里钉三条分工:
+ * 钉三条:SVG 里只有节点值(提示 / 错误 / 性质结论一律不进 SVG);#treeOutput 每轮只装一种
+ * 内容(一行提示 / 一行错误 / 性质清单);节点数 = 连线数 + 1,红黑修饰类按表达式挂上.
  *
- * 1. **树只画结构与节点值**:SVG 里的文字只应该出现节点值(每个节点一处),提示 /
- *    错误 / 性质结论一个都不许进 SVG -- 所以"空输入 / 空树 / 解析失败"三种情况下
- *    节点与连线都必须是 0,合法树那一次的节点数必须等于表达式里的节点数;
- * 2. **文案只有一个输出区**:#treeOutput 里每轮只装一种内容 -- 一行提示
- *    (.tree-hint),一行错误(.tree-error),或性质清单(抬头 + 四条 .tree-property),
- *    三者不会同时出现(整批替换);
- * 3. **结构能对上**:节点数 = 2n-1(每条连线都是一个非根节点),红黑修饰类真的按
- *    表达式里的颜色挂上,节点坐标来自布局(不是全挤在原点).
- *
- * 从前这一层打在 canvas 原型上,记录 `fillText` 的调用;换成 SVG 之后树就是文档里
- * 的元素,直接查 DOM 即可 -- 那一整套"造一块只记 fillText 的 2D 上下文"的桩因此
- * 整个删掉了.真像素 / 真实 CSS 级联(颜色真的落在 fill 上,令牌真的生效)仍然只在
- * 真机上验,不在这一层重复.
- *
- * 输入是 miko_ui 的 CodeEditor 之后多了一条契约:**载入示例要连装饰层一起刷新**。
- * 程序化写 `textarea.value` 不派发 input 事件,行号与高亮层不会自己更新,所以这一层
- * 断言"挂载之后高亮层里就是那段示例"(id 与类名对不上时它会一直停在初值,不报错).
+ * CodeEditor 的坑:程序化写 `textarea.value` 不派发 input 事件,行号与高亮层要显式刷新.
  *
  * @vitest-environment happy-dom
  */
@@ -70,10 +55,9 @@ function typeExpression(input: HTMLTextAreaElement, expression: string): void {
 }
 
 /**
- * 挂一次桌面(与真页面同形:一颗宿主 + `mountRBT`),交回输入框 / 输出区 / 那棵 SVG
- * (每轮输入前后都拿它读状态).树现在画在**桌面背景那块平面**里(视口 -> svg ->
- * 世界层),输出区在性质窗口的正文里,两者都不再属于同一颗框体 -- 取它们一律按 id,
- * 不按面板结构.
+ * 挂一次桌面(与真页面同形:一颗宿主 + `mountRBT`),交回输入框 / 输出区 / 那棵 SVG.
+ * 树画在桌面背景那块平面里(视口 -> svg -> 世界层),输出区在性质窗口的正文里,两者不在
+ * 同一颗框体里 -- 取它们一律按 id,不按面板结构.
  */
 function mountPanel(): { input: HTMLTextAreaElement; output: HTMLElement; tree: SVGSVGElement } {
     const host = document.createElement('div');
@@ -111,7 +95,6 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
 
         expect(input.value).toBe(RBT_TREE_EXAMPLE);
         expect(output.hidden).toBe(false);
-        // 一块输出区里只有清单:提示行 / 错误行都不在
         expect(output.querySelectorAll(`.${RBT_OUTPUT_HINT_CLASS}`)).toHaveLength(0);
         expect(output.querySelectorAll(`.${RBT_OUTPUT_ERROR_CLASS}`)).toHaveLength(0);
         expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_SUMMARY_CLASS}`)).toHaveLength(1);
@@ -120,19 +103,18 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         /*
           站点默认示例是一棵合法红黑树:四条全 PASS.
 
-          核心层测试不 import 显示层的示例(依赖方向只有显示 -> 核心),所以"示例本身合法"
-          这一条在挂载之后从 DOM 上钉:状态文字全部落在 is-pass 上,一条 is-fail 都没有.
+          "示例本身合法"只能在这里从 DOM 上钉:核心层测试不 import 显示层的示例(依赖方向
+          只有显示 -> 核心).
         */
         expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_STATE_CLASS}.is-fail`)).toHaveLength(0);
         expect(output.querySelectorAll(`.${RBT_DIAGNOSTICS_STATE_CLASS}.is-pass`))
             .toHaveLength(RBT_PROPERTIES.length);
 
-        // 深度 4 的满树 31 个节点 => 31 个节点组,且每个都是一颗圆 + 一个节点值.
-        // 每颗圆都带 .rbt-node__shape(半径 / 颜色由 CSS 给它,见 src/ui/rbt/rbt.css).
+        // 深度 4 的满树 31 个节点 => 31 个节点组,每个都是一颗圆 + 一个节点值;
+        // 每颗圆都带 .rbt-node__shape(半径 / 颜色由 CSS 给)
         const nodes = treeNodes(tree);
         expect(nodes).toHaveLength(31);
         expect(tree.querySelectorAll(`.${RBT_NODE_SHAPE_CLASS}`)).toHaveLength(31);
-        // 节点值全是纯数字(背景上除了节点值没有任何别的文字)
         expect(treeLabels(tree).every((label) => /^\d+$/.test(label))).toBe(true);
     });
 
@@ -149,7 +131,7 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(input.value).toBe(RBT_TREE_EXAMPLE);
         // 单行表达式:行号只有一行(直接赋值后没 refresh 的话这里还是初值)
         expect(host.querySelector('.code-editor-lines')?.textContent).toBe('1');
-        // 高亮层里就是那段示例,而且真的分了词(不是一段没着色的纯文本)
+        // 高亮层里就是那段示例,而且真的分了词
         const code = host.querySelector('.code-editor-highlight-code');
         expect(code?.textContent).toBe(RBT_TREE_EXAMPLE);
         expect(code?.querySelectorAll(`.${RBT_TOKEN_VALUE_CLASS}`).length).toBeGreaterThan(0);
@@ -160,7 +142,6 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
 
         const transforms = treeNodes(tree).map((node) => node.getAttribute('transform') ?? '');
         expect(transforms.every((transform) => /^translate\([\d.]+,[\d.]+\)$/.test(transform))).toBe(true);
-        // 31 个节点各有各的位置(同层也有水平展开)
         expect(new Set(transforms).size).toBe(31);
 
         // 连线两端读的就是父子节点的坐标,所以端点也不该是同一个点
@@ -182,12 +163,12 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(world?.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
         expect(world?.querySelectorAll(`.${RBT_EDGE_CLASS}`)).toHaveLength(31 - 1);
         /*
-          世界层的 transform 由视口句柄写(见 ui/rbt/rbt_viewport.ts).
+          世界层的 transform 由视口句柄写.
 
           happy-dom 不做排版:`world.getBBox()` 恒为空矩形,drawTree 交回 null,rbt.ts
-          因此不报包围盒(见 ui/rbt/rbt_render.test.ts);就算报了,host.clientWidth 也是 0.
-          两层兜底叠在一起,世界层停在视口挂载时写的恒等视角上 -- 这一层钉的是"属性
-          一定被写过、格式就是 translate + scale",真机上的适应比例不在这一层验.
+          因此不报包围盒;就算报了,host.clientWidth 也是 0. 两层兜底叠在一起,世界层停在
+          视口挂载时写的恒等视角上 -- 这里钉的是"属性一定被写过、格式就是 translate +
+          scale",真机上的适应比例不在这里验.
         */
         expect(world?.getAttribute('transform')).toBe('translate(0 0) scale(1)');
     });
@@ -277,18 +258,16 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(host.querySelectorAll(`#${RBT_DOM.treeId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`#${RBT_DOM.editorId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
-        // 回正按钮也只有一枚:动作由库按上一份桌面的 dockActions 建,随旧任务栏一起
-        // 离场;新桌面的 mountDesktop 再按同一份清单建一枚
+        // 回正按钮也只有一枚:动作由库按上一份桌面的 dockActions 建,随旧任务栏一起离场
         expect([...host.querySelectorAll('.dock button')]
             .filter((button) => button.textContent === RBT_FIT_BUTTON_TEXT)).toHaveLength(1);
     });
 });
 
 /**
- * 回正按钮是**唯一**的"回到看得见"入口(双击判定与计时已删,见 ui/rbt/rbt_viewport.ts):
- * 这里钉的是 rbt.ts 的接线 -- 按钮的 click 最终落到视口句柄的 `fitViewport()`.
- * 按钮本身在任务栏的动作区里(桌面级动作,2026-10 从性质检查窗口搬过去),所以这里按
- * 文案从 `.dock` 的按钮里取它,而不是按某扇窗口的正文结构.
+ * 回正按钮是唯一的"回到看得见"入口:这里钉的是 rbt.ts 的接线 -- 按钮的 click 最终落到
+ * 视口句柄的 `fitViewport()`.按钮本身在任务栏的动作区里(桌面级动作),所以这里按文案从
+ * `.dock` 的按钮里取它,而不是按某扇窗口的正文结构.
  *
  * happy-dom 不做布局:视口 `clientWidth` 为 0,`fitPlaneView` 因此给恒等视角;`getBBox()`
  * 默认是空矩形,渲染层量不到内容就不会向视口报包围盒.两条都不影响本用例 -- 把
@@ -318,8 +297,7 @@ describe('红黑树:回正按钮', () => {
             viewport.dispatchEvent(wheelEvent);
             expect(world.getAttribute('transform')).not.toBe(fitted);
 
-            // 回正按钮在任务栏的动作区里(桌面级动作,2026-10 从性质检查窗口搬过去):
-            // 任务栏里另一枚按钮是库的「全部还原」,所以按文案认它
+            // 回正按钮在任务栏的动作区里:任务栏另一枚按钮是库的「全部还原」,按文案认它
             const button = [...document.querySelectorAll<HTMLButtonElement>('.dock button')]
                 .find((candidate) => candidate.textContent === RBT_FIT_BUTTON_TEXT);
             if (!button) throw new Error('任务栏里找不到回正按钮');

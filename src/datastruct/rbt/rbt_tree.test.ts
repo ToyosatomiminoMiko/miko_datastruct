@@ -1,14 +1,9 @@
 /**
- * 红黑树**数据结构与四条性质**(datastruct/rbt/rbt_tree.ts)的契约:纯函数,默认 node 环境.
+ * 红黑树数据结构与四条性质(datastruct/rbt/rbt_tree.ts)的契约:纯函数,默认 node 环境.
  *
- * 每条性质单独喂一棵"专门坏在这一条上"的树:拿表达式当输入(与用户实际敲的是同一条
- * 路径),用 findPropertyResult 只断言那一条,免得"根是红的"顺带把红红相接也弄红了,
- * 断言写成 `failedCount === 1` 就很难维护.
- *
- * 这一层断言的是**结构化结论**(违规节点 / 两侧黑高),不是文案:核心层不知道
- * `10R` 会显示成"根节点 10R 是红色",那是 ui/rbt/rbt_format.ts 的事(见 rbt_format.test.ts).
- *
- * 解析本身在 datastruct/rbt/rbt_parse.test.ts;挂载与背景树在 ui/rbt/rbt.test.ts.
+ * 每条性质单独喂一棵"专门坏在这一条上"的树:输入走表达式(与用户实际敲的是同一条路径),
+ * 用 findPropertyResult 只断言那一条,免得"根是红的"顺带把红红相接也弄红、`failedCount`
+ * 断言难维护.断言的是结构化结论(违规节点 / 两侧黑高),不是文案.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -25,9 +20,8 @@ import {
 /**
  * 一棵深度 4 的满二叉树(31 个节点),四条性质都合法.
  *
- * 为什么不直接用显示层的示例(`ui/rbt/config.ts` 的 RBT_TREE_EXAMPLE):依赖方向只有
- * 显示 -> 核心一个,核心层的测试反过去 import 显示层会把这条线倒过来.示例本身是否
- * 合法由显示层在挂载后断言(见 `ui/rbt/rbt.test.ts`),这里要的只是"一棵合法的满树".
+ * 不用显示层的示例:依赖方向只有 显示 -> 核心,核心层测试反过来 import 显示层会把这条线
+ * 倒过来;示例本身是否合法由显示层在挂载后断言.
  */
 const VALID_FULL_TREE =
     '18B(9R(4B(2R(1B,3B),6R(5B,7B)),13B(11R(10B,12B),15R(14B,16B))),27R(22B(20R(19B,21B),24R(23B,25B)),31B(29R(28B,30B),33R(32B,34B))))';
@@ -66,8 +60,8 @@ describe('红黑树:性质清单', () => {
         for (const id of Object.values(PROPERTY_IDS)) {
             expect(RBT_PROPERTY_IDS, id).toContain(id);
         }
-        // "nil 叶子黑" / "非红即黑" / "两孩子或都是 nil" 三条结构上不可能违反,
-        // 不列进清单(理由见 datastruct/rbt/rbt_tree.ts 的 RBT_PROPERTY_IDS);这里钉住"没混进来"
+        // "nil 叶子黑" / "非红即黑" / "两孩子都是 nil" 三条结构上不可能违反,故不列进清单;
+        // 这里钉住"没混进来"
         expect(RBT_PROPERTY_IDS as readonly string[]).not.toContain('nil-leaf-black');
     });
 });
@@ -110,8 +104,7 @@ describe('红黑树:性质检查', () => {
 
     it('红节点接 nil 叶子只坏黑高,不坏第 2 条(nil 就是黑的)', () => {
         // 5R 是简写叶子,补成 5R(nil,nil):两个孩子都是黑叶子,第 2 条不适用;
-        // 但它右边那条路径(5R -> nil)比左边(10B -> 5R -> nil)少一个黑节点,
-        // 所以坏的是黑高那一条
+        // 但它右边那条路径(5R -> nil)比左边(10B -> 5R -> nil)少一个黑节点,所以坏的是黑高
         const report = check('10B(5R,20B)');
         expect(findPropertyResult(report, PROPERTY_IDS.redChild).pass).toBe(true);
         const height = findPropertyResult(report, PROPERTY_IDS.blackHeight);
@@ -143,9 +136,6 @@ describe('红黑树:性质检查', () => {
         // 20<30,5<20 各自都对,整条链却都跑到根的左边(链上每个都得大于 10)
         const report = check('10B(2B(1B,3B),30B(20B(5B,25B),40B))');
         expect(findPropertyResult(report, PROPERTY_IDS.bstOrder).pass).toBe(false);
-        // 顺带说明:报的是"扫描时最先撞上的违规处"(这里 5 与 30 都比根小,
-        // 先撞上哪个就报哪个),不一定是最初写错的那个节点 -- 位置只是
-        // "搜索能确认违规的地方",不是根因定位.
     });
 
     it('相等值(重复)不算有序:两侧共用同一个数会判 FAIL', () => {

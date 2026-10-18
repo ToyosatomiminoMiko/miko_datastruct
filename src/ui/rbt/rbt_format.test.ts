@@ -2,14 +2,9 @@
  * 显示层的**文案拼装**(ui/rbt/rbt_format.ts)的契约:纯字符串,默认 node 环境.
  *
  * 核心层只给结构化结果(错误码 / 违规节点 / 两侧黑高),这一层把它变成界面上那句话.
- * 所以这里断言的是**看得见的字**:
- *
- * - 解析失败:错误码 -> 固定句子的映射(每条错误码都要有句子,漏一条编译期就报);
- * - 性质违规:节点写成"值+颜色",黑高那条把两个数填进模板;
- * - 抬头:总条数 / FAIL 条数换成数字.
- *
- * 核心层的事实(哪棵树坏在哪条、违规节点是哪个)在 datastruct/rbt/rbt_tree.test.ts;
- * 解析器在 datastruct/rbt/rbt_parse.test.ts.两边的接口就是 RbtParseError 与 RbtPropertyReport.
+ * 两边接口就是 RbtParseError 与 RbtPropertyReport,所以这里断言的是**看得见的字**:
+ * 错误码 -> 固定句子(漏一条编译期就报)、节点写成"值+颜色"、黑高填两个数、抬头填
+ * 总条数 / FAIL 条数.
  */
 import { describe, expect, it } from 'vitest';
 

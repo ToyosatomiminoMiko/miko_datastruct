@@ -1,16 +1,8 @@
 /**
- * 红黑树**表达式解析**(datastruct/rbt/rbt_parse.ts)的契约:纯函数,默认 node 环境.
+ * 红黑树表达式解析(datastruct/rbt/rbt_parse.ts)的契约:纯函数,默认 node 环境.
  *
- * 这一层只钉两件事:
- *
- * 1. **成功时的树形**:节点值 / 颜色 / 左右子树对得上(简写补成 `(nil,nil)`,
- *    nil 与空串给 null);
- * 2. **失败时的原因码**:`RbtParseError.code` 与出错片段对得上.
- *
- * 给人看的中文句子是显示层的事(ui/rbt/rbt_format.ts),这里一个文案断言都没有 --
- * 两件事分开测,以后改一句错误提示就不必动核心层的测试.
- *
- * 挂载后的行为在 ui/rbt/rbt.test.ts;四条性质检查在 datastruct/rbt/rbt_tree.test.ts.
+ * 只钉两件事:成功时的树形,失败时的原因码与出错片段.给人看的中文句子是显示层的事,这里
+ * 一个文案断言都没有,两件事分开测.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -80,8 +72,7 @@ describe('红黑树:解析失败的原因码', () => {
     });
 
     it('括号配平之后还有内容 -> 抛 trailing,片段是多余的那一段,不静默丢弃', () => {
-        // 括号配平只说明"这一段对上了",不说明整串就是这一个表达式;
-        // 少这条检查的话下面三种写法都会被当成合法的 5B 树.
+        // 括号配平只说明"这一段对上了",整串是否只有这一个表达式还要另外查
         expect(parseError('5B(1B,2B)junk').fragment).toBe('junk');
         expect(parseError('5B(1B,2B))').fragment).toBe(')');
         expect(parseError('5B(1B,2B)(3B,4B)').fragment).toBe('(3B,4B)');

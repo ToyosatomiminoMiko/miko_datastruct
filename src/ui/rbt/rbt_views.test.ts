@@ -1,32 +1,9 @@
 /**
- * 红黑树**桌面视图**的标记契约(进程内,跑在 happy-dom 里).
+ * 红黑树桌面视图的标记契约:createRbtViews() 的标记(挂载前)与 mountRBT() 的桌面装配.
  *
- * 这一层分两段,因为"标记长什么样"与"桌面装配成什么样"是两件事:
- *
- * 1. **视图标记**(`createRbtViews()` 的返回值,此时还没挂进任何文档):性质检查窗口里
- *    的提示区三行 + 初始 hidden 的输出区 `#treeOutput`;表达式窗口里唯一一件编辑器宿主
- *    `#rbtEditor`;一块**空的**平面背景(视口 `#rbtViewport` → `<svg>` `#rbtTree` → 世界层
- *    `.rbt-world`).这些是"标记里本来有什么",必须在挂载前断言 -- 一挂载,rbt.ts 就会
- *    种入示例并画出 31 个节点.回正按钮**不在视图里**:它由库按 config 的
- *    `RBT_DOCK_ACTIONS` 装配(见下面的装配用例);
- * 2. **桌面装配**(`mountRBT()`,与 index.html 同形):桌面根里依次是 背景(视口)->
- *    窗口层 -> 吸附预览 -> 任务栏,`#rbtViewport` 是桌面根的直接子节点、**不在任何窗口
- *    里**(这就是"树是桌面背景"这句话的全部可断言内容),两扇窗口的正文根各挂库的
- *    `ui-scrollbar`,窗口标题与任务栏文案来自 config 的窗口清单;任务栏动作区里,回正
- *    视图(库按 `RBT_DOCK_ACTIONS` 建)排在库的「全部还原」左边.
- *
- * `src/ui/rbt/rbt.css` 按 `#rbtViewport` / `#rbtTree` / `#rbtEditorPanel` /
- * `#rbtOutputPanel` / `#rbtEditor` / `#treeOutput` 命中;平面几何(布局参数 / 视口参数)与
- * 窗口清单都来自 config.逐字文案(三行提示里的 U+00A0 与「黒」)一并钉住:顺手改掉就会
- * 变成静默的文案漂移.
- *
- * 表达式输入从裸 textarea 换成 miko_ui 的 CodeEditor(见 ui/rbt/rbt_views.ts)之后,这一层
- * 钉的是**装配契约**,不是库的内部结构:
- * - 我们那一格宿主 `#rbtEditor` 在正文里,库的外框 `.code-editor` 长在它里面;
- * - textarea 是库建的,但 spellcheck 与 placeholder 由我们给(库没有 placeholder 选项);
- * - 行号槽与高亮层都在,且高亮开关(`is-highlighted`)已经打开 -- 那个类同时控制
- *   "textarea 文字透明"与"高亮层显示",少一半的后果是编辑框一片空白;
- * - **分词不在这里测**:那是纯函数,见 rbt_highlight.test.ts.
+ * rbt.css 按 #rbtViewport / #rbtTree / #rbtEditor 等 id 命中,平面几何与窗口清单都来自
+ * config;逐字文案(三行提示里的 U+00A0 与「黒」)一并钉住,顺手改掉就是静默的文案漂移.
+ * 编辑器只钉装配契约,不钉库的内部结构(分词是纯函数,不在这里测).
  *
  * @vitest-environment happy-dom
  */
@@ -63,7 +40,7 @@ function buildViews(): {
     };
 }
 
-/** 按窗口 id 取那扇窗口的正文容器(取不到说明装配变了,直接抛错而不是让断言读 null) */
+/** 按窗口 id 取正文容器(取不到直接抛错,而不是让断言读 null) */
 function windowBody(host: HTMLElement, windowId: string): HTMLElement {
     const body = host.querySelector(`.window[data-window="${windowId}"] .window-body`);
     if (!body) throw new Error(`桌面里找不到窗口 ${windowId} 的正文`);
@@ -79,12 +56,11 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         const spans = [...(hintBox?.querySelectorAll('span') ?? [])];
         expect(spans.map((span) => span.textContent))
             .toEqual([RBT_HINT_SHORTHAND, RBT_HINT_COLOR_LEGEND, RBT_HINT_VIEWPORT]);
-        // &nbsp; 在不换行语义上有意义,不能退化成普通空格
+        // &nbsp; 的换行语义有意义,不能退化成普通空格
         expect(RBT_HINT_COLOR_LEGEND).toContain('\u00a0');
         expect(RBT_HINT_COLOR_LEGEND).toContain('黒');
-        // 三行各自以 <br> 结束
         expect(hintBox?.querySelectorAll('br')).toHaveLength(3);
-        // 表达式窗口一个字的说明都不留:那扇窗口只有编辑器一件
+        // 表达式窗口只有编辑器一件,一个字说明都不留
         expect(editorPanel.children).toHaveLength(1);
         expect(editorPanel.querySelector(`.${RBT_HINT_BOX_CLASS}`)).toBeNull();
     });
@@ -93,26 +69,25 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         const { views, editorPanel } = buildViews();
         const editorHost = editorPanel.querySelector(`#${RBT_DOM.editorId}`);
 
-        // 宿主是我们的那一格,而且是正文根唯一的孩子(提示区已经搬去另一扇窗口);
-        // 库的外框长在它里面(库的元素上一个 id 都没有)
+        // 宿主是我们的那一格,也是正文根唯一的孩子;库的外框长在它里面
         expect(editorHost).not.toBeNull();
         expect(editorHost).toBe(editorPanel.children[0]);
         expect(editorHost).toBe(views.editor.element.parentElement);
         expect(views.editor.element.className).toBe('code-editor');
 
-        // textarea 就是库交回的那一颗,而且只有这一颗(值的唯一真相源)
+        // 只有库交回的那一颗 textarea(值的唯一真相源)
         const textareas = editorHost?.querySelectorAll('.code-editor-textarea') ?? [];
         expect(textareas).toHaveLength(1);
         expect(textareas[0]).toBe(views.editor.textarea);
 
-        // 拼写检查按库的布尔选项写成属性;占位文案由我们补(库没有 placeholder 选项)
+        // 占位文案由我们补(库没有 placeholder 选项)
         expect(views.editor.textarea.getAttribute('spellcheck')).toBe('false');
         expect(views.editor.textarea.getAttribute('placeholder')).toBe(RBT_INPUT_PLACEHOLDER);
 
-        // 表达式是"代码",初始值由挂载函数种(标记里不带 value)
+        // 初始值由挂载函数种(标记里不带 value)
         expect(views.editor.textarea.value).toBe('');
 
-        // 行号与高亮层缺一不可:没有它们编辑器就退化成裸 textarea
+        // 行号与高亮层缺一不可,否则编辑器退化成裸 textarea
         expect(editorHost?.querySelector('.code-editor-lines')?.textContent).toBe('1');
         expect(editorHost?.querySelector('.code-editor-highlight-code')).toBe(views.editor.highlightCode);
         // 高亮开关:文字透明与着色层由同一个类控制,只开一半等于编辑框空白
@@ -122,11 +97,11 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
     it('唯一输出区初始隐藏且是空的(提示 / 错误 / 清单共用这一个元素)', () => {
         const { views, outputPanel } = buildViews();
 
-        // 正文根里是 说明(提示区)-> 结果(输出区) 两件;回正按钮在任务栏,不在这一栏
+        // 正文根里是 提示区 -> 输出区 两件(回正按钮在任务栏)
         expect(outputPanel.children).toHaveLength(2);
         expect(outputPanel.children[1]).toBe(views.output);
         expect(views.output.id).toBe(RBT_DOM.outputId);
-        // 容器只认 id(#treeOutput):自己不挂类名(类名契约只剩提示行 / 错误行 / 抬头的类)
+        // 容器只认 id(#treeOutput),自己不挂类名
         expect(views.output.className).toBe('');
         expect(views.output.hidden).toBe(true);
         expect(views.output.hasAttribute('hidden')).toBe(true);
@@ -138,7 +113,7 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
     it('背景是 视口 div > svg#rbtTree > 世界层 g,画布不再有 viewBox / 宽高属性', () => {
         const { views } = buildViews();
 
-        // 视口是库要的那颗背景节点(`.desktop-background` 给定位与底色,见 miko_ui)
+        // 视口是库要的背景节点(`.desktop-background` 给定位与底色)
         expect(views.viewport.tagName.toLowerCase()).toBe('div');
         expect(views.viewport.id).toBe(RBT_DOM.viewportId);
         expect(views.viewport.classList.contains('desktop-background')).toBe(true);
@@ -149,23 +124,21 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         expect(views.tree.tagName.toLowerCase()).toBe('svg');
         expect(views.tree.id).toBe(RBT_DOM.treeId);
         /*
-          平面化的核心断言:画布是 **1:1 的像素面**.
-
-          - 没有 `viewBox`:一个用户单位就是一个 CSS 像素,布局算出来的坐标不用换算,
-            "世界坐标 -> 屏幕像素"的缩放只由世界层的 transform 表达;
-          - 没有 `width` / `height` 属性:显示尺寸由 CSS 给 100%(铺满视口),SVG 自己
-            不缩放 -- 这两条一起没掉,才叫"不再是定尺画布".
+          画布是 1:1 的像素面:
+          - 没有 `viewBox`:一个用户单位 = 一个 CSS 像素,世界坐标 -> 屏幕像素的缩放
+            只由世界层 transform 表达;
+          - 没有 `width` / `height`:显示尺寸由 CSS 给 100%,SVG 自己不缩放.
         */
         expect(views.tree.getAttribute('viewBox')).toBeNull();
         expect(views.tree.getAttribute('width')).toBeNull();
         expect(views.tree.getAttribute('height')).toBeNull();
         expect(views.tree.getAttribute('preserveAspectRatio')).toBeNull();
 
-        // 世界层:SVG 里唯一一层,树的世界坐标只在这一层的 transform 里被换算
+        // 世界层是 SVG 里唯一一层,树的坐标只在这里被 transform 换算
         expect(views.tree.children).toHaveLength(1);
         expect(views.world.tagName.toLowerCase()).toBe('g');
         expect(views.world.classList.contains(RBT_WORLD_CLASS)).toBe(true);
-        // 空:每轮画什么由 rbt.ts 重建,这一层不认识树(视口句柄只改它的 transform)
+        // 空:每轮画什么由 rbt.ts 重建,这一层不认识树
         expect(views.world.children).toHaveLength(0);
     });
 
@@ -174,7 +147,7 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
 
         expect(views.content(RBT_WINDOW_EDITOR).body).toEqual([editorPanel]);
         expect(views.content(RBT_WINDOW_PROPERTIES).body).toEqual([outputPanel]);
-        // 库传进来的是不透明字符串:清单外的 id 不该让装配炸掉
+        // 库传进来的是不透明字符串,清单外的 id 不该让装配炸掉
         expect(views.content('nope')).toEqual({});
     });
 });
@@ -183,7 +156,7 @@ describe('红黑树:桌面装配(mountRBT)', () => {
     it('桌面根里依次是 背景视口 -> 窗口层 -> 吸附预览 -> 任务栏', () => {
         const { host } = renderHost(mountRBT);
 
-        // 三层容器用类名(库的桌面层没有 id 选择器,也不要求消费者写宿主)
+        // 三层容器用类名(库的桌面层没有 id 选择器)
         expect([...host.children].map((child) => child.id || child.className))
             .toEqual([RBT_DOM.viewportId, 'window-layer', 'snap-preview', 'dock']);
     });
@@ -196,7 +169,7 @@ describe('红黑树:桌面装配(mountRBT)', () => {
         expect(viewport).not.toBeNull();
         expect(viewport?.parentElement).toBe(host);
         expect(tree?.parentElement).toBe(viewport);
-        // 窗口层压在它上面,而它不该被任何窗口收进去(收进去就退回"面板里的一块画布")
+        // 窗口层压在它上面,而它不该被任何窗口收进去
         expect(viewport?.closest('.window')).toBeNull();
         expect(tree?.closest('.window')).toBeNull();
     });
@@ -210,7 +183,7 @@ describe('红黑树:桌面装配(mountRBT)', () => {
         expect(windows.map((window) => window.querySelector('.window-title')?.textContent))
             .toEqual(RBT_DESKTOP_WINDOWS.map((spec) => spec.title));
 
-        // 任务栏每个窗口一枚按钮(文案与顺序都跟着窗口清单走)
+        // 任务栏每个窗口一枚按钮,文案与顺序跟着窗口清单走
         const buttons = [...host.querySelectorAll('.dock .dock-btn')];
         expect(buttons.map((button) => button.textContent))
             .toEqual(RBT_DESKTOP_WINDOWS.map((spec) => spec.dock.label));
@@ -223,14 +196,14 @@ describe('红黑树:桌面装配(mountRBT)', () => {
         const dock = host.querySelector('.dock');
         if (!dock) throw new Error('桌面里找不到任务栏');
 
-        // 清单是唯一真相源:动作区 = config 的动作(按清单顺序)+ 库的「全部还原」
+        // 动作区 = config 的动作(按清单顺序)+ 库的「全部还原」
         const actionButtons = [...dock.querySelectorAll<HTMLButtonElement>('.dock-action')];
         expect(actionButtons.map((button) => button.textContent))
             .toEqual([...RBT_DOCK_ACTIONS.map((action) => action.text), '全部还原']);
 
         const [fit] = actionButtons;
         if (!fit) throw new Error('任务栏动作区里找不到回正按钮');
-        // 按钮由库建:createButton 基线 + 桌面动作钩子 + `data-dock-action` = config 的 id
+        // 按钮由库建:`data-dock-action` 就是 config 的 id
         expect(fit.classList.contains('ui-button')).toBe(true);
         expect(fit.classList.contains('dock-action')).toBe(true);
         expect(fit.getAttribute('data-dock-action')).toBe(RBT_DOCK_ACTIONS[0].id);
@@ -248,7 +221,7 @@ describe('红黑树:桌面装配(mountRBT)', () => {
 
         expect(editorPanel?.parentElement).toBe(windowBody(host, RBT_WINDOW_EDITOR));
         expect(outputPanel?.parentElement).toBe(windowBody(host, RBT_WINDOW_PROPERTIES));
-        // 滚动条外观是库的一条独立规定(见 miko_ui 的 styles/scrollbar.css),要显式挂类
+        // 滚动条外观由库的 ui-scrollbar 类给,要显式挂
         expect(editorPanel?.classList.contains('ui-scrollbar')).toBe(true);
         expect(outputPanel?.classList.contains('ui-scrollbar')).toBe(true);
     });

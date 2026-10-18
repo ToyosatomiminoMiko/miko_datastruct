@@ -1,19 +1,9 @@
 /**
- * 显示层**平面布局**(ui/rbt/rbt_layout.ts)的契约:纯几何,默认 node 环境.
+ * 显示层平面布局(ui/rbt/rbt_layout.ts)的契约:纯几何,默认 node 环境.
  *
- * 这一层钉三件事:
- *
- * 1. **树形 -> 坐标**:每个节点都拿到坐标(根在顶、层距固定、左右子树分列两侧),
- *    连线两端就是父子两个节点,节点数 = 连线数 + 1;
- * 2. **不重叠**:同层任意两节点的中心距都不小于 RBT_MIN_HORIZONTAL_GAP(从前那版
- *    "区间递归"在不平衡的树上会算出 20px 的中心距、圆直接叠在一起,这条用例盯的就是
- *    那个回归);
- * 3. **父节点居中于孩子**:双孩子节点的 x 正好是左右孩子 x 的中点,单孩子节点与孩子
- *    同 x(父子连线是竖线).
- *
- * 内容包围盒**不在这一层**:布局不知道节点半径,实际占多大由渲染层落笔后向浏览器要
- * `getBBox()`(见 ui/rbt/rbt_render.test.ts).真机上的像素观感更不在这一层验;树在 DOM 里
- * 的形状在 rbt.test.ts.表达式解析在 datastruct/rbt/rbt_parse.test.ts.
+ * 钉三件事:每个节点都拿到坐标(根在顶、层距固定、左右子树分列两侧且父子连线两端就是父子
+ * 节点);同层任意两节点中心距不小于 RBT_MIN_HORIZONTAL_GAP;双孩子节点的 x 正好是左右
+ * 孩子中点.内容包围盒不在这里算(布局不知道节点半径).
  */
 import { describe, expect, it } from 'vitest';
 
@@ -53,11 +43,9 @@ describe('红黑树:平面布局', () => {
         expect(layout.edges).toHaveLength(2);
 
         const [root, left, right] = layout.nodes;
-        // 根在 y = 0,深一层加一个层距
         expect(root.y).toBe(0);
         expect(left.y).toBe(RBT_Y_STEP);
         expect(right.y).toBe(RBT_Y_STEP);
-        // 左子树在根左边,右子树在根右边
         expect(left.x).toBeLessThan(root.x);
         expect(right.x).toBeGreaterThan(root.x);
         // 父节点居中于两个孩子:根 x 正好是左右孩子的中点
@@ -118,8 +106,8 @@ describe('红黑树:平面布局', () => {
 
     it('不平衡的树:同层节点不重叠(中心距 >= 最小间距)', () => {
         /*
-          从前那版"区间递归分配 + 越界钳制"在这棵左重树上会把 1B / 2B 算到只差 20px
-          (圆半径 22,直接叠住),而钳制看的是"整棵树有没有跑出平面",兜不住局部塌缩.
+          左重树上最容易露出"区间递归分配 + 越界钳制"那类算法的毛病:局部塌缩成 20px
+          (圆半径 22,直接叠住),而钳制只看"整棵树有没有跑出平面",兜不住局部.
           轮廓合并法里 shift 是每层轮廓算出来的最小可行值,所以这条对任何形状都成立.
         */
         const layout = laidOut('10B(5R(3B(1B,2B),4B),15R)');
@@ -143,7 +131,6 @@ describe('红黑树:平面布局', () => {
                 const left = byNode.get(node.left)!;
                 const right = byNode.get(node.right)!;
                 expect(placed.x).toBeCloseTo((left.x + right.x) / 2, 9);
-                // 父节点在两个孩子中间(不是和其中一个重合)
                 expect(left.x).toBeLessThan(placed.x);
                 expect(placed.x).toBeLessThan(right.x);
             }
@@ -197,7 +184,6 @@ describe('红黑树:平面布局', () => {
 
         const layout = layoutTree(root);
 
-        // 节点本身上没有显示状态:坐标只在布局结果里
         expect('x' in root).toBe(false);
         expect('y' in root).toBe(false);
         expect(layout.nodes[0].node).toBe(root);

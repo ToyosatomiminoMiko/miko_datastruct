@@ -1,26 +1,12 @@
 /*
-表达式 -> 高亮 HTML(注入给 miko_ui 的 CodeEditor).
+表达式 -> 高亮 HTML(注入给 miko_ui 的 CodeEditor).库的高亮层只把 `highlight(source)`
+的产物显示在透明 textarea 背后,不认识任何词法,分词与配色都在这一侧.
 
-库的高亮层是**叠层**:真 textarea 负责光标 / 选区 / 撤销 / IME,它上面那一层只把
-`highlight(source)` 交回的 HTML 显示在透明文字背后(见 miko_ui 的
-editor/EditorHighlight 文件头).库因此不认识"红黑树表达式"这门语言,也不知道
-任何词法类名 -- 分词与配色都是消费者的事,这一个文件就是那份分词.
+词法口径与解析器(datastruct/rbt/rbt_parse.ts)一致:按 `(` / `)` / `,` 切成节点词,
+末位 R / B 是颜色标记,整段(不分大小写)是 `nil` 即空树.
 
-词法口径与解析器一致(见 src/datastruct/rbt/rbt_parse.ts):表达式被 `(` / `)` / `,` 切成
-一段段"节点词",每段去掉首尾空白后,末位字符若是 R / B 就是颜色标记,前面是节点值;
-整段(不分大小写)是 `nil` 就是空树写法.所以高亮不引入第二套语法:解析器认什么,
-这里就按什么着色 -- 语法字符本身也直接引解析器那一份,不在这里另抄一遍.
-
-三件必须守住的事:
-1. **不改动源码文本**:交回的 HTML 去掉标签必须逐字等于输入(行号 / 光标 / 选区
-   全按 textarea 的文本对齐,高亮层多一个字少一个字就会整体错位);
-2. **必须转义**:源码是用户敲进来的,`<` / `&` 直接拼进 innerHTML 会把编辑区变成
-   HTML 注入点(高亮层是 `innerHTML` 写进去的,见 EditorHighlight.update);
-3. **只着色不判错**:颜色标记写错(`5X`)归解析器报错,这里按"值"着色就好 --
-   两处各判一套错的话,高亮与输出区会互相打脸.
-
-返回的是 HTML 字符串而不是元素:库的口径就是"消费者给一个 source -> html 的纯函数",
-纯函数也才能在进程内直接单测(见 rbt_highlight.test.ts).
+必须守住:去掉标签后逐字等于源码(否则行号 / 光标错位);源码是用户输入,拼接前必须
+转义(高亮层用 innerHTML 写入);颜色标记写错归解析器,这里只按"值"着色.
 */
 
 import {
@@ -40,7 +26,7 @@ import {
     RBT_TOKEN_VALUE_CLASS,
 } from '@/ui/rbt/config';
 
-/** 切分节点词的三个字符(与解析器的切分口径一致,见文件头) */
+/** 切分节点词的三个字符(与解析器的切分口径一致) */
 const RBT_DELIMITERS: readonly string[] = [RBT_LEFT_PAREN, RBT_RIGHT_PAREN, RBT_COMMA];
 
 function isDelimiter(ch: string): boolean {
@@ -96,15 +82,14 @@ function highlightWord(word: string): string {
         return `${leading}${tokenSpan(RBT_TOKEN_VALUE_CLASS, body.slice(0, -1))}${tokenSpan(colorClass, lastChar)}${trailing}`;
     }
 
-    // 颜色标记没写对:整段按值着色,不在这里报错(理由见文件头第 3 条)
+    // 颜色标记没写对:整段按值着色,不在这里报错(理由见文件头)
     return `${leading}${tokenSpan(RBT_TOKEN_VALUE_CLASS, body)}${trailing}`;
 }
 
 /**
  * 把一段表达式变成高亮 HTML(注入给 `createCodeEditor` 的 `highlight`).
  *
- * 空串给空串:编辑器初值是空的时候高亮层就是空的(不塞一个空 span,行高由
- * textarea 与高亮层各自的 CSS 保证).
+ * 空串给空串:编辑器初值是空的时候高亮层就是空的,不塞一个空 span.
  */
 export function highlightRbtExpression(source: string): string {
     let html = '';
@@ -117,7 +102,6 @@ export function highlightRbtExpression(source: string): string {
             index += 1;
             continue;
         }
-        // 一段节点词 = 直到下一个分隔符为止(分隔符自己由上面那条分支吃掉)
         let end = index;
         while (end < source.length && !isDelimiter(source[end])) end += 1;
         html += highlightWord(source.slice(index, end));

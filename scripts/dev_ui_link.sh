@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# 本地联调 miko_ui 的壳. 真正的逻辑在 scripts/dev_ui_link.py(见那里的模块说明).
-#
-# 用法: bash scripts/dev_ui_link.sh [link|unlink|status]   (默认 link)
-# 完全等价于 python3 scripts/dev_ui_link.py ...
+# 本地联调 miko_ui 的壳: 真正的逻辑在 scripts/dev_ui_link.py.
+# 用法: bash scripts/dev_ui_link.sh [link|unlink|status] (默认 link), 等价于 python3 那条命令.
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

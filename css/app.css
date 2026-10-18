@@ -1,64 +1,46 @@
 /*
-应用层样式:页面基线 + 从主站继承下来的应用级令牌.
-
-为什么令牌在这里:`src/ui/rbt/*.css` 是从主站逐字搬来的,它引的 `--font-code` 原本定义在
-主站的 `public/css/tokens.css`(站点层,跨模块共用的排版口径).独立项目没有那一层,
-就在这里补一份等价定义,让 `rbt.css` / `tokens.css` 不必为这条改字.
-
-`--font-code` 引的是库的代码面令牌(`--code-font-family`),字体文件与 `@font-face` 随
-`miko_ui` 发布,本项目不自带字体.表达式编辑器那一格不用它:库的编辑器自己引
-`--code-font-family`(见 miko_ui 的 styles/editor.css),只有输出区与树上的节点值走
-`--font-code`.
-
-文档基线(盒模型 / body 底色与字体)也在这里:主站那份在 `public/css/index.css`,
-本项目只留红黑树用得到的那几条.
-*/
+ * 应用层样式:页面基线(盒模型 / body 底色与字体)+ 应用级令牌.
+ *
+ * `--font-code` 在这里给定义(输出区与树上的节点值引用它):它指向库的 `--code-font-family`,
+ * 字体文件与 `@font-face` 随 miko_ui 发布,本项目不自带字体.表达式编辑器那一格不用它 -- 库的
+ * 编辑器自己引 `--code-font-family`.
+ */
 :root {
     /*
-     * 页面是深色的:把这条**显式声明**出来(库的上游示例与主站的 base.css 都装着它).
-     *
-     * 两件事都靠这一条:
+     * 页面是深色的:把这条**显式声明**出来.
      *
      * 1. **原生件按深色画**:滚动条 / 光标 / 选区 / 表单控件由浏览器渲染,它只看
-     *    `color-scheme`.少了这条,深色面板上会冒出浅色滚动条(库的 `.ui-scrollbar`
-     *    只管它自己挂类的那几个容器);
-     * 2. **挡住"深色模式夺舍"**:用户若开了强制深色(Chrome 的自动深色 / 规范里说的
-     *    "dark room" 模式),按 CSS Color Adjust Level 1 §2.5,UA 会对**没有声明支持
-     *    深色**的页面做自动调整("auto-adjust other colors ... such as by inverting
-     *    their brightness");页面一旦用 `color-scheme`(或同名的 `<meta
-     *    name="color-scheme">`)声明了 dark,这一段自动调整就**不发生**.
+     *    `color-scheme`.少了这条,深色面板上会冒出浅色滚动条;
+     * 2. **挡住"深色模式夺舍"**:用户若开了强制深色,按 CSS Color Adjust Level 1 §2.5,
+     *    UA 会对**没有声明支持深色**的页面做自动调整(反色之类);页面一旦用 `color-scheme`
+     *    (或同名的 `<meta name="color-scheme">`)声明了 dark,这段自动调整就**不发生**.
      *
-     * 注意 `!important` 在这里**不管用**:自动反色与强制颜色改写都不是级联的胜负,
-     * 而是 UA 在渲染 / used value 阶段改颜色;唯一的口子是 `forced-color-adjust`
-     * (见 rbt.css 里那棵树那条).
-     *
-     * 写属性而不是写在 `<meta>` 里:与库的示例、主站的 base.css 同一条做法;两者
-     * 规范上都认(§2.1 说 meta 设的是"页面 color scheme",这里设的是根元素那条).
+     * 注意 `!important` 在这里**不管用**:自动反色与强制颜色改写都不是级联的胜负,而是 UA
+     * 在渲染 / used value 阶段改颜色;唯一的口子是 `forced-color-adjust`(见 rbt.css 里那棵树
+     * 那条).
      */
     color-scheme: dark;
 
-    /* 代码等宽字体栈:输出区与树上的节点值引它 */
+    /* 输出区与树上节点值引的等宽字体令牌 */
     --font-code: var(--code-font-family);
 
     /*
-     * 桌面底色 = 覆盖库的 `--color-bg-desktop`(库默认为 `--color-bg-app`),值取自
-     * 主站的 `--bg-page`(#212529),保持与主站一致的观感.
+     * 桌面底色 = 覆盖库的 `--color-bg-desktop`(库默认为 `--color-bg-app`).
      *
-     * 为什么是"覆盖库的 token"而不是"再造一个 --app-bg-page":桌面底色只能有一个
-     * 名字(库的 `--color-bg-desktop`,见 miko_ui 的 styles/tokens.css 与
-     * styles/desktop.css),否则树背景 / body / 将来的自绘背景各认一个,改配色就会
-     * 漏掉其中一处.应用要换色就覆盖它 -- 这正是 token 层开放覆盖的那条约定.
+     * 不另造一个 `--app-bg-page`:桌面底色只能有一个名字,否则树背景 / body / 将来自绘的
+     * 背景各认一个,改配色就会漏掉其中一处.应用要换色就覆盖它 -- 这正是 token 层开放覆盖
+     * 的那条约定.
      */
     --color-bg-desktop: #212529;
 
-    /* 正文色:与主站的 --text-page 同值,搬过来保持观感一致 */
+    /* 正文文字色 */
     --app-text-page: #dee2e6;
 }
 
 /*
- * 全站盒模型:与主站同一条基线.
+ * 全站盒模型:宽度口径统一按 border-box 算,加内边距 / 描边不会把盒子撑出容器.
  * 库的组件自己声明 box-sizing(见 `.code-editor` / `.code-editor-gutter`),这一条管的是
- * 应用层:盒子的宽度口径统一按 border-box 算,加内边距 / 描边不会把盒子撑出容器.
+ * 应用层.
  */
 * {
     box-sizing: border-box;
@@ -75,26 +57,22 @@ body {
     background: var(--color-bg-desktop);
     color: var(--app-text-page);
     /*
-     * 字体给到 body 是必要的:`rbt_views.ts` 建的提示区没有类名也没有字体规则,
-     * 全靠继承;不写这一条会掉进浏览器默认的衬线字体(与主站观感不一致).
-     * 库的 tokens.css 在 main.ts 里先于本文件引入,所以这个令牌一定解析得到.
+     * 字体给到 body 是必要的:`rbt_views.ts` 建的提示区没有类名也没有字体规则,全靠继承;
+     * 不写这一条会掉进浏览器默认的衬线字体.库的 tokens.css 在 main.ts 里先于本文件引入,
+     * 所以这个令牌一定解析得到.
      */
     font-family: var(--font-family-base);
     line-height: 1.5;
 }
 
 /*
- * 应用根 = **桌面**:铺满视口,树背景 / 窗口层 / 任务栏都长在它里面.
+ * 应用根 = **桌面**:铺满视口.窗口几何由库的 WindowManager 按 `clientWidth/clientHeight`
+ * 算成行内像素,宿主要有确定的尺寸 -- 居中留边只会让窗口算法按错误的桌面尺寸摆窗口.
  *
- * 从前的两条(定尺居中 `min(1100px, 92vw)` 与上下 padding)是"面板挂在页面上"的写法,
- * 桌面化之后不再适用:窗口几何由库的 WindowManager 按 `clientWidth/clientHeight` 算成
- * 行内像素,宿主要有确定的尺寸,居中留边只会让窗口算法按错误的桌面尺寸摆窗口.
- *
- * 这一层只剩**尺寸**:`position: relative`(背景 `#rbtTree` 与窗口层都是
- * `absolute; inset: 0`,少了定位参照就会以初始包含块(视口)为参照)与
- * `overflow: hidden`(桌面不滚动,滑条会改变几何读到的 `clientWidth/Height`)由库的
- * `.desktop-root` 给 -- 库在 `mountDesktop()` 里挂这个类,不再由每个应用各抄一遍
- * (见 miko_ui 的 styles/desktop.css 的"桌面骨架").
+ * 这一层只剩**尺寸**:`position: relative`(背景 `#rbtTree` 与窗口层都是 `absolute;
+ * inset: 0`,少了定位参照就会以视口为参照)与 `overflow: hidden`(桌面不滚动,滑条会改变
+ * 几何读到的 `clientWidth/Height`)由库的 `.desktop-root` 给(见 miko_ui 的
+ * styles/desktop.css 的"桌面骨架").
  */
 #app {
     width: 100vw;
