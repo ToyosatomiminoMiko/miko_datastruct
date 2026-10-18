@@ -131,6 +131,20 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 }
 
 /*
+ * 平面工具条:回正按钮那一行(提示区之下、输出区之上,见 ui/rbt/rbt_views.ts).
+ *
+ * 只规定"一行"这一件事(排布 / 与上下的间距);按钮自己的外观归库的 `.ui-button`
+ * 基线(miko_ui 的 styles/widgets.css),这里一条都不覆盖 -- 与"库组件的观感归库"
+ * 同一条口径.间距复用提示区那条令牌:两者同属"说明 / 操作"这一栏,分开写只会多出
+ * 一个需要同步的数.
+ */
+#rbtOutputPanel .rbt-plane-toolbar {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--rbt-hint-margin);
+}
+
+/*
  * 唯一输出区(输入框下面那块,由 rbt.ts 每轮整批重建 #treeOutput 的子节点).
  *
  * 提示 / 错误 / 性质检查清单都写进这一个元素:它们只是"这一轮要显示的内容",

@@ -23,7 +23,7 @@
  *
  * @vitest-environment happy-dom
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     RBT_DIAGNOSTICS_ROW_CLASS,
@@ -276,5 +276,48 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(host.querySelectorAll(`#${RBT_DOM.treeId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`#${RBT_DOM.editorId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
+    });
+});
+
+/**
+ * 回正按钮是**唯一**的"回到看得见"入口(双击判定与计时已删,见 ui/rbt/rbt_viewport.ts):
+ * 这里钉的是 rbt.ts 的接线 -- 按钮的 click 最终落到视口句柄的 `fitViewport()`.
+ *
+ * happy-dom 不做布局:视口 `clientWidth` 为 0,`fitPlaneView` 因此给恒等视角;`getBBox()`
+ * 默认是空矩形,渲染层量不到内容就不会向视口报包围盒.两条都不影响本用例 -- 把
+ * `getBBox` 桩成一块正尺寸,让"内容报上来"这条链路成立,然后看点按钮前后的 transform:
+ * 初始(自动适应)= 恒等,滚轮之后 = 缩放,点按钮之后 = 回到恒等.
+ */
+describe('红黑树:回正按钮', () => {
+    it('手动缩放后点「回正视图」:世界层回到适应视角(按钮 -> fitViewport 接线)', () => {
+        const bbox = vi.spyOn(SVGGraphicsElement.prototype, 'getBBox')
+            .mockReturnValue(new DOMRect(0, 0, 200, 100));
+        try {
+            const { tree } = mountPanel();
+            const world = tree.querySelector(`.${RBT_WORLD_CLASS}`);
+            if (!world) throw new Error('树里找不到世界层');
+            const fitted = world.getAttribute('transform');
+
+            // 滚轮缩放(真实的 wheel 事件链路):进入手动模式,视角离开适应位置
+            const viewport = byId<HTMLElement>(RBT_DOM.viewportId);
+            const wheelEvent = new WheelEvent('wheel', {
+                deltaY: -100,
+                deltaMode: 0,
+                bubbles: true,
+                cancelable: true,
+            });
+            Object.defineProperty(wheelEvent, 'clientX', { value: 100 });
+            Object.defineProperty(wheelEvent, 'clientY', { value: 100 });
+            viewport.dispatchEvent(wheelEvent);
+            expect(world.getAttribute('transform')).not.toBe(fitted);
+
+            const button = byId<HTMLElement>(RBT_DOM.outputPanelId).querySelector('button');
+            if (!button) throw new Error('性质检查窗口里找不到回正按钮');
+            button.click();
+
+            expect(world.getAttribute('transform')).toBe(fitted);
+        } finally {
+            bbox.mockRestore();
+        }
     });
 });

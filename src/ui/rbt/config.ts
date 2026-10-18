@@ -49,7 +49,8 @@ export const RBT_DOM = {
      * 层,svg 退回 1:1 的绘制面(理由见本文件"平面与视口"一节,以及 ui/rbt/rbt_views.ts).
      * 为什么不让 svg 自己当视口:库的口径是"背景节点挂 `.desktop-background`,绘制与
      * 尺寸归消费者",而一根 div 的裁切 / 光标 / `touch-action` 比 SVG 根更少歧义;将来
-     * 视口上要加的浮层(比例 / 复位按钮)也有现成的父亲.
+     * 视口上要加的浮层(比例尺 / 小地图)也有现成的父亲.回正按钮**不在**这层浮层上:
+     * 它挂在性质检查窗口里(见本文件的"平面工具条"一节).
      */
     viewportId: 'rbtViewport',
     /**
@@ -184,6 +185,28 @@ export const RBT_DESKTOP_WINDOWS = [
     },
 ] as const satisfies readonly WindowConfigEntry[];
 
+// ---------- 平面工具条(性质检查窗口里的回正按钮) ----------
+//
+// 回正是**显式按钮**,不是双击手势(2026-10 改):双击判定只看两次按下的时间间隔 --
+// 不看位置、中键也参与计时、拖动也会留下第一次按下 -- 误触发多,而且"回正"这种
+// 明确的动作没有理由藏在一个不可见的手势里.按钮放在性质检查窗口正文的提示区之下、
+// 输出区之上(见 ui/rbt/rbt_views.ts 的 outputPanel):那扇窗口本来就是"看结果 /
+// 调视角"的那一栏.
+
+/**
+ * 回正按钮的文案(可见文本).
+ *
+ * "回正"是应用层叫法,语义由 ui/rbt/rbt_viewport.ts 的 `fitViewport()` 定义:
+ * 按最近一次内容包围盒重新适应视口,并把自动适应接回来.
+ */
+export const RBT_FIT_BUTTON_TEXT = '回正视图';
+
+/** 回正按钮的 `title` / 悬停说明:按钮文案之外的第二层解释 */
+export const RBT_FIT_BUTTON_TITLE = '把整棵树装回视口并居中,之后重绘继续自动适应';
+
+/** 平面工具条那一行的类名(样式见 src/ui/rbt/rbt.css 的 `.rbt-plane-toolbar`) */
+export const RBT_PLANE_TOOLBAR_CLASS = 'rbt-plane-toolbar';
+
 // ---------- 提示区(性质检查窗口正文顶部那静态说明) ----------
 //
 // 提示区是**静态文案**:简写语法与配色图例说的是"这套表达式怎么读",与这一轮的输入
@@ -216,11 +239,11 @@ export const RBT_HINT_COLOR_LEGEND = 'R 红色 \u00a0|\u00a0 B 黒色';
 /**
  * 提示区第三行:背景平面的操作说明(可见文本).
  *
- * 为什么值得占一行:平面视口的三种操作(拖动 / 滚轮 / 双击)**在界面上没有任何控件**,
- * 不写出来就只能靠用户乱试;它跟上面两行同处一栏(说明在上、结果在下),读结论时
- * 顺手就能看到怎么看这棵树.
+ * 为什么值得占一行:平面视口的两条手势(拖动平移 / 滚轮缩放)**在界面上没有控件**,
+ * 不写出来就只能靠用户乱试;回正虽然是按钮,也在这里点一次名 -- 说明与按钮同在
+ * 性质检查窗口里,读结论时顺手就能看到怎么看这棵树.
  */
-export const RBT_HINT_VIEWPORT = '背景平面:拖动平移、滚轮缩放、双击适应视口';
+export const RBT_HINT_VIEWPORT = `背景平面:拖动平移、滚轮缩放;点「${RBT_FIT_BUTTON_TEXT}」把树装回视口`;
 
 /**
  * 表达式编辑器的占位文案(可见文本).
@@ -281,7 +304,7 @@ export const RBT_PLANE_FIT_PADDING = 48;
  * 试过删掉它、让适应也放大到填满(2026-10):满树在 2560 宽的桌面上会被放大到 2.25 倍,
  * 左右两端的节点正好钻进两侧窗口底下 -- 窗口是浮在背景上的,适应又不能把窗口算进去,
  * 所以"装得下"不等于"看得见".1:1 反而让整个树落在两扇窗口中间那条可见带上.小树想
- * 看大,滚轮 / 双击适应之外本来就有手动放大的路.
+ * 看大,滚轮 / 回正按钮之外本来就有手动放大的路.
  */
 export const RBT_FIT_MAX_ZOOM = 1;
 
@@ -307,14 +330,6 @@ export const RBT_WHEEL_ZOOM_SENSITIVITY = 0.0015;
  */
 export const RBT_WHEEL_LINE_PIXELS = 16;
 export const RBT_WHEEL_PAGE_PIXELS = 800;
-
-/**
- * 双击判定间隔(ms):两次按下挨得比它近 = 双击"适应视口".
- *
- * 判定发生在**起手之前**(与库的窗口标题栏双击同一条口径,见 miko_ui 的
- * shared/dragGesture.ts 的 `canStart`):是双击就不起手拖动,也不 preventDefault.
- */
-export const RBT_DOUBLE_PRESS_MS = 320;
 
 /**
  * 世界层的类名:树上所有连线 / 节点都挂在这一层 `<g>` 里,视口只改它的 transform.

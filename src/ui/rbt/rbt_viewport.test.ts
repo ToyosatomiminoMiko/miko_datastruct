@@ -1,5 +1,5 @@
 /**
- * 平面视口(ui/rbt/rbt_viewport.ts)的契约:**变换数学**与**三种手势**.
+ * 平面视口(ui/rbt/rbt_viewport.ts)的契约:**变换数学**与**两种手势 + 回正**.
  *
  * 这一层分两段,因为"算得对"与"接得上"是两件事:
  *
@@ -11,7 +11,8 @@
  *    - 行 / 页两种 deltaMode 折算成像素后与 Chrome 的像素模式同量级(不然 Firefox
  *      上滚轮等于失灵).
  * 2. **手势绑定**(happy-dom 里挂一颗真视口):左键拖动改世界层 transform、滚轮以
- *    指针为锚缩放、双击"适应"把自动模式接回来、dispose 之后手势全部失效.
+ *    指针为锚缩放、`fitViewport()` 回正把自动模式接回来、dispose 之后手势全部失效.
+ *    回正是**句柄方法**,不绑任何鼠标事件(双击判定已删,见用例"连续两次左键按下").
  *
  * `manual`(自动 / 手动适应)那台状态机单独测:它是"重绘要不要抢方向盘"的全部内容 --
  * 用户没动过时内容变了就重新适应,动过之后一个字都不动.
@@ -281,15 +282,12 @@ describe('平面视口:手势绑定', () => {
         expect(Math.abs(after.x + worldX * after.k - 500)).toBeLessThan(0.5);
     });
 
-    it('手动挪过之后重绘不再抢视角;双击"适应"把自动模式接回来', () => {
+    it('手动挪过之后重绘不再抢视角;fitViewport() 回正把自动模式接回来', () => {
         const { host, world, viewport } = mountViewport();
         viewport.contentChanged(box(0, 0, 400, 200));
         const fitted = readTransform(world);
 
-        /*
-          用滚轮进入手动模式,不用拖动:拖动会在 `lastPress` 上留下一次按下,于是紧接着
-          的"双击"里第一下就会被判成双击对 -- 测试要的是干净的两次按下.
-        */
+        // 用滚轮进入手动模式:滚轮缩放也是"用户挪过视角"的一种
         wheel(host, 500, 400, -100);
         const zoomed = readTransform(world);
         expect(zoomed.k).toBeGreaterThan(fitted.k);
@@ -298,11 +296,8 @@ describe('平面视口:手势绑定', () => {
         viewport.contentChanged(box(0, 0, 40, 40));
         expect(readTransform(world)).toEqual(zoomed);
 
-        // 双击(两次左键按下挨得够近):回到自动模式,并按最近那块内容适应
-        host.dispatchEvent(pointerEvent('pointerdown', 300, 300, 1));
-        host.dispatchEvent(pointerEvent('pointerup', 300, 300, 1));
-        host.dispatchEvent(pointerEvent('pointerdown', 300, 300, 2));
-        host.dispatchEvent(pointerEvent('pointerup', 300, 300, 2));
+        // 回正(句柄方法,按钮点击最终落到这里):回到自动模式,并按最近那块内容适应
+        viewport.fitViewport();
 
         const refitted = readTransform(world);
         expect(refitted.k).toBe(RBT_FIT_MAX_ZOOM);
@@ -312,6 +307,27 @@ describe('平面视口:手势绑定', () => {
         // 自动模式真的回来了:下一次重绘又会跟着内容走
         viewport.contentChanged(box(0, 0, 200, 200));
         expect(readTransform(world).x).toBeCloseTo((1000 - 200) / 2, 6);
+    });
+
+    it('连续两次左键按下不再被当成回正(双击判定与计时已删)', () => {
+        const { host, world, viewport } = mountViewport();
+        viewport.contentChanged(box(0, 0, 400, 200));
+        wheel(host, 500, 400, -100);
+        const zoomed = readTransform(world);
+
+        /*
+          两次完整的按下 / 松手,中间没有位移:它们只是两次单击(同步派发,间隔为 0,
+          按旧的计时口径正好落在双击窗口里).没有位移,所以既不平移也不回正;
+          `manual` 也不该被复位(下面那次重绘不动视角).
+        */
+        host.dispatchEvent(pointerEvent('pointerdown', 300, 300, 1));
+        host.dispatchEvent(pointerEvent('pointerup', 300, 300, 1));
+        host.dispatchEvent(pointerEvent('pointerdown', 300, 300, 2));
+        host.dispatchEvent(pointerEvent('pointerup', 300, 300, 2));
+
+        expect(readTransform(world)).toEqual(zoomed);
+        viewport.contentChanged(box(0, 0, 40, 40));
+        expect(readTransform(world)).toEqual(zoomed);
     });
 
     it('dispose 之后拖动 / 滚轮都不再改世界层(监听随信号摘掉)', () => {

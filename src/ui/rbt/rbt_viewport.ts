@@ -19,24 +19,24 @@ viewBox:viewBox 会连带把"用户单位"也缩放掉,于是 `stroke-width` / `
 **没有坐标系**:不画网格 / 轴 / 刻度,平面的底色就是桌面底色(见 rbt.css).图的语义
 是树的结构,给用户一个"我在平面的哪一格"没有意义,反而把背景弄花.
 
-## 交互(三种,都没有控件)
+## 交互(两种手势 + 一个按钮)
 
-| 手势 | 行为 | 为什么这么定 |
+| 操作 | 行为 | 为什么这么定 |
 | --- | --- | --- |
 | 左键 / 中键拖动 | 平移 | 桌面空白处本来没有别的左键动作,拖动是最直接的"推平面";中键是同一条约定的另一条路 |
 | 滚轮 | 以**指针为锚**缩放 | 锚点不动才叫"放大这里",否则内容会从视野里跑掉;指数缩放(乘性)才能让 0.1 与 2 两档手感一致 |
-| 左键双击 | 适应视口(复位并回到自动适应) | 缩放自由之后必然要有"回到看得见"的路;判定复用库的 `canStart` 路子(见下) |
+| 「回正视图」按钮 | 适应视口(复位并回到自动适应) | 缩放自由之后必然要有"回到看得见"的路;做成显式按钮,见下 |
 
 拖动**复用库的 `bindDragGesture`**(miko_ui 的 shared/dragGesture.ts,库内唯一一份拖动
 实现):指针捕获、拖动态光标、`is-dragging` 类、收尾复位都在它里面,本项目不再写第二
 份.它对光标的口径是"读 handle 自己的计算样式",所以抓 / 抓取中的两个光标写在 CSS
 (rbt.css 的 `#rbtViewport` 与 `.is-dragging`).
 
-双击**不在 `dblclick` 事件上判**:拖动实现会在 pointerdown 里 `preventDefault`,而
-preventDefault 掉的是那串兼容鼠标事件(dblclick 正在其中,能不能收到要看浏览器).
-判定放进 `canStart`:两次按下的间隔够近就是双击 -- 与库的窗口标题栏双击同一个位置、
-同一条口径(见 dragGesture.ts 的 `canStart` 文档):决定"这次不起手",于是既不拖动,
-也不 preventDefault.
+**回正不在本模块绑监听**:按钮由 ui/rbt/rbt_views.ts 建、ui/rbt/rbt.ts 接线,落到下面
+的 `fitViewport()`.为什么不做双击(2026-10 改):双击只能靠"两次按下的时间间隔"判定,
+既不看位置(平面铺满整块桌面,两次点可以离很远),又跟中键 / 拖动共用计时,误触发多;
+而"回正"是一个明确的动作,挂到一颗看得见、点得到的按钮上最直接.本模块因此没有任何
+计时器,也不需要判双击.
 
 ## 自动适应(manual 状态机)
 
@@ -45,16 +45,16 @@ preventDefault 掉的是那串兼容鼠标事件(dblclick 正在其中,能不能
 
 - `manual === false`(自动):`contentChanged()` 报来新包围盒就 `fit()`;
 - 一旦**真的动了**(拖动产生了位移 / 滚轮缩放),`manual` 置真,之后重绘不再动视角;
-- 双击"适应"把 `manual` 复位成假,下一轮重绘重新自动.
+- 调用 `fitViewport()`(回正按钮)把 `manual` 复位成假,下一轮重绘重新自动.
 
 只看"位移与缩放",不看"按下了" :按一下没拖(手滑的单击)不该退出自动模式,所以
 `manual` 在 `onDelta` / wheel 里置,不在 `canStart` / `onStart` 里置.
 
 ## 分工与不做的事
 
-本模块不认识树:它只认识"一块内容包围盒 + 一块视口矩形 + 三种手势".包围盒由
-ui/rbt/rbt_render.ts 落笔后向浏览器 `getBBox()` 量来(见 drawTree),`<g>` 由
-ui/rbt/rbt_views.ts 建,绑在谁身上、什么时候拆由 rbt.ts 的 mountRBT 管.
+本模块不认识树:它只认识"一块内容包围盒 + 一块视口矩形 + 两种手势(外加一个回正
+方法)".包围盒由 ui/rbt/rbt_render.ts 落笔后向浏览器 `getBBox()` 量来(见 drawTree),
+`<g>` 由 ui/rbt/rbt_views.ts 建,绑在谁身上、什么时候拆由 rbt.ts 的 mountRBT 管.
 
 不做(留作后续,真要时再加):触摸双指捏合(需要自己管多指针,库的拖动是单指针)、
 小地图 / 比例尺、缩放到某个节点、惯性滑动.
@@ -62,7 +62,6 @@ ui/rbt/rbt_views.ts 建,绑在谁身上、什么时候拆由 rbt.ts 的 mountRBT
 
 import { bindDragGesture } from 'miko_ui';
 import {
-    RBT_DOUBLE_PRESS_MS,
     RBT_FIT_MAX_ZOOM,
     RBT_MAX_ZOOM,
     RBT_MIN_ZOOM,
@@ -229,6 +228,14 @@ export interface RbtViewportHandle {
      * 用户的,重绘不该把它拉回来.
      */
     contentChanged(bounds: RbtPlaneBox): void;
+    /**
+     * 回正:按最近一次报来的内容包围盒重新适应视口,并把自动适应接回来.
+     *
+     * 与自动适应走同一个 `fit()`;唯一的区别是先把 `manual` 复位成假 -- 回正是用户
+     * 主动要的"重新跟着内容走",之后重绘 / 视口尺寸变化会继续自动适应.内容还没报过
+     * (如空输入 / 测试环境量不到包围盒)时什么都不做:没有盒可装,视角保持原样.
+     */
+    fitViewport(): void;
     /** 拆掉监听与观察者(同一颗宿主重复挂载时由 rbt.ts 调) */
     dispose(): void;
 }
@@ -247,12 +254,10 @@ export function mountPlaneViewport(
 ): RbtViewportHandle {
     // 初值恒等:首屏那块内容还没画,任何视角都一样;第一次 contentChanged 就会换成适应
     let view: RbtViewState = { k: 1, x: 0, y: 0 };
-    /** 最近一次报来的内容包围盒(双击"适应"要用它,所以留一份) */
+    /** 最近一次报来的内容包围盒(回正要用它,所以留一份) */
     let content: RbtPlaneBox | null = null;
     /** 用户是否手动挪过视角(见文件头的状态机) */
     let manual = false;
-    /** 上一次左键按下的时间戳,用来判双击 */
-    let lastPress = Number.NEGATIVE_INFINITY;
 
     // 解绑信号:拖动 / 滚轮监听都挂在它上面,dispose 一次全摘(库的 bindDragGesture
     // 也吃这个信号,而且会在 abort 时把正在进行的拖动收尾)
@@ -293,16 +298,7 @@ export function mountPlaneViewport(
     bindDragGesture(host, signal, {
         canStart(event) {
             // 左右键之外的按下(右键菜单等)不起手
-            if (event.button !== 0 && event.button !== 1) return false;
-            // 左键连按两下 = 双击"适应":不起手、不 preventDefault,并把自动模式接回来
-            if (event.button === 0 && event.timeStamp - lastPress <= RBT_DOUBLE_PRESS_MS) {
-                lastPress = Number.NEGATIVE_INFINITY;
-                manual = false;
-                fit();
-                return false;
-            }
-            lastPress = event.timeStamp;
-            return true;
+            return event.button === 0 || event.button === 1;
         },
         onStart: () => {
             // 拖动本身没有什么要起手的(光标由库按 CSS 换)
@@ -358,6 +354,11 @@ export function mountPlaneViewport(
         contentChanged(bounds: RbtPlaneBox): void {
             content = bounds;
             if (!manual) fit();
+        },
+        fitViewport(): void {
+            // 手动挪过的视角由这次点击主动交回给自动适应,所以先复位再按最近内容装
+            manual = false;
+            fit();
         },
         dispose(): void {
             observer?.disconnect();

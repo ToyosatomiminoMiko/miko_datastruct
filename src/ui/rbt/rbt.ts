@@ -79,6 +79,7 @@ import {
     create_element,
     mountDesktop,
     seedTextareaSource,
+    type ButtonHandle,
     type CodeEditorHandle,
     type DesktopHandle,
 } from 'miko_ui';
@@ -137,7 +138,7 @@ function propertyLines(report: RbtPropertyReport): HTMLElement[] {
  * `ResizeObserver`(行号与高亮各一个),`dispose()` 才会拆掉;桌面那边的窗口外壳
  * 与三层容器(`.window-layer` / `.snap-preview` / `.dock`)也归 `DesktopHandle`.
  * 标记可以靠 `replaceChildren` 整块换掉,但**观察者与 window 上的监听不会随节点
- * 离场自动消失** -- 同一颗宿主重复挂载时要先把上一份桌面、编辑器与视口拆掉,否则每挂
+ * 离场自动消失** -- 同一颗宿主重复挂载时要先把上一份桌面、编辑器、视口与按钮拆掉,否则每挂
  * 一次就多留一套窗口、一个观察者与一条 resize 通道(旧节点已不在文档里,泄漏的是
  * 内存与回调,不报错也看不出来).
  *
@@ -148,6 +149,8 @@ interface MountedRbt {
     readonly editor: CodeEditorHandle;
     /** 平面视口:拖动 / 滚轮监听与尺寸观察者都在它手里(见 ui/rbt/rbt_viewport.ts) */
     readonly viewport: RbtViewportHandle;
+    /** 回正按钮(库的 `ButtonHandle`):点击分发监听归它的 `dispose()` 拆 */
+    readonly fitButton: ButtonHandle;
 }
 
 const mounted = new WeakMap<HTMLElement, MountedRbt>();
@@ -161,11 +164,12 @@ const mounted = new WeakMap<HTMLElement, MountedRbt>();
  * ui/rbt/rbt_layout.ts,平面视口在 ui/rbt/rbt_viewport.ts,核心逻辑在 src/datastruct/rbt/.
  */
 export function mountRBT(host: HTMLElement): void {
-    // 重复挂载同一颗宿主:先拆掉上一份桌面、编辑器与视口(见 MountedRbt)
+    // 重复挂载同一颗宿主:先拆掉上一份桌面、编辑器、视口与按钮(见 MountedRbt)
     const previous = mounted.get(host);
     previous?.desktop.dispose();
     previous?.editor.dispose();
     previous?.viewport.dispose();
+    previous?.fitButton.dispose();
     mounted.delete(host);
 
     // 宿主由本模块独占:清空之后整体接管(桌面三层是 append 进来的,不清会叠两份)
@@ -180,6 +184,12 @@ export function mountRBT(host: HTMLElement): void {
     const viewport = mountPlaneViewport(views.viewport, views.world, {
         topInset: DEFAULT_DESKTOP_CONFIG.dockReserve,
     });
+    /*
+      回正按钮:控件归 ui/rbt/rbt_views.ts 建,点击行为在这里接到视口句柄 -- 这是本应用
+      唯一的"回到看得见"入口(以前是双击,已删;理由见 ui/rbt/rbt_viewport.ts 文件头).
+      按钮的拆卸随 `fitButton.dispose()` 走(见上面的重复挂载分支).
+    */
+    views.fitButton.onClick(() => viewport.fitViewport());
     /*
       立起桌面:库一律用默认值(窗口动作 / 边缘余量 / 标题栏高度 / z / 吸附),
       应用只覆盖两处 --
@@ -202,7 +212,7 @@ export function mountRBT(host: HTMLElement): void {
     const input = editor.textarea;
     const outputEl = views.output;
     const worldEl = views.world;
-    mounted.set(host, { desktop, editor, viewport });
+    mounted.set(host, { desktop, editor, viewport, fitButton: views.fitButton });
 
     /**
      * 输出区的写入口:整批替换 #treeOutput 的子节点,空数组就整块 hidden.
