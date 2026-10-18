@@ -131,20 +131,6 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
 }
 
 /*
- * 平面工具条:回正按钮那一行(提示区之下、输出区之上,见 ui/rbt/rbt_views.ts).
- *
- * 只规定"一行"这一件事(排布 / 与上下的间距);按钮自己的外观归库的 `.ui-button`
- * 基线(miko_ui 的 styles/widgets.css),这里一条都不覆盖 -- 与"库组件的观感归库"
- * 同一条口径.间距复用提示区那条令牌:两者同属"说明 / 操作"这一栏,分开写只会多出
- * 一个需要同步的数.
- */
-#rbtOutputPanel .rbt-plane-toolbar {
-    display: flex;
-    align-items: center;
-    margin-bottom: var(--rbt-hint-margin);
-}
-
-/*
  * 唯一输出区(输入框下面那块,由 rbt.ts 每轮整批重建 #treeOutput 的子节点).
  *
  * 提示 / 错误 / 性质检查清单都写进这一个元素:它们只是"这一轮要显示的内容",
@@ -156,6 +142,10 @@ font-family / font-size / fill 仍然显式写(见"树本身"那一块)-- SVG �
  * .tree-hint 中性说明,.tree-error 解析失败,清单抬头弱化,状态色挂 .tree-property-state.
  * 布局用 gap 而不是给每行 margin:行数是 config 里 RBT_PROPERTIES 的长度,加一条就多
  * 一行,行距只该写一处.
+ *
+ * 回正按钮**不在这里**:它挂在库的任务栏里(与「全部还原」并排,见 ui/rbt/rbt.ts 的
+ * 插入说明),外观吃库的 `.ui-button` 基线,本文件对它一条规则都没有 -- 与"库组件的
+ * 观感归库"同一条口径.
  *
  * [hidden] 必须显式再写一遍:容器是 display:flex,作者规则会盖过 UA 的
  * [hidden] { display: none },不补这句的话 rbt.ts 置的 hidden 收不起来.

@@ -4,14 +4,16 @@
  * 这一层分两段,因为"标记长什么样"与"桌面装配成什么样"是两件事:
  *
  * 1. **视图标记**(`createRbtViews()` 的返回值,此时还没挂进任何文档):性质检查窗口里
- *    的提示区三行 + 平面工具条(回正按钮)+ 初始 hidden 的输出区 `#treeOutput`、表达式
- *    窗口里唯一一件编辑器宿主 `#rbtEditor`、以及一块**空的**平面背景(视口
- *    `#rbtViewport` → `<svg>` `#rbtTree` → 世界层 `.rbt-world`).这些是"标记里本来
- *    有什么",必须在挂载前断言 -- 一挂载,rbt.ts 就会种入示例并画出 31 个节点;
+ *    的提示区三行 + 初始 hidden 的输出区 `#treeOutput`;表达式窗口里唯一一件编辑器宿主
+ *    `#rbtEditor`;一块**空的**平面背景(视口 `#rbtViewport` → `<svg>` `#rbtTree` → 世界层
+ *    `.rbt-world`).这些是"标记里本来有什么",必须在挂载前断言 -- 一挂载,rbt.ts 就会
+ *    种入示例并画出 31 个节点.回正按钮**不在视图里**:它由库按 config 的
+ *    `RBT_DOCK_ACTIONS` 装配(见下面的装配用例);
  * 2. **桌面装配**(`mountRBT()`,与 index.html 同形):桌面根里依次是 背景(视口)->
  *    窗口层 -> 吸附预览 -> 任务栏,`#rbtViewport` 是桌面根的直接子节点、**不在任何窗口
  *    里**(这就是"树是桌面背景"这句话的全部可断言内容),两扇窗口的正文根各挂库的
- *    `ui-scrollbar`,窗口标题与任务栏文案来自 config 的窗口清单.
+ *    `ui-scrollbar`,窗口标题与任务栏文案来自 config 的窗口清单;任务栏动作区里,回正
+ *    视图(库按 `RBT_DOCK_ACTIONS` 建)排在库的「全部还原」左边.
  *
  * `src/ui/rbt/rbt.css` 按 `#rbtViewport` / `#rbtTree` / `#rbtEditorPanel` /
  * `#rbtOutputPanel` / `#rbtEditor` / `#treeOutput` 命中;平面几何(布局参数 / 视口参数)与
@@ -32,15 +34,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
     RBT_DESKTOP_WINDOWS,
+    RBT_DOCK_ACTIONS,
     RBT_DOM,
-    RBT_FIT_BUTTON_TEXT,
-    RBT_FIT_BUTTON_TITLE,
     RBT_HINT_BOX_CLASS,
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
     RBT_HINT_VIEWPORT,
     RBT_INPUT_PLACEHOLDER,
-    RBT_PLANE_TOOLBAR_CLASS,
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
     RBT_WORLD_CLASS,
@@ -89,26 +89,6 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
         expect(editorPanel.querySelector(`.${RBT_HINT_BOX_CLASS}`)).toBeNull();
     });
 
-    it('平面工具条:提示区之下、输出区之上,里面是库的按钮(回正视图)', () => {
-        const { views, editorPanel, outputPanel } = buildViews();
-        const toolbar = outputPanel.children[1];
-
-        expect(toolbar?.classList.contains(RBT_PLANE_TOOLBAR_CLASS)).toBe(true);
-        // 只有一枚按钮:回正是这一栏唯一的操作控件
-        expect(toolbar?.children).toHaveLength(1);
-        expect(toolbar?.children[0]).toBe(views.fitButton.element);
-        expect(views.fitButton.element.tagName.toLowerCase()).toBe('button');
-        // 走库的 createButton:基线类与 `type="button"` 都该在(后者防止将来被塞进表单)
-        expect(views.fitButton.element.classList.contains('ui-button')).toBe(true);
-        expect(views.fitButton.element.getAttribute('type')).toBe('button');
-        expect(views.fitButton.element.textContent).toBe(RBT_FIT_BUTTON_TEXT);
-        expect(views.fitButton.element.title).toBe(RBT_FIT_BUTTON_TITLE);
-
-        // 它只出现在性质检查窗口里;表达式窗口仍然只有编辑器一件
-        expect(editorPanel.querySelector(`.${RBT_PLANE_TOOLBAR_CLASS}`)).toBeNull();
-        expect(editorPanel.querySelector('button')).toBeNull();
-    });
-
     it('表达式输入是库的 CodeEditor:宿主 #rbtEditor 里是外框 + textarea + 行号 + 高亮层', () => {
         const { views, editorPanel } = buildViews();
         const editorHost = editorPanel.querySelector(`#${RBT_DOM.editorId}`);
@@ -142,9 +122,9 @@ describe('红黑树:视图标记(createRbtViews,挂载之前)', () => {
     it('唯一输出区初始隐藏且是空的(提示 / 错误 / 清单共用这一个元素)', () => {
         const { views, outputPanel } = buildViews();
 
-        // 正文根里是 说明(提示区)-> 操作(平面工具条)-> 结果(输出区) 三件
-        expect(outputPanel.children).toHaveLength(3);
-        expect(outputPanel.children[2]).toBe(views.output);
+        // 正文根里是 说明(提示区)-> 结果(输出区) 两件;回正按钮在任务栏,不在这一栏
+        expect(outputPanel.children).toHaveLength(2);
+        expect(outputPanel.children[1]).toBe(views.output);
         expect(views.output.id).toBe(RBT_DOM.outputId);
         // 容器只认 id(#treeOutput):自己不挂类名(类名契约只剩提示行 / 错误行 / 抬头的类)
         expect(views.output.className).toBe('');
@@ -236,6 +216,28 @@ describe('红黑树:桌面装配(mountRBT)', () => {
             .toEqual(RBT_DESKTOP_WINDOWS.map((spec) => spec.dock.label));
         expect(buttons.map((button) => button.getAttribute('data-window')))
             .toEqual(RBT_DESKTOP_WINDOWS.map((spec) => spec.id));
+    });
+
+    it('回正动作由库按 RBT_DOCK_ACTIONS 装配:在任务栏动作区里、排在「全部还原」左边', () => {
+        const { host } = renderHost(mountRBT);
+        const dock = host.querySelector('.dock');
+        if (!dock) throw new Error('桌面里找不到任务栏');
+
+        // 清单是唯一真相源:动作区 = config 的动作(按清单顺序)+ 库的「全部还原」
+        const actionButtons = [...dock.querySelectorAll<HTMLButtonElement>('.dock-action')];
+        expect(actionButtons.map((button) => button.textContent))
+            .toEqual([...RBT_DOCK_ACTIONS.map((action) => action.text), '全部还原']);
+
+        const [fit] = actionButtons;
+        if (!fit) throw new Error('任务栏动作区里找不到回正按钮');
+        // 按钮由库建:createButton 基线 + 桌面动作钩子 + `data-dock-action` = config 的 id
+        expect(fit.classList.contains('ui-button')).toBe(true);
+        expect(fit.classList.contains('dock-action')).toBe(true);
+        expect(fit.getAttribute('data-dock-action')).toBe(RBT_DOCK_ACTIONS[0].id);
+        expect(fit.title).toBe(RBT_DOCK_ACTIONS[0].title);
+        // 桌面级动作:在任务栏里,不属于任何窗口(窗口最小化了它也还在)
+        expect(fit.closest('.window')).toBeNull();
+        expect(fit.closest('.dock')).toBe(dock);
     });
 
     it('两个正文根各归各的窗口,都是库的滚动容器(ui-scrollbar)', () => {

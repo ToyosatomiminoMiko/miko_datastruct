@@ -34,6 +34,7 @@ import {
     RBT_EMPTY_HINT_TEXT,
     RBT_EMPTY_TREE_HINT_TEXT,
     RBT_ERROR_UI_PREFIX,
+    RBT_FIT_BUTTON_TEXT,
     RBT_NODE_BLACK_CLASS,
     RBT_NODE_CLASS,
     RBT_NODE_LABEL_CLASS,
@@ -276,12 +277,18 @@ describe('红黑树:挂载后的树与唯一输出区', () => {
         expect(host.querySelectorAll(`#${RBT_DOM.treeId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`#${RBT_DOM.editorId}`)).toHaveLength(1);
         expect(host.querySelectorAll(`.${RBT_NODE_CLASS}`)).toHaveLength(31);
+        // 回正按钮也只有一枚:动作由库按上一份桌面的 dockActions 建,随旧任务栏一起
+        // 离场;新桌面的 mountDesktop 再按同一份清单建一枚
+        expect([...host.querySelectorAll('.dock button')]
+            .filter((button) => button.textContent === RBT_FIT_BUTTON_TEXT)).toHaveLength(1);
     });
 });
 
 /**
  * 回正按钮是**唯一**的"回到看得见"入口(双击判定与计时已删,见 ui/rbt/rbt_viewport.ts):
  * 这里钉的是 rbt.ts 的接线 -- 按钮的 click 最终落到视口句柄的 `fitViewport()`.
+ * 按钮本身在任务栏的动作区里(桌面级动作,2026-10 从性质检查窗口搬过去),所以这里按
+ * 文案从 `.dock` 的按钮里取它,而不是按某扇窗口的正文结构.
  *
  * happy-dom 不做布局:视口 `clientWidth` 为 0,`fitPlaneView` 因此给恒等视角;`getBBox()`
  * 默认是空矩形,渲染层量不到内容就不会向视口报包围盒.两条都不影响本用例 -- 把
@@ -311,8 +318,11 @@ describe('红黑树:回正按钮', () => {
             viewport.dispatchEvent(wheelEvent);
             expect(world.getAttribute('transform')).not.toBe(fitted);
 
-            const button = byId<HTMLElement>(RBT_DOM.outputPanelId).querySelector('button');
-            if (!button) throw new Error('性质检查窗口里找不到回正按钮');
+            // 回正按钮在任务栏的动作区里(桌面级动作,2026-10 从性质检查窗口搬过去):
+            // 任务栏里另一枚按钮是库的「全部还原」,所以按文案认它
+            const button = [...document.querySelectorAll<HTMLButtonElement>('.dock button')]
+                .find((candidate) => candidate.textContent === RBT_FIT_BUTTON_TEXT);
+            if (!button) throw new Error('任务栏里找不到回正按钮');
             button.click();
 
             expect(world.getAttribute('transform')).toBe(fitted);

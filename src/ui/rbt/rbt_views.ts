@@ -16,13 +16,19 @@
      └─ g.rbt-world(树的一切都在世界坐标里;视口只改这一层的 transform)
 
   窗口 "表达式":只有编辑器宿主 #rbtEditor
-  窗口 "性质检查":提示区(三行静态说明)+ 平面工具条(回正按钮)+ 唯一输出区 #treeOutput
+  窗口 "性质检查":提示区(三行静态说明)+ 唯一输出区 #treeOutput
+  任务栏(库的 .dock):窗口按钮组 + 桌面动作区(回正视图 + 全部还原)
 
 两扇窗口各装什么是**按"操作 / 说明 / 结果"分**的:编辑器独占一扇,窗口整高都给输入区,
 光标与选区不被说明挤开;三行说明说的是"这套表达式怎么读、这块平面怎么动",与本轮的
-输出结果同处一栏(说明在上、结果在下),看结论时语法与操作提示就在眼前.平面工具条
-(回正按钮)也在这扇窗口里:树是背景、窗口是操作,而"回到看得见"是操作里唯一一个
-需要控件的动作;按钮的点击行为不在这里绑,由 rbt.ts 接到视口的 `fitViewport()`.
+输出结果同处一栏(说明在上、结果在下),看结论时语法与操作提示就在眼前.
+
+回正按钮不在这两扇窗口的正文里(2026-10 改:先前在性质检查窗口的"平面工具条"一行):
+树是桌面背景,窗口只是压在它上面的操作框,被移开 / 最小化之后背景仍然在 -- "回到看得见"
+是**桌面级**动作,所以它进库的任务栏、与「全部还原」并排.按钮**也不由本模块建**了:
+动作清单在 config 的 `RBT_DOCK_ACTIONS`(纯数据),由库的 `mountDesktop` 按 `dockActions`
+装配(排在「全部还原」左边);点击由 rbt.ts 的 `onDockAction` 按 id 接到视口的
+`fitViewport()`.本模块因此连任务栏都不认识,只产出背景与逐窗口正文.
 
 这样做的理由与 miko_graphcalc 把 3D 视口当桌面背景是同一条:树是**结果**,窗口是
 **操作**;把结果铺在桌面上、操作浮在上面,改表达式时不用在"输入框"和"看树"之间
@@ -71,9 +77,7 @@ API;而且宿主在 CSS 里还有别的活干(外边距 / 最小高度,见 rbt.c
 import {
     create_element,
     create_svg_element,
-    createButton,
     createCodeEditor,
-    type ButtonHandle,
     type Child,
     type CodeEditorHandle,
     type WindowContentSpec,
@@ -81,14 +85,11 @@ import {
 import {
     RBT_DOM,
     RBT_EDITOR_GUTTER_MIN_WIDTH,
-    RBT_FIT_BUTTON_TEXT,
-    RBT_FIT_BUTTON_TITLE,
     RBT_HINT_BOX_CLASS,
     RBT_HINT_COLOR_LEGEND,
     RBT_HINT_SHORTHAND,
     RBT_HINT_VIEWPORT,
     RBT_INPUT_PLACEHOLDER,
-    RBT_PLANE_TOOLBAR_CLASS,
     RBT_WINDOW_EDITOR,
     RBT_WINDOW_PROPERTIES,
     RBT_WORLD_CLASS,
@@ -140,14 +141,6 @@ export interface RbtViews {
      * 重复挂载时(见 rbt.ts).
      */
     readonly editor: CodeEditorHandle;
-    /**
-     * 回正按钮句柄(库的 `ButtonHandle`,文案 / title 来自 config).
-     *
-     * 这里只**建控件**,点击行为由 rbt.ts 用 `onClick` 接到视口句柄的 `fitViewport()`
-     * (本模块不绑业务事件).`dispose()` 与编辑器同一条规矩:重复挂载时由 rbt.ts 调,
-     * 把按钮自己的点击分发监听拆掉.
-     */
-    readonly fitButton: ButtonHandle;
     /** 唯一输出区 #treeOutput(初始 hidden,内容由 rbt.ts 每次整批重建) */
     readonly output: HTMLElement;
 }
@@ -220,7 +213,7 @@ export function createRbtViews(): RbtViews {
       (与"输出区与树同屏"同一条思路:要一起看的放在一起).
 
       第三行(平面怎么动)与前两行同属"怎么读这个界面":拖动 / 滚轮在界面上没有控件,
-      不写出来用户只能乱试;回正按钮就在下一行,提示里点了它的名.
+      不写出来用户只能乱试;回正按钮在任务栏里,提示里点了它的名并说清位置.
     */
     const hints = create_element(
         { tag: 'div' },
@@ -231,24 +224,6 @@ export function createRbtViews(): RbtViews {
         create_element({ tag: 'br' }),
         create_element({ tag: 'span' }, {}, RBT_HINT_VIEWPORT),
         create_element({ tag: 'br' }),
-    );
-
-    /*
-      平面工具条:回正按钮那一行,排在提示区之下、输出区之上.
-
-      按钮走库的 `createButton`(永远是 `type="button"` + `.ui-button` 基线,外观不用
-      这里写样式);点击行为**不在这里绑** -- 本模块不绑业务事件,由 rbt.ts 用
-      `fitButton.onClick(...)` 接到视口句柄的 `fitViewport()`.与自动适应同一个 `fit()`,
-      只是明确交回自动模式(见 ui/rbt/rbt_viewport.ts 的 manual 状态机).
-    */
-    const fitButton = createButton({
-        text: RBT_FIT_BUTTON_TEXT,
-        title: RBT_FIT_BUTTON_TITLE,
-    });
-    const planeToolbar = create_element(
-        { tag: 'div' },
-        { class: RBT_PLANE_TOOLBAR_CLASS },
-        fitButton.element,
     );
 
     /*
@@ -272,7 +247,6 @@ export function createRbtViews(): RbtViews {
         { tag: 'div' },
         { class: 'ui-scrollbar', id: RBT_DOM.outputPanelId },
         hints,
-        planeToolbar,
         output,
     );
 
@@ -290,7 +264,6 @@ export function createRbtViews(): RbtViews {
         world,
         content: (id) => (isRbtWindowId(id) ? { body: bodies[id] } : {}),
         editor,
-        fitButton,
         output,
     };
 }

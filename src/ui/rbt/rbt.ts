@@ -16,6 +16,11 @@
 装配顺序与 miko_graphcalc 同形:先建内容(背景 + 逐窗口正文),再 `mountDesktop`
 建桌面三层与窗口外壳.
 
+任务栏动作(「回正视图」)也归这一层接线:动作清单是 config 的 `RBT_DOCK_ACTIONS`
+(纯数据),交给 `mountDesktop` 的 `dockActions` 由库装配(排在库的「全部还原」左边);
+点击由 `onDockAction` 按 id 分派到视口的 `fitViewport()`.应用因此不再需要知道
+任务栏的 DOM 结构.
+
 **树画在"平面"里,平面由一块可拖动缩放的视口看着**(2026-10 起):布局算出来的
 x / y 是**平面坐标**(单位 = 屏幕像素 @ 缩放 1),平面本身无限大 -- 布局只保证同层节点
 彼此不撞(见 ui/rbt/rbt_layout.ts),不预设画布多大.树上的东西全部落进世界层
@@ -50,9 +55,11 @@ import {
     RBT_DIAGNOSTICS_ROW_CLASS,
     RBT_DIAGNOSTICS_STATE_CLASS,
     RBT_DIAGNOSTICS_SUMMARY_CLASS,
+    RBT_DOCK_ACTIONS,
     RBT_EMPTY_HINT_TEXT,
     RBT_EMPTY_TREE_HINT_TEXT,
     RBT_ERROR_UI_PREFIX,
+    RBT_FIT_ACTION_ID,
     RBT_OUTPUT_ERROR_CLASS,
     RBT_OUTPUT_HINT_CLASS,
     RBT_PROPERTIES,
@@ -79,7 +86,6 @@ import {
     create_element,
     mountDesktop,
     seedTextareaSource,
-    type ButtonHandle,
     type CodeEditorHandle,
     type DesktopHandle,
 } from 'miko_ui';
@@ -138,7 +144,7 @@ function propertyLines(report: RbtPropertyReport): HTMLElement[] {
  * `ResizeObserver`(行号与高亮各一个),`dispose()` 才会拆掉;桌面那边的窗口外壳
  * 与三层容器(`.window-layer` / `.snap-preview` / `.dock`)也归 `DesktopHandle`.
  * 标记可以靠 `replaceChildren` 整块换掉,但**观察者与 window 上的监听不会随节点
- * 离场自动消失** -- 同一颗宿主重复挂载时要先把上一份桌面、编辑器、视口与按钮拆掉,否则每挂
+ * 离场自动消失** -- 同一颗宿主重复挂载时要先把上一份桌面、编辑器与视口拆掉,否则每挂
  * 一次就多留一套窗口、一个观察者与一条 resize 通道(旧节点已不在文档里,泄漏的是
  * 内存与回调,不报错也看不出来).
  *
@@ -149,8 +155,6 @@ interface MountedRbt {
     readonly editor: CodeEditorHandle;
     /** 平面视口:拖动 / 滚轮监听与尺寸观察者都在它手里(见 ui/rbt/rbt_viewport.ts) */
     readonly viewport: RbtViewportHandle;
-    /** 回正按钮(库的 `ButtonHandle`):点击分发监听归它的 `dispose()` 拆 */
-    readonly fitButton: ButtonHandle;
 }
 
 const mounted = new WeakMap<HTMLElement, MountedRbt>();
@@ -164,12 +168,11 @@ const mounted = new WeakMap<HTMLElement, MountedRbt>();
  * ui/rbt/rbt_layout.ts,平面视口在 ui/rbt/rbt_viewport.ts,核心逻辑在 src/datastruct/rbt/.
  */
 export function mountRBT(host: HTMLElement): void {
-    // 重复挂载同一颗宿主:先拆掉上一份桌面、编辑器、视口与按钮(见 MountedRbt)
+    // 重复挂载同一颗宿主:先拆掉上一份桌面、编辑器与视口(见 MountedRbt)
     const previous = mounted.get(host);
     previous?.desktop.dispose();
     previous?.editor.dispose();
     previous?.viewport.dispose();
-    previous?.fitButton.dispose();
     mounted.delete(host);
 
     // 宿主由本模块独占:清空之后整体接管(桌面三层是 append 进来的,不清会叠两份)
@@ -185,24 +188,30 @@ export function mountRBT(host: HTMLElement): void {
         topInset: DEFAULT_DESKTOP_CONFIG.dockReserve,
     });
     /*
-      回正按钮:控件归 ui/rbt/rbt_views.ts 建,点击行为在这里接到视口句柄 -- 这是本应用
-      唯一的"回到看得见"入口(以前是双击,已删;理由见 ui/rbt/rbt_viewport.ts 文件头).
-      按钮的拆卸随 `fitButton.dispose()` 走(见上面的重复挂载分支).
-    */
-    views.fitButton.onClick(() => viewport.fitViewport());
-    /*
-      立起桌面:库一律用默认值(窗口动作 / 边缘余量 / 标题栏高度 / z / 吸附),
-      应用只覆盖两处 --
+      立起桌面:库一律用默认值(标题栏动作 / 边缘余量 / 标题栏高度 / z / 吸附),
+      应用只覆盖这几处 --
       - `windows`:窗口清单(应用特有的,库不预设);
+      - `dockActions`:任务栏动作清单(回正视图),库按它建按钮并排在「全部还原」左边;
+      - `onDockAction`:这些动作的点击唯一接收入口 -- 库只交回 id,这里按 id 分派;
       - `edgeGap`:与窗口几何里的 `inset` 是同一个数(见 config 的 RBT_DESKTOP_INSET),
         改成库的默认值会让"默认离边多远"和"能贴多近"各说各话.
       背景是那**块平面视口**(不是里面的 `<svg>`):它由库 append 到桌面根上,窗口层与
       任务栏都压在它上面.视口的指针手势在它被 append 之前就绑好了,所以顺序无关.
+
+      回正是本应用唯一的"回到看得见"入口(以前是双击,已删;理由见
+      ui/rbt/rbt_viewport.ts 文件头),它是**桌面级**动作:树是桌面背景,窗口只是压在
+      它上面的操作框 -- 窗口最小化之后背景还在,按钮不该只长在某扇窗口的正文里.
+      按钮本身与它在任务栏里的位置都归库(DockActionSpec):应用只声明"有哪些动作、
+      叫什么"(config 的 RBT_DOCK_ACTIONS)并接住点击.
     */
     const desktop = mountDesktop(host, {
         ...DEFAULT_DESKTOP_CONFIG,
         edgeGap: RBT_DESKTOP_INSET,
         windows: RBT_DESKTOP_WINDOWS,
+        dockActions: RBT_DOCK_ACTIONS,
+        onDockAction: (id) => {
+            if (id === RBT_FIT_ACTION_ID) viewport.fitViewport();
+        },
         background: [views.viewport],
         content: views.content,
     });
@@ -212,7 +221,7 @@ export function mountRBT(host: HTMLElement): void {
     const input = editor.textarea;
     const outputEl = views.output;
     const worldEl = views.world;
-    mounted.set(host, { desktop, editor, viewport, fitButton: views.fitButton });
+    mounted.set(host, { desktop, editor, viewport });
 
     /**
      * 输出区的写入口:整批替换 #treeOutput 的子节点,空数组就整块 hidden.

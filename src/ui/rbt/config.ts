@@ -20,7 +20,7 @@
 // 并按核心层的顺序生成界面清单(见 RBT_PROPERTIES).
 // ================================================================
 
-import type { WindowConfigEntry } from 'miko_ui';
+import type { DockActionSpec, WindowConfigEntry } from 'miko_ui';
 import { RBT_PROPERTY_IDS, type RbtPropertyId } from '@/datastruct/rbt/rbt_tree';
 
 
@@ -50,7 +50,7 @@ export const RBT_DOM = {
      * 为什么不让 svg 自己当视口:库的口径是"背景节点挂 `.desktop-background`,绘制与
      * 尺寸归消费者",而一根 div 的裁切 / 光标 / `touch-action` 比 SVG 根更少歧义;将来
      * 视口上要加的浮层(比例尺 / 小地图)也有现成的父亲.回正按钮**不在**这层浮层上:
-     * 它挂在性质检查窗口里(见本文件的"平面工具条"一节).
+     * 它挂在任务栏里(见本文件的"任务栏里的回正按钮"一节).
      */
     viewportId: 'rbtViewport',
     /**
@@ -185,13 +185,21 @@ export const RBT_DESKTOP_WINDOWS = [
     },
 ] as const satisfies readonly WindowConfigEntry[];
 
-// ---------- 平面工具条(性质检查窗口里的回正按钮) ----------
+// ---------- 任务栏里的回正按钮 ----------
 //
 // 回正是**显式按钮**,不是双击手势(2026-10 改):双击判定只看两次按下的时间间隔 --
 // 不看位置、中键也参与计时、拖动也会留下第一次按下 -- 误触发多,而且"回正"这种
-// 明确的动作没有理由藏在一个不可见的手势里.按钮放在性质检查窗口正文的提示区之下、
-// 输出区之上(见 ui/rbt/rbt_views.ts 的 outputPanel):那扇窗口本来就是"看结果 /
-// 调视角"的那一栏.
+// 明确的动作没有理由藏在一个不可见的手势里.
+//
+// 它挂在**库的任务栏**里(2026-10 再改一次:先前在性质检查窗口正文的提示区与输出区
+// 之间):树是桌面背景,窗口只是压在它上面的操作框,被移开 / 最小化之后背景仍然在 --
+// "回到看得见"因此是**桌面级**动作,该和「全部还原」并排,而不是某扇窗口正文里的一枚
+// 按钮.库的 `DesktopConfig.dockActions` 就是这类动作的**正式入口**:清单在本文件
+// (纯数据),点击由 ui/rbt/rbt.ts 的 `onDockAction` 按 id 分派,按钮与位置由库装配
+// (整组排在「全部还原」左边) -- 应用不再按库的 DOM 结构自己塞按钮.
+//
+// 从前(库还没有这个入口时)按钮由 ui/rbt/rbt_views.ts 建、rbt.ts 按 `.dock-actions`
+// 这个结构钩子插进动作区;现在那两条都不需要了,类名也不再抄进应用配置.
 
 /**
  * 回正按钮的文案(可见文本).
@@ -204,8 +212,23 @@ export const RBT_FIT_BUTTON_TEXT = '回正视图';
 /** 回正按钮的 `title` / 悬停说明:按钮文案之外的第二层解释 */
 export const RBT_FIT_BUTTON_TITLE = '把整棵树装回视口并居中,之后重绘继续自动适应';
 
-/** 平面工具条那一行的类名(样式见 src/ui/rbt/rbt.css 的 `.rbt-plane-toolbar`) */
-export const RBT_PLANE_TOOLBAR_CLASS = 'rbt-plane-toolbar';
+/**
+ * 回正动作的 id:库把它写成按钮的 `data-dock-action`,点击时原样交回
+ * `onDockAction` -- 库不解释它,应用内唯一即可.
+ */
+export const RBT_FIT_ACTION_ID = 'fit-viewport';
+
+/**
+ * 任务栏动作清单:交给库 `mountDesktop` 的 `dockActions`.
+ *
+ * 与窗口清单同一条口径:清单是唯一真相源(顺序即显示顺序),库按它建按钮;整组排在
+ * 库的「全部还原」左边.文案 / 悬停提示分别是上面的两个常量,id 是 `onDockAction`
+ * 的分派键 -- 按钮长什么样归库(`createButton` + `.ui-button` + `dock-action` 钩子),
+ * 应用只声明"有哪些动作、叫什么".
+ */
+export const RBT_DOCK_ACTIONS = [
+    { id: RBT_FIT_ACTION_ID, text: RBT_FIT_BUTTON_TEXT, title: RBT_FIT_BUTTON_TITLE },
+] as const satisfies readonly DockActionSpec[];
 
 // ---------- 提示区(性质检查窗口正文顶部那静态说明) ----------
 //
@@ -240,10 +263,11 @@ export const RBT_HINT_COLOR_LEGEND = 'R 红色 \u00a0|\u00a0 B 黒色';
  * 提示区第三行:背景平面的操作说明(可见文本).
  *
  * 为什么值得占一行:平面视口的两条手势(拖动平移 / 滚轮缩放)**在界面上没有控件**,
- * 不写出来就只能靠用户乱试;回正虽然是按钮,也在这里点一次名 -- 说明与按钮同在
- * 性质检查窗口里,读结论时顺手就能看到怎么看这棵树.
+ * 不写出来就只能靠用户乱试;回正虽然是按钮,也在这里点一次名 -- 但它人在任务栏里,
+ * 不在这一栏,所以文案要点出位置("任务栏"),否则读这三行说明的人会往窗口正文里找.
  */
-export const RBT_HINT_VIEWPORT = `背景平面:拖动平移、滚轮缩放;点「${RBT_FIT_BUTTON_TEXT}」把树装回视口`;
+export const RBT_HINT_VIEWPORT =
+    `背景平面:拖动平移、滚轮缩放;点任务栏里的「${RBT_FIT_BUTTON_TEXT}」把树装回视口`;
 
 /**
  * 表达式编辑器的占位文案(可见文本).
