@@ -16,9 +16,9 @@
  * 五条结论独立运行、不短路:检查窗口要一次把问题列全,而不是修一条看一次.
  */
 
-import type { SceneDocument, SceneDocumentNode } from '@/datastruct/scene/scene_document';
-import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/datastruct/scene/scene_check';
-import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/datastruct/scene/label_value';
+import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
+import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/scene/scene_check';
+import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/scene/label_value';
 
 type NodeColor = 'red' | 'black';
 

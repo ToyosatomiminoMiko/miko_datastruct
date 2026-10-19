@@ -23,7 +23,7 @@ import type {
     SceneDocumentEdge,
     SceneDocumentNode,
     SceneDocumentPointer,
-} from '@/datastruct/scene/scene_document';
+} from '@/scene/scene_document';
 
 /** 解析失败的稳定错误码(测试与显示层按它区分,不靠文案匹配) */
 export type SceneDocumentErrorCode =

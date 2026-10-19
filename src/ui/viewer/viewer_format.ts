@@ -9,7 +9,7 @@
  * 4. 节点属性 -> 视觉层的变体名(红黑树的 `color: "red"` -> `visual-node--red`).
  */
 
-import { SceneDocumentError } from '@/datastruct/scene/scene_document_parse';
+import { SceneDocumentError } from '@/scene/scene_document_parse';
 import {
     VIEWER_CHECK_CONFIG_ERROR_PREFIX,
     VIEWER_CHECK_SUMMARY,

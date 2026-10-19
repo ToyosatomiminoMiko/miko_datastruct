@@ -12,7 +12,7 @@
  * 没登记的函数名不是错误:已有检查照跑,诊断窗口会提示"未找到"的名字.
  */
 
-import { registerSceneChecks } from '@/datastruct/scene/scene_check';
+import { registerSceneChecks } from '@/scene/scene_check';
 import { GRAPH_CHECKS } from '@/datastruct/graph/graph_checks';
 import { HEAP_CHECKS } from '@/datastruct/heap/heap_checks';
 import { LIST_CHECKS } from '@/datastruct/list/list_checks';
@@ -28,10 +28,10 @@ export {
     registerSceneChecks,
     registeredCheckIds,
     runSceneChecks,
-} from '@/datastruct/scene/scene_check';
+} from '@/scene/scene_check';
 export type {
     SceneCheckDefinition,
     SceneCheckFunction,
     SceneCheckResult,
     SceneCheckRun,
-} from '@/datastruct/scene/scene_check';
+} from '@/scene/scene_check';

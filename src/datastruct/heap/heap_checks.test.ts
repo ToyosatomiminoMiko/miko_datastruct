@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { readSceneDocument } from '@/datastruct/scene/scene_document_parse';
+import { readSceneDocument } from '@/scene/scene_document_parse';
 import { HEAP_CHECKS } from '@/datastruct/heap/heap_checks';
 
 function heapDocument(

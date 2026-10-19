@@ -14,9 +14,9 @@ import type {
     SceneCheckDefinition,
     SceneCheckFunction,
     SceneCheckResult,
-} from '@/datastruct/scene/scene_check';
-import type { SceneDocument, SceneDocumentNode } from '@/datastruct/scene/scene_document';
-import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/datastruct/scene/label_value';
+} from '@/scene/scene_check';
+import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
+import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/scene/label_value';
 
 /** 链表结构违规的原因(定位用;文案由下面统一拼) */
 type ListViolationKind = 'edge' | 'no-head' | 'multi-head' | 'branch' | 'merge' | 'cycle' | 'disconnected';

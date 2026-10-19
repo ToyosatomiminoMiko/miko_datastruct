@@ -9,8 +9,8 @@
  * 直接 FAIL:没有数值就无从判定堆序,静默跳过会得到一条空真的 PASS.
  */
 
-import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/datastruct/scene/scene_check';
-import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/datastruct/scene/label_value';
+import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/scene/scene_check';
+import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/scene/label_value';
 
 function pass(name: string): SceneCheckResult {
     return { name, passed: true, detail: '', details: [], node: null };

@@ -11,7 +11,7 @@
  * 应该注册自己的检查集,而不是复用这个结构名.
  */
 
-import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/datastruct/scene/scene_check';
+import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/scene/scene_check';
 
 function pass(name: string): SceneCheckResult {
     return { name, passed: true, detail: '', details: [], node: null };

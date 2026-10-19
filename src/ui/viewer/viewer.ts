@@ -1,7 +1,7 @@
 /*
  * JSON 查看器桌面:装配 + 每轮输入的全流程.
  *
- * 本文件只做挂载与串联:文档解析 / 校验在 datastruct/scene,性质检查的注册与运行在
+ * 本文件只做挂载与串联:文档解析 / 校验在 scene,性质检查的注册与运行在
  * datastruct/checks(含「检查配置」窗口的函数名列表),自动布局在 visual/layout,行内容在
  * ui/viewer/viewer_items,窗口标记在 ui/viewer/viewer_views.装配顺序:先建内容,再
  * mountDesktop 建桌面三层与窗口外壳.
@@ -44,9 +44,9 @@ import {
     VIEWER_EXAMPLE_MENU_LABEL,
     VIEWER_FIT_ACTION_ID,
 } from '@/ui/viewer/config';
-import { parseSceneDocument } from '@/datastruct/scene/scene_document_parse';
-import type { SceneDocument, SceneDocumentNode } from '@/datastruct/scene/scene_document';
-import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
+import { parseSceneDocument } from '@/scene/scene_document_parse';
+import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
+import type { SceneCheckResult } from '@/scene/scene_check';
 import { runSceneChecks } from '@/datastruct/checks';
 import { layoutScene, type SceneLayout } from '@/visual/layout';
 import type { VisualScene } from '@/visual/scene';

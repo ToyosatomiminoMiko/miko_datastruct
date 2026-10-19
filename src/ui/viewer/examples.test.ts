@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest';
 
 import '@/datastruct/checks';
-import { registeredCheckIds } from '@/datastruct/scene/scene_check';
-import { parseSceneDocument } from '@/datastruct/scene/scene_document_parse';
+import { registeredCheckIds } from '@/scene/scene_check';
+import { parseSceneDocument } from '@/scene/scene_document_parse';
 import {
     DEFAULT_VIEWER_EXAMPLE,
     VIEWER_EXAMPLES,

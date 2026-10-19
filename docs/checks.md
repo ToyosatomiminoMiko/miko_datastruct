@@ -9,7 +9,7 @@
 | `RUN` / `Ctrl+Enter` 触发 | `src/ui/viewer/viewer.ts` → `mountViewer` 内的 `run()` |
 | 检查配置变化(不重新解析 JSON) | 同文件 → `applyCheckConfig()` |
 | 检查配置 JSON -> 函数名数组 | `src/ui/viewer/check_config.ts` → `parseCheckConfig()` |
-| id -> 检查函数 | `src/datastruct/scene/scene_check.ts` → `runSceneChecks()` |
+| id -> 检查函数 | `src/scene/scene_check.ts` → `runSceneChecks()` |
 | 内置检查集登记 | `src/datastruct/checks.ts` → `registerSceneChecks(...)` |
 | 一条结论 -> 一行 | `src/ui/viewer/viewer_items.ts` → `CheckItem` |
 | 检查窗口抬头 `n 条中 m 条 FAIL` | `src/ui/viewer/viewer_format.ts` → `formatCheckSummary()` |
@@ -38,13 +38,13 @@
 | `buildTreeIndex()` | `src/datastruct/rbt/rbt_checks.ts` | 节点表 / 出边表 / 根列表；出边顺序 = `pointers` 数组顺序 = 左右顺序 |
 | `colorOf()` | `src/datastruct/rbt/rbt_checks.ts` | `attrs.color` -> `red` / `black` / null |
 | `readList()` | `src/datastruct/list/list_checks.ts` | 单链表结构校验 + 从表头读出节点顺序；两条链表检查共用 |
-| `toComparableLabel()` | `src/datastruct/scene/label_value.ts` | `label` -> 数值，只认十进制；rbt / heap / list 共用 |
-| `LABEL_COMPARE_TOLERANCE` | `src/datastruct/scene/label_value.ts` | 浮点比较容差(`1e-9`)，只兜浮点误差，不把相等算通过 |
+| `toComparableLabel()` | `src/scene/label_value.ts` | `label` -> 数值，只认十进制；rbt / heap / list 共用 |
+| `LABEL_COMPARE_TOLERANCE` | `src/scene/label_value.ts` | 浮点比较容差(`1e-9`)，只兜浮点误差，不把相等算通过 |
 | `pass()` / `fail()` | 各 `*_checks.ts` | 构造 `SceneCheckResult`；`fail` 的 `node` 决定 FAIL 行末「定位」是否出现 |
 
 ## `SceneCheckResult` 字段
 
-定义在 `src/datastruct/scene/scene_check.ts`。
+定义在 `src/scene/scene_check.ts`。
 
 | 字段 | 去处 |
 | --- | --- |

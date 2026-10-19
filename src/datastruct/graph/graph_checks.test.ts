@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { readSceneDocument } from '@/datastruct/scene/scene_document_parse';
+import { readSceneDocument } from '@/scene/scene_document_parse';
 import { GRAPH_CHECKS } from '@/datastruct/graph/graph_checks';
 
 function graphDocument(

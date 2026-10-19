@@ -18,7 +18,7 @@
  * 同一份文档 + 同一个 id 列表永远得到同一组结论(顺序 = 配置数组顺序).
  */
 
-import type { SceneDocument } from '@/datastruct/scene/scene_document';
+import type { SceneDocument } from '@/scene/scene_document';
 
 /**
  * 一条结构检查结论(不是 JSON 字段).

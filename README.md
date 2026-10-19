@@ -106,13 +106,13 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 
 | 文件 | 作用 |
 | --- | --- |
-| `src/datastruct/scene/scene_check.ts` | 注册表:检查 id -> 运行函数;`runSceneChecks` 按 id 列表运行 |
+| `src/scene/scene_check.ts` | 注册表:检查 id -> 运行函数;`runSceneChecks` 按 id 列表运行 |
 | `src/datastruct/checks.ts` | 内置注册入口:模块加载时把 rbt / graph / heap / list 的检查登记进去 |
 | `src/datastruct/rbt/rbt_checks.ts` | `rbt`:颜色合法 / 根黑 / 红孩子 / 黑高 / 搜索树有序(id 就是函数名) |
 | `src/datastruct/graph/graph_checks.ts` | `graph`:欧拉回路存在性(`checkEulerCircuit`) |
 | `src/datastruct/heap/heap_checks.ts` | `heap`:最小堆序(`checkHeapOrder`) |
 | `src/datastruct/list/list_checks.ts` | `list`:单链表结构合法 / 值严格递增(`checkLinkedList` / `checkListSorted`) |
-| `src/datastruct/scene/label_value.ts` | label -> 数值的共用口径(rbt / heap / list 都用它) |
+| `src/scene/label_value.ts` | label -> 数值的共用口径(rbt / heap / list 都用它) |
 | `src/ui/viewer/check_config.ts` | 「检查配置」编辑器内容(JSON 数组)的解析 |
 | `docs/checks.md` | **检查实现速查**:每个显示名 / id 对应哪个函数、判据是什么 |
 
@@ -259,11 +259,13 @@ index.html              页面上只有一颗手写宿主 #app
 src/main.ts             入口:引库样式 + 应用样式,再 mountViewer(#app)
 css/app.css             应用层:页面基线 + 从主站继承的令牌(--font-code / 桌面底色)
 
-src/datastruct/         纯逻辑:中性场景文档 + 性质检查注册表
-src/datastruct/scene/scene_document.ts       文档类型(nodes / pointers / edges)
-src/datastruct/scene/scene_document_parse.ts 解析 / 校验(错误码 + 路径)
-src/datastruct/scene/scene_check.ts          检查注册表:检查 id -> 运行函数
-src/datastruct/scene/label_value.ts          label -> 数值的共用口径(rbt / heap / list)
+src/scene/              中性场景文档:类型 / 解析校验 / 检查注册表(与具体结构无关)
+src/scene/scene_document.ts       文档类型(nodes / pointers / edges)
+src/scene/scene_document_parse.ts 解析 / 校验(错误码 + 路径)
+src/scene/scene_check.ts          检查注册表:检查 id -> 运行函数
+src/scene/label_value.ts          label -> 数值的共用口径(rbt / heap / list)
+
+src/datastruct/         纯逻辑:各数据结构的性质检查
 src/datastruct/checks.ts                     内置检查集注册入口(rbt / graph / heap / list)
 src/datastruct/rbt/rbt_checks.ts             红黑树性质检查
 src/datastruct/graph/graph_checks.ts         图(欧拉回路)检查
@@ -300,7 +302,7 @@ docs/checks.md          性质检查实现速查(显示名 / id / 函数位置 /
 python/                 中性 JSON 生成(纯标准库;与 web 不是前后端关系,见 python/README.md)
 ```
 
-跨目录导入一律用源码根别名 `@/`(`@/datastruct/scene/scene_document_parse`,
+跨目录导入一律用源码根别名 `@/`(`@/scene/scene_document_parse`,
 `@/ui/viewer/config`,`@/test_support/desktop_test_helpers`);别名一处定义两处生效:
 `tsconfig.json` 的 `paths` 与 `vite.config.ts` 的 `resolve.alias`.
 

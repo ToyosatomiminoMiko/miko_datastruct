@@ -6,8 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { readSceneDocument } from '@/datastruct/scene/scene_document_parse';
-import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
+import { readSceneDocument } from '@/scene/scene_document_parse';
+import type { SceneCheckResult } from '@/scene/scene_check';
 import { RBT_CHECKS } from '@/datastruct/rbt/rbt_checks';
 
 /** 一份红黑树文档:节点写成 [key, label, color],指针写成 [from, to] */

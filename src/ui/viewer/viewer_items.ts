@@ -12,7 +12,7 @@
  *   `<details>`(默认收起,展开态在行重建时用库的 carryDetailsOpen 保留),
  *   FAIL 且有 `node` 时行末「定位」移到违规节点.
  *
- * 不在这里做数据校验 / 文案拼接:输入已经过 datastruct/scene 的解析器,检查文案来自
+ * 不在这里做数据校验 / 文案拼接:输入已经过 scene 的解析器,检查文案来自
  * 检查器(config 只给 PASS / FAIL 与按钮字).
  */
 
@@ -24,8 +24,8 @@ import {
     createObjectRow,
     create_element,
 } from 'miko_ui';
-import type { SceneDocumentNode } from '@/datastruct/scene/scene_document';
-import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
+import type { SceneDocumentNode } from '@/scene/scene_document';
+import type { SceneCheckResult } from '@/scene/scene_check';
 import {
     VIEWER_ATTRIBUTE_CLASS,
     VIEWER_CHECK_FAIL_TEXT,

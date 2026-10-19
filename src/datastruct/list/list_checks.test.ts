@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { readSceneDocument } from '@/datastruct/scene/scene_document_parse';
+import { readSceneDocument } from '@/scene/scene_document_parse';
 import { LIST_CHECKS } from '@/datastruct/list/list_checks';
 
 function listDocument(

@@ -9,8 +9,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { SceneDocumentNode } from '@/datastruct/scene/scene_document';
-import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
+import type { SceneDocumentNode } from '@/scene/scene_document';
+import type { SceneCheckResult } from '@/scene/scene_check';
 import { CheckItem, EntityItem } from '@/ui/viewer/viewer_items';
 
 beforeEach(() => {

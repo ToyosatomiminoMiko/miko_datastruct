@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { SceneDocumentError } from '@/datastruct/scene/scene_document_parse';
+import { SceneDocumentError } from '@/scene/scene_document_parse';
 import {
     formatAttributeValue,
     formatCheckConfigError,

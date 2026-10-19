@@ -13,7 +13,7 @@ import {
     parseSceneDocument,
     readSceneDocument,
     SceneDocumentError,
-} from '@/datastruct/scene/scene_document_parse';
+} from '@/scene/scene_document_parse';
 
 /** 断言抛的是带指定错误码的 SceneDocumentError,并交回它给调用方看路径 / 文案 */
 function expectError(source: string, code: string): SceneDocumentError {

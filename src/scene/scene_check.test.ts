@@ -6,14 +6,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { SceneDocument } from '@/datastruct/scene/scene_document';
+import type { SceneDocument } from '@/scene/scene_document';
 import {
     registerSceneChecks,
     registeredCheckIds,
     runSceneChecks,
     type SceneCheckDefinition,
     type SceneCheckResult,
-} from '@/datastruct/scene/scene_check';
+} from '@/scene/scene_check';
 
 const DOCUMENT: SceneDocument = {
     nodes: [{ key: 0, label: 'A', attrs: {} }],
