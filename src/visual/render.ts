@@ -6,7 +6,8 @@
  *
  * 连线的两种方向语义在这里落笔:
  * - 无向边:一条线段;
- * - 有向指针:线段 + 终点处的箭头三角形.端点已经由布局收进节点圆边界,箭头不会被圆盖住.
+ * - 有向指针:线段 + 终点处的箭头三角形.端点已经由布局收进节点圆边界,箭头不会被圆盖住;
+ *   线段在箭头**底边**处收住,不画到尖端(原因见 `arrowGeometry()`).
  *
  * 箭头画成显式 `<path>` 而不是 SVG `<marker>`:marker 要么按线宽缩放、要么要一份带 id 的
  * `<defs>`(同一页面多次挂载 / 重绘时要管 id 唯一),而这一层的箭头大小是固定的几个像素,
@@ -32,7 +33,7 @@ import {
     VISUAL_POINTER_ARROW_CLASS,
     visualNodeVariantClass,
 } from '@/visual/config';
-import type { VisualLink, VisualNode, VisualScene } from '@/visual/scene';
+import type { VisualLink, VisualNode, VisualPoint, VisualScene } from '@/visual/scene';
 import type { PlaneBox } from '@/visual/viewport';
 
 /** 一个节点组:位置 + 语义变体修饰类 + 形状 + 值文字 */
@@ -53,12 +54,28 @@ function createNodeElement(node: VisualNode): SVGGElement {
 }
 
 /**
- * 有向指针终点的箭头三角形:尖端在 `to`,底边向回退 `VISUAL_ARROW_LENGTH`.
+ * 有向指针的箭头几何:尖端在 `to`,底边沿连线往回退 `VISUAL_ARROW_LENGTH`,底边总宽
+ * `2 × VISUAL_ARROW_HALF_WIDTH`;底边中点 `base` 同时是**线段的终点**.
  *
- * 线本身画到尖端;三角形随后落笔覆盖在线段上,所以线不会从箭头里透出来.
+ * 线必须停在底边上,不能画到尖端.三角形在尖端附近比线还窄:半宽从 3.5 线性收到 0,
+ * 而线宽恒为 2,所以离尖端约 2.9px 以内,线反而比三角形宽.画到尖端的线头于是从两条
+ * 斜边里戳出来,尖端变成一截方头 -- 放大后整枚箭头看着像鼠标指针.线停在底边就没有
+ * 这截多余的方头,线段也正好被底边(宽 7)整个盖住,接缝处不会漏色.
+ *
  * 零长度(自环)没有方向,交回 null -- 宁可少画一枚箭头,也不要画一个 NaN 坐标.
+ * 连线比一个箭头还短时,底边最多退到起点(不让线反向画),此时整条线就是那枚箭头.
  */
-function createArrowElement(link: VisualLink): SVGPathElement | null {
+interface ArrowGeometry {
+    /** 三角形尖端 = 指针终点 */
+    readonly tip: VisualPoint;
+    /** 底边中点 = 线段终点(尖端正往回退一个箭头长度) */
+    readonly base: VisualPoint;
+    /** 底边两个端点 */
+    readonly left: VisualPoint;
+    readonly right: VisualPoint;
+}
+
+function arrowGeometry(link: VisualLink): ArrowGeometry | null {
     const dx = link.to.x - link.from.x;
     const dy = link.to.y - link.from.y;
     const length = Math.hypot(dx, dy);
@@ -66,20 +83,32 @@ function createArrowElement(link: VisualLink): SVGPathElement | null {
 
     const ux = dx / length;
     const uy = dy / length;
-    // 底边中点:从尖端沿连线往回退一个箭头长度
-    const baseX = link.to.x - ux * VISUAL_ARROW_LENGTH;
-    const baseY = link.to.y - uy * VISUAL_ARROW_LENGTH;
+    // 底边中点:从尖端沿连线往回退一个箭头长度(连线不够长时退到起点为止)
+    const back = Math.min(VISUAL_ARROW_LENGTH, length);
+    const baseX = link.to.x - ux * back;
+    const baseY = link.to.y - uy * back;
     // 底边的两个端点:沿法向各偏半个底宽
     const leftX = baseX - uy * VISUAL_ARROW_HALF_WIDTH;
     const leftY = baseY + ux * VISUAL_ARROW_HALF_WIDTH;
     const rightX = baseX + uy * VISUAL_ARROW_HALF_WIDTH;
     const rightY = baseY - ux * VISUAL_ARROW_HALF_WIDTH;
 
+    return {
+        tip: { x: link.to.x, y: link.to.y },
+        base: { x: baseX, y: baseY },
+        left: { x: leftX, y: leftY },
+        right: { x: rightX, y: rightY },
+    };
+}
+
+/** 把箭头三角形落成一枚填充 `<path>`:尖端 -> 左底角 -> 右底角 -> 闭合 */
+function createArrowElement(geometry: ArrowGeometry): SVGPathElement {
     return create_svg_element(
         { tag: 'path' },
         {
             class: VISUAL_POINTER_ARROW_CLASS,
-            d: `M ${link.to.x} ${link.to.y} L ${leftX} ${leftY} L ${rightX} ${rightY} Z`,
+            d: `M ${geometry.tip.x} ${geometry.tip.y} L ${geometry.left.x} ${geometry.left.y}`
+                + ` L ${geometry.right.x} ${geometry.right.y} Z`,
         },
     );
 }
@@ -87,25 +116,28 @@ function createArrowElement(link: VisualLink): SVGPathElement | null {
 /**
  * 一条连线落成 1~2 个元素:线段必有,有向指针再加一枚箭头.
  *
- * 线段的类名带变体(`visual-link--pointer` / `visual-link--edge`):测试与样式可以只看
- * 有向 / 无向,不必按 data-* 或节点顺序去猜.
+ * 线段止于箭头底边中点(不是尖端):见 `arrowGeometry()` 的说明.线段的类名带变体
+ * (`visual-link--pointer` / `visual-link--edge`):测试与样式可以只看有向 / 无向,
+ * 不必按 data-* 或节点顺序去猜.
  */
 function createLinkElements(link: VisualLink): (SVGLineElement | SVGPathElement)[] {
     const variant = link.directed ? VISUAL_LINK_POINTER_CLASS : VISUAL_LINK_EDGE_CLASS;
+    const arrow = link.directed ? arrowGeometry(link) : null;
+    // 有向指针的线收在箭头底边;无向边(或零长度指针)直接画到终点
+    const end = arrow === null ? link.to : arrow.base;
     const line = create_svg_element(
         { tag: 'line' },
         {
             class: `${VISUAL_LINK_CLASS} ${variant}`,
             x1: String(link.from.x),
             y1: String(link.from.y),
-            x2: String(link.to.x),
-            y2: String(link.to.y),
+            x2: String(end.x),
+            y2: String(end.y),
         },
     );
-    if (!link.directed) return [line];
+    if (arrow === null) return [line];
 
-    const arrow = createArrowElement(link);
-    return arrow === null ? [line] : [line, arrow];
+    return [line, createArrowElement(arrow)];
 }
 
 /**

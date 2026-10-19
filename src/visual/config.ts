@@ -71,11 +71,22 @@ export const VISUAL_LINK_NODE_GAP = 4;
  */
 export const VISUAL_LINK_LANE_GAP = 14;
 
-/** 有向指针箭头的长度(px,沿连线方向) */
-export const VISUAL_ARROW_LENGTH = 10;
+/**
+ * 有向指针箭头的长度(px,沿连线方向).
+ *
+ * 与线宽(2,见 tokens.css 的 `--visual-pointer-width`)一起决定观感:箭头要比线明显粗一截,
+ * 但也不能大 -- 长了会盖掉整条短边(相邻两层的圆边之间只有十几像素),短了又不像箭头.
+ */
+export const VISUAL_ARROW_LENGTH = 8;
 
-/** 有向指针箭头的半宽(px,垂直连线方向;底边总宽 = 2 倍) */
-export const VISUAL_ARROW_HALF_WIDTH = 5;
+/**
+ * 有向指针箭头的半宽(px,垂直连线方向;底边总宽 = 2 倍).
+ *
+ * 底边总宽 7 = 线宽的 3.5 倍.这个比例是观感的**关键**:半宽等于长度(5)时张角 90°,
+ * 放大后是一枚等腰直角三角形,看着像鼠标指针;收到 3.5 后张角约 39°,两条斜边离平行
+ * 更近,才读得出"朝这个方向".
+ */
+export const VISUAL_ARROW_HALF_WIDTH = 3.5;
 
 /**
  * 节点的语义变体类名:`visualNodeVariantClass('red')` -> `visual-node--red`.

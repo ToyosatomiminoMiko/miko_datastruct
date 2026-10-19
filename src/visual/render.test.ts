@@ -14,6 +14,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { create_svg_element } from 'miko_ui';
 
 import {
+    VISUAL_ARROW_HALF_WIDTH,
+    VISUAL_ARROW_LENGTH,
     VISUAL_LINK_CLASS,
     VISUAL_LINK_EDGE_CLASS,
     VISUAL_LINK_POINTER_CLASS,
@@ -49,6 +51,12 @@ function stubBBox(world: SVGGElement, box: { x: number; y: number; width: number
     Object.defineProperty(world, 'getBBox', { value: () => box, configurable: true });
 }
 
+/** 从箭头的 `d`("M x y L x y L x y Z")里取出三个顶点:尖端 / 左底角 / 右底角 */
+function arrowPoints(d: string): [number, number][] {
+    const numbers = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    return [[numbers[0], numbers[1]], [numbers[2], numbers[3]], [numbers[4], numbers[5]]];
+}
+
 describe('视觉层:场景落笔与内容测量', () => {
     beforeEach(() => {
         document.body.innerHTML = '';
@@ -77,15 +85,19 @@ describe('视觉层:场景落笔与内容测量', () => {
         expect(link?.tagName.toLowerCase()).toBe('line');
         expect(link?.classList.contains(VISUAL_LINK_POINTER_CLASS)).toBe(true);
         expect(link?.classList.contains(VISUAL_LINK_EDGE_CLASS)).toBe(false);
-        expect(['x1', 'y1', 'x2', 'y2'].map((name) => link?.getAttribute(name)))
-            .toEqual(['0', '0', '70', '70']);
+        // 线段起点 = 指针起点;终点在箭头底边(尖端往回退一个箭头长度),不是尖端
+        const [x1, y1, x2, y2] = ['x1', 'y1', 'x2', 'y2']
+            .map((name) => Number(link?.getAttribute(name)));
+        expect([x1, y1]).toEqual([0, 0]);
+        expect(x2).toBeCloseTo(70 - VISUAL_ARROW_LENGTH / Math.SQRT2, 6);
+        expect(y2).toBeCloseTo(70 - VISUAL_ARROW_LENGTH / Math.SQRT2, 6);
 
         // 形状半径由 TS 常量写进 r 属性(不是 CSS)
         expect(world.querySelector(`.${VISUAL_NODE_SHAPE_CLASS}`)?.getAttribute('r'))
             .toBe(String(VISUAL_NODE_RADIUS));
     });
 
-    it('有向指针:线段后面跟一枚箭头,尖端落在终点', () => {
+    it('有向指针:末端一枚箭头,尖端落在终点,线段收在箭头底边', () => {
         const world = createWorld();
         stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
 
@@ -93,10 +105,43 @@ describe('视觉层:场景落笔与内容测量', () => {
 
         const arrow = world.querySelector(`.${VISUAL_POINTER_ARROW_CLASS}`);
         expect(arrow?.tagName.toLowerCase()).toBe('path');
-        expect(arrow?.getAttribute('d')).toContain('M 70 70');
+        const [tip, left, right] = arrowPoints(arrow?.getAttribute('d') ?? '');
+        expect(tip).toEqual([70, 70]);
+        // 线段终点 = 底边中点(不是尖端):否则线头会从三角形靠近尖端的窄处戳出来
+        const link = world.querySelector(`.${VISUAL_LINK_CLASS}`);
+        expect(Number(link?.getAttribute('x2'))).toBeCloseTo((left[0] + right[0]) / 2, 6);
+        expect(Number(link?.getAttribute('y2'))).toBeCloseTo((left[1] + right[1]) / 2, 6);
+        // 从线段终点到尖端正好一个箭头长度
+        expect(Math.hypot(tip[0] - Number(link?.getAttribute('x2')),
+            tip[1] - Number(link?.getAttribute('y2')))).toBeCloseTo(VISUAL_ARROW_LENGTH, 6);
         // 有向指针 = 1 条线 + 1 枚箭头
         expect(world.querySelectorAll(`.${VISUAL_LINK_CLASS}`)).toHaveLength(1);
         expect(world.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(1);
+    });
+
+    it('连线比箭头还短时:线段不退到起点之后,整条线就是那枚箭头', () => {
+        const world = createWorld();
+        stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
+
+        // 5px 的连线 < 10px 的箭头:底边最多退到起点,不能反向画
+        renderScene(world, {
+            nodes: [
+                { at: { x: 0, y: 0 }, label: 'A' },
+                { at: { x: 5, y: 0 }, label: 'B' },
+            ],
+            links: [{ from: { x: 0, y: 0 }, to: { x: 5, y: 0 }, directed: true }],
+        });
+
+        const link = world.querySelector(`.${VISUAL_LINK_CLASS}`);
+        expect([Number(link?.getAttribute('x2')), Number(link?.getAttribute('y2'))]).toEqual([0, 0]);
+        expect(world.querySelector(`.${VISUAL_POINTER_ARROW_CLASS}`)?.getAttribute('d'))
+            .toContain('M 5 0');
+    });
+
+    it('箭头是尖的:底宽小于长度(张角不到 90°)', () => {
+        // 底宽 = 长度时是一枚等腰直角三角形,放大后像鼠标指针而不是箭头;这条锁住
+        // VISUAL_ARROW_HALF_WIDTH / VISUAL_ARROW_LENGTH 的比例意图,数值可以调,比例不能反.
+        expect(VISUAL_ARROW_HALF_WIDTH * 2).toBeLessThan(VISUAL_ARROW_LENGTH);
     });
 
     it('无向边:只有线段,不画箭头', () => {
