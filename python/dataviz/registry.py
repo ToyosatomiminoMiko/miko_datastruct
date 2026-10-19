@@ -9,6 +9,9 @@
 
 没有手写 `roles=`:能推断的从注解 / 标量默认值推断,推断不出来的**报错**,不静默兜底.
 字段顺序 = 定义顺序 = Scene 里节点 / 边数组的顺序.
+
+检查结论不在这份 JSON 里:web 侧「检查配置」窗口按函数名选择检查,载入后现算;
+Python 侧只负责描述结构,不跑检查.
 """
 
 from __future__ import annotations
@@ -24,8 +27,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Callable, Iterable, Mapping
 
-from .diagram import CheckResult, Diagram
-from .errors import RegistrationError, RenderError
+from .diagram import Diagram
+from .errors import RegistrationError
 from .roles import Attr, Pointer, Role
 from .scene import Scene, SceneWriter
 from .spec import MISSING, FieldSpec, StructureSpec
@@ -64,7 +67,6 @@ class Registry:
         name: str | None = None,
         as_: str = "node",
         label: Callable[[Any], str] | str | None = None,
-        checks: Iterable[Callable[[Any], Any]] = (),
         subclasses: bool = False,
         override: bool = False,
         doc: str = "",
@@ -80,7 +82,6 @@ class Registry:
                 name=name,
                 as_=as_,
                 label=label,
-                checks=checks,
                 subclasses=subclasses,
                 override=override,
                 doc=doc,
@@ -97,7 +98,6 @@ class Registry:
         name: str | None,
         as_: str,
         label: Callable[[Any], str] | str | None,
-        checks: Iterable[Callable[[Any], Any]],
         subclasses: bool,
         override: bool,
         doc: str,
@@ -110,11 +110,6 @@ class Registry:
         structure_name = name if name is not None else _snake_case(cls.__name__)
         if not structure_name:
             raise RegistrationError("bad-name", "结构名不能为空")
-
-        check_tuple = tuple(checks)
-        for check in check_tuple:
-            if not callable(check):
-                raise RegistrationError("bad-check", f"checks 里只能是可调用对象,实际 {check!r}")
 
         conflicts: dict[int, StructureSpec] = {}
         for candidate in (self._by_name.get(structure_name), self._by_type.get(cls)):
@@ -135,7 +130,6 @@ class Registry:
             name=structure_name,
             as_=as_,
             label=label,
-            checks=check_tuple,
             subclasses=subclasses,
             doc=doc or inspect.getdoc(cls) or "",
         )
@@ -254,39 +248,12 @@ class Registry:
         return SceneWriter(self._graph(root)).write()
 
     def diagram(self, root: Any) -> Diagram:
-        """一次遍历,同时拿到 Scene 与 checks 结论;`Diagram.dumps()` 是 web 读的 JSON."""
+        """一次遍历拿到中性 Scene;`Diagram.dumps()` 是 web 读的 JSON."""
         graph = self._graph(root)
-        return Diagram(
-            root=root,
-            scene=SceneWriter(graph).write(),
-            checks=self._run_checks(graph),
-        )
+        return Diagram(root=root, scene=SceneWriter(graph).write())
 
     def _graph(self, root: Any) -> Graph:
         return RenderContext(self, root).traverse()
-
-    def _run_checks(self, graph: Graph) -> tuple[CheckResult, ...]:
-        root_record = graph.records[graph.root_oid]
-        if root_record.spec is None:
-            return ()
-        results: list[CheckResult] = []
-        for check in root_record.spec.checks:
-            name = getattr(check, "__name__", "check")
-            try:
-                outcome = check(graph.root)
-            except Exception as exc:
-                raise RenderError("check-failed", f"检查 {name} 抛错:{exc}", path="root") from exc
-            if isinstance(outcome, CheckResult):
-                results.append(outcome)
-            elif outcome is None or outcome is True:
-                results.append(CheckResult(name, True))
-            elif outcome is False:
-                results.append(CheckResult(name, False))
-            elif isinstance(outcome, str):
-                results.append(CheckResult(name, False, outcome))
-            else:
-                results.append(CheckResult(name, bool(outcome)))
-        return tuple(results)
 
     # 字段解析(延迟)
 

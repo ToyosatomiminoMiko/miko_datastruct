@@ -1,14 +1,14 @@
 /*
  * JSON 查看器的**桌面视图组件**(声明式):按 config.ts 的声明产出桌面背景(平面绘制面
- * 由视觉层 visual/surface.ts 建)与五扇窗口的正文节点,由 ui/viewer/viewer.ts 的
+ * 由视觉层 visual/surface.ts 建)与六扇窗口的正文节点,由 ui/viewer/viewer.ts 的
  * `mountViewer` 交给库的 `mountDesktop` 装配.
  *
  * 本模块是纯函数:不读页面,不改全局,不绑业务事件;列表行内容的装配在 viewer_items.ts,
  * 解析 / 布局 / 每轮重绘在 viewer.ts.
  *
- * 五扇窗口各装一件事:JSON 输入、实体列表、检查列表、诊断消息、帮助.
- * 实体与检查拆成两扇而不是一扇里两段:两件事的列表长度互不相干,拆开之后各自滚动、
- * 各自最小化,一栏不会被另一栏挤掉.
+ * 六扇窗口各装一件事:JSON 输入、实体列表、检查配置(编辑器)、检查列表、诊断消息、帮助.
+ * 实体 / 检查配置 / 检查拆成独立窗口而不是一扇里几段:几件事的长度互不相干,拆开之后
+ * 各自滚动、各自最小化,一栏不会被另一栏挤掉.
  */
 
 import {
@@ -21,6 +21,7 @@ import {
     type WindowContentSpec,
 } from 'miko_ui';
 import {
+    VIEWER_CHECK_SETUP_EDITOR_LABEL,
     VIEWER_DOM,
     VIEWER_EDITOR_GUTTER_MIN_WIDTH,
     VIEWER_EDITOR_PLACEHOLDER,
@@ -33,6 +34,7 @@ import {
     VIEWER_CHECK_EMPTY_TEXT,
     VIEWER_ENTITY_EMPTY_TEXT,
     VIEWER_WINDOW_CHECK,
+    VIEWER_WINDOW_CHECK_SETUP,
     VIEWER_WINDOW_DIAGNOSTICS,
     VIEWER_WINDOW_ENTITY,
     VIEWER_WINDOW_HELP,
@@ -45,7 +47,7 @@ import { createVisualSurface } from '@/visual/surface';
 /** 结构图那块绘制面的读屏标签(它不是纯装饰:画的是这一份 JSON 的结构) */
 const VIEWER_TREE_LABEL = '结构图';
 
-/** JSON 查看器的桌面视图:桌面背景 + 五扇窗口正文 + 行为代码要用的引用 */
+/** JSON 查看器的桌面视图:桌面背景 + 六扇窗口正文 + 行为代码要用的引用 */
 export interface ViewerViews {
     /** 平面视口(交给库当桌面背景,挂 `.desktop-background`) */
     readonly viewport: HTMLElement;
@@ -75,6 +77,10 @@ export interface ViewerViews {
     /** 空状态说明 */
     readonly entityEmpty: HTMLElement;
     readonly checkEmpty: HTMLElement;
+    /** 检查配置窗口的正文根(滚动归它) */
+    readonly checkSetupPanel: HTMLElement;
+    /** 检查配置编辑器:一段 JSON 数组,元素是检查函数名 */
+    readonly checkSetupEditor: CodeEditorHandle;
 }
 
 /** 一个列表窗口的正文:顶部一行说明 + 列表容器 + 空状态;交回面板与列表两个句柄 */
@@ -144,7 +150,7 @@ export function createViewerViews(): ViewerViews {
     diagnostics.element.id = VIEWER_DOM.diagnosticsPanelId;
 
     /*
-      五扇窗口的正文根各自是滚动容器(`ui-scrollbar` 是库的滚动条类):滑条贴着窗口边.
+      六扇窗口的正文根各自是滚动容器(`ui-scrollbar` 是库的滚动条类):滑条贴着窗口边.
       不套"卡片":库的 `.window-body` 已经裁好高度,窗口描边就是内容框. JSON 窗口
       只有编辑器(提示 / 错误在诊断窗口里).
     */
@@ -164,6 +170,28 @@ export function createViewerViews(): ViewerViews {
         checkSummary,
         VIEWER_DOM.checkListId,
         checkEmpty,
+    );
+
+    /*
+      检查配置窗口:与 JSON 窗口共用同一套 CodeEditor + JSON 词法高亮.
+      内容是一段 JSON 数组(元素 = 检查函数名);提示与可用函数名在帮助窗口里,
+      这一扇只放编辑器,不摆说明 / 状态行 / 目录.
+    */
+    const checkSetupEditor = createCodeEditor({
+        spellcheck: false,
+        highlight: highlightJson,
+        gutterMinWidth: VIEWER_EDITOR_GUTTER_MIN_WIDTH,
+    });
+    checkSetupEditor.textarea.setAttribute('aria-label', VIEWER_CHECK_SETUP_EDITOR_LABEL);
+    const checkSetupEditorHost = create_element(
+        { tag: 'div' },
+        { id: VIEWER_DOM.checkSetupEditorId },
+        checkSetupEditor.element,
+    );
+    const checkSetupPanel = create_element(
+        { tag: 'div' },
+        { class: 'ui-scrollbar', id: VIEWER_DOM.checkSetupPanelId },
+        checkSetupEditorHost,
     );
 
     // 帮助窗口:静态说明,与这一轮的输入无关
@@ -187,6 +215,7 @@ export function createViewerViews(): ViewerViews {
     const bodies: Readonly<Record<ViewerWindowId, readonly Child[]>> = {
         [VIEWER_WINDOW_JSON]: [editorPanel],
         [VIEWER_WINDOW_ENTITY]: [entity.panel],
+        [VIEWER_WINDOW_CHECK_SETUP]: [checkSetupPanel],
         [VIEWER_WINDOW_CHECK]: [check.panel],
         [VIEWER_WINDOW_DIAGNOSTICS]: [diagnostics.element],
         [VIEWER_WINDOW_HELP]: [helpPanel],
@@ -204,6 +233,8 @@ export function createViewerViews(): ViewerViews {
         diagnostics,
         entityList: entity.list,
         checkList: check.list,
+        checkSetupPanel,
+        checkSetupEditor,
         entityCount,
         checkSummary,
         entityEmpty,

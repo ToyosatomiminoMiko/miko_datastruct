@@ -44,10 +44,10 @@ def _node(key: int, color: Color, left: RbtNode | None = None, right: RbtNode | 
 
 
 def sample_tree() -> RbtNode:
-    """与 web 首屏示例同构的一棵小树."""
+    """一棵合法的 7 节点红黑树:颜色 / 黑高 / 搜索树顺序都由 web 的注册检查器验证."""
     return _node(
         13,
         Color.BLACK,
-        _node(8, Color.RED, _node(1, Color.BLACK), _node(11, Color.RED)),
+        _node(8, Color.RED, _node(1, Color.BLACK), _node(11, Color.BLACK)),
         _node(17, Color.RED, _node(15, Color.BLACK), _node(25, Color.BLACK)),
     )

@@ -1,4 +1,7 @@
-"""三个例子的端到端结果:Scene 结构、checks 结论,以及 web 读的 JSON."""
+"""三个例子的端到端结果:Scene 结构与 web 读的 JSON.
+
+JSON 里没有检查结论,也没有结构名:要跑哪些检查由 web 侧「检查配置」窗口单独给.
+"""
 
 from __future__ import annotations
 
@@ -45,20 +48,12 @@ class GraphExampleTest(unittest.TestCase):
         self.assertEqual(edges.count((1, 3)), 1)  # N-E
         self.assertEqual(edges.count((2, 3)), 1)  # S-E
 
-    def test_euler_check_fails(self):
-        self.assertEqual(len(self.diagram.checks), 1)
-        check = self.diagram.checks[0]
-        self.assertFalse(check.passed)
-        self.assertIn("奇数度节点", check.detail)
-        self.assertIn("K(度5)", check.detail)
-
-    def test_json_carries_checks(self):
+    def test_json_has_only_scene_graphics(self):
+        # 结构名与检查结论都不进 JSON:检查由 web 的「检查配置」窗口选择
         data = json.loads(self.diagram.dumps())
         self.assertEqual(data["nodes"][0], {"key": 0, "label": "K"})
         self.assertEqual(len(data["edges"]), 7)
-        self.assertEqual(len(data["checks"]), 1)
-        self.assertFalse(data["checks"][0]["passed"])
-        self.assertIn("奇数度节点", data["checks"][0]["detail"])
+        self.assertNotIn("checks", data)
 
 
 class RbtExampleTest(unittest.TestCase):
@@ -76,7 +71,7 @@ class RbtExampleTest(unittest.TestCase):
                 {"color": "black"},
                 {"color": "red"},
                 {"color": "black"},
-                {"color": "red"},
+                {"color": "black"},
                 {"color": "red"},
                 {"color": "black"},
                 {"color": "black"},

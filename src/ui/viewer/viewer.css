@@ -15,6 +15,7 @@
 /* 窗口正文根(类名 `ui-scrollbar` 由库的 scrollbar.css 给外观):滚动归这一层 */
 #viewerEditorPanel,
 #viewerEntityPanel,
+#viewerCheckSetupPanel,
 #viewerCheckPanel,
 #viewerHelpPanel {
     overflow: auto;
@@ -268,6 +269,19 @@
     line-height: 1.45;
     color: var(--viewer-detail-line-color);
     overflow-wrap: anywhere;
+}
+
+/*
+ * 检查配置窗口:与 JSON 窗口一样,正文里只有编辑器(说明 / 可用函数名在帮助窗口).
+ * 编辑器外框占满整高;`.code-editor` 的 `min-height: 100%` 需要宿主高度确定.
+ */
+#viewerCheckSetupEditor {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#viewerCheckSetupEditor .code-editor {
+    min-height: max(100%, var(--viewer-input-min-height));
 }
 
 /* 帮助窗口:组标题 + 若干行说明 */

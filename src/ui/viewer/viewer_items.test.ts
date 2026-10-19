@@ -9,7 +9,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { SceneDocumentCheck, SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
 import { CheckItem, EntityItem } from '@/ui/viewer/viewer_items';
 
 beforeEach(() => {
@@ -25,7 +26,7 @@ function entityNode(overrides: Partial<SceneDocumentNode> = {}): SceneDocumentNo
     };
 }
 
-function check(overrides: Partial<SceneDocumentCheck> = {}): SceneDocumentCheck {
+function check(overrides: Partial<SceneCheckResult> = {}): SceneCheckResult {
     return {
         name: '根节点为黑色',
         passed: true,

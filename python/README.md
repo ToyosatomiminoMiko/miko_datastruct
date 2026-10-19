@@ -1,10 +1,11 @@
 # Python 侧:用普通类生成中性 JSON
 
-> 状态:**demo**(两种字段角色 / 三种结构种类 / 遍历 / Scene / checks / JSON 输出已实现)。
+> 状态:**demo**(两种字段角色 / 三种结构种类 / 遍历 / Scene / JSON 输出已实现)。
 > 纯标准库,不需要安装。
 
 这一半回答的问题是:**用户怎样用普通 Python 类描述一种结构,库怎样把它变成 web 直接消费的
-中性 JSON**。它不画图、不算布局、不碰像素,也不跑服务。
+中性 JSON**。它不画图、不算布局、不碰像素,也不跑服务。性质检查也不在这一半:JSON 只写
+结构内容;要跑哪些检查由 web 侧「检查配置」窗口单独选。
 
 ## 两半的分工:不是前后端
 
@@ -13,18 +14,21 @@
 ┌─────────────────────┐  遍历   ┌──────────┐  写端   ┌─────────────────────────────┐
 │ @reg.structure 的类 │ ──────> │ 中性图    │ ──────> │ 中性 JSON                    │
 │ 属性 / 有向指针      │  身份   │ 记录/指针 │         │ nodes / pointers / edges    │
-└─────────────────────┘  共享/环 └──────────┘         │ + checks                    │
+└─────────────────────┘  共享/环 └──────────┘         │                             │
                                                        └──────────────┬──────────────┘
                                                                       │ 文件 / 剪贴板
                                                                       ▼
-                                                           ┌─────────────────────┐
-                                                           │ web:布局 + SVG 落笔  │
-                                                           └─────────────────────┘
+                                                    ┌─────────────────────────────────┐
+                                                    │ web:按检查配置跑检查              │
+                                                    │     + 布局 + SVG 落笔            │
+                                                    └─────────────────────────────────┘
 ```
 
 - **没有 HTTP、没有进程间调用**:Python 写出一份 JSON(文件或剪贴板),web 读这份 JSON。
 - **只有一种输出**:web 读的**中性 JSON**。`Scene` 是其中的可视化部分(节点 / 有向指针 /
-  无向边,**没有像素坐标**);`Diagram` 再带上 `checks`,合并成 web 的完整输入文档。
+  无向边,**没有像素坐标**);`Diagram` 就是 web 的完整输入文档。
+- **检查结论与结构名都不在 JSON 里**:JSON 只描述结构;要跑哪些性质检查由 web 侧
+  「检查配置」窗口按函数名选择、载入后现算。
 - Scene **不标树 / 图**:那是内容本身的性质,由 web 从图元推出来,不进中性表示。
 - 两半共用同一套词汇:**属性 / 指针 / 边 / 聚合根**。
 
@@ -43,14 +47,7 @@ python3 -m unittest discover -s tests -t .
 {
   "nodes": [{"key": 0, "label": "K"}, "...": "..."],
   "pointers": [],
-  "edges": [{"a": 0, "b": 1}, "...": "..."],
-  "checks": [
-    {
-      "name": "_check_euler_circuit",
-      "passed": false,
-      "detail": "奇数度节点:K(度5), N(度3), S(度3), E(度3) -- 不存在欧拉回路"
-    }
-  ]
+  "edges": [{"a": 0, "b": 1}, "...": "..."]
 }
 ```
 
@@ -127,15 +124,12 @@ README 的"输入:中性场景 JSON"一节一致。
     { "key": 1, "label": "8",  "attrs": { "color": "red" } }
   ],
   "pointers": [{ "from": 0, "to": 1 }],
-  "edges": [{ "a": 0, "b": 1, "label": "name=桥1", "attrs": { "name": "桥1" } }],
-  "checks": [
-    { "name": "根节点为黑色", "passed": true },
-    { "name": "各路径黑色节点数量相同", "passed": false, "detail": "较浅一侧 1, 较深一侧 2" }
-  ]
+  "edges": [{ "a": 0, "b": 1, "label": "name=桥1", "attrs": { "name": "桥1" } }]
 }
 ```
 
-- `nodes` / `pointers` / `edges` 是三种图元,方向语义严格区分;`checks` 可省略;
+- `nodes` / `pointers` / `edges` 是三种图元,方向语义严格区分;
+- JSON 里**没有结构名、没有检查结论**:要跑哪些检查由 web 侧「检查配置」窗口单独给;
 - `nodes[].key` 是**整数**,按遍历顺序从 0 开始,在 nodes 内唯一;
 - `pointers[].from` / `to`、`edges[].a` / `b` 都引用节点 key;
 - pointer / edge **自己不带 key**:现在没有别的图元引用它们,`n0` / `e0` 这种前缀也因此
@@ -151,17 +145,6 @@ README 的"输入:中性场景 JSON"一节一致。
 - 边 `label` 是展示文字;`attrs` 里放它的其余属性;
 - `None` 不当成值,不进 `attrs`(JSON 里省略);空 attrs 也省略。
 
-### checks
-
-`Diagram.dumps()` 把结构检查的结论一起写进 JSON:
-
-- `checks[]` = `{ name, passed, detail? }`;
-- `checks=(callable,)` 可选:可调用对象吃根对象,返回 `None` / `True`(PASS)、
-  `False`(FAIL)、`str`(FAIL + 细节)或 `CheckResult`;
-- `name` 默认取可调用对象的 `__name__`;
-- web 输入契约里还有可选的 `details`(展开行)与 `node`(定位目标),Python 侧暂时没有对应
-  的 API(见"未实现")。
-
 ### 和 web 侧的一一对应
 
 | Python 侧 | web 侧 |
@@ -171,7 +154,6 @@ README 的"输入:中性场景 JSON"一节一致。
 | `Pointer` | 有向连接(画布上目前是无线段) |
 | `as_="edge"` | 无向边(画布上目前是无线段) |
 | `attrs` | 各结构自己的渲染 / 样式映射(没有 `variant` 字段) |
-| `checks` | 检查窗口的结论行 |
 | `label` 钩子 | 节点的展示文字 |
 
 **关键差异**:web 的 `VisualScene` 带世界坐标,Python 的 Scene **不带**。布局由 web 侧从
@@ -236,7 +218,7 @@ class Bridge:
     a: Place
     b: Place
 
-@reg.structure(as_="container", checks=(check_euler_circuit,))
+@reg.structure(as_="container")
 @dataclass
 class Graph:
     nodes: list[Place] = field(default_factory=list)
@@ -244,7 +226,8 @@ class Graph:
 ```
 
 4 块陆地、7 座桥(其中 K-N、K-S 各两座,多重边靠不同的 Bridge 对象表达),度数
-K=5、N=3、S=3、E=3,`check_euler_circuit` 返回 FAIL:不存在欧拉回路。
+K=5、N=3、S=3、E=3.在 web 的「检查配置」窗口里填上 `checkEulerCircuit`,载入时就会
+算出"不存在欧拉回路".
 
 ## 目录结构
 
@@ -257,7 +240,7 @@ python/
   dataviz/registry.py      注册表 + 字段发现 + 角色推断 + 输出出口
   dataviz/traversal.py     遍历:身份 / 共享 / 环 / 方向 / 上限 / 路径
   dataviz/scene.py         Scene 写端(节点 / 有向指针 / 无向边)+ JSON
-  dataviz/diagram.py       Diagram(scene + checks)+ 完整 JSON
+  dataviz/diagram.py       Diagram(scene)+ 完整 JSON
   dataviz/backend.py       JsonBackend / Backend 协议
   dataviz/formatting.py    属性值格式化(标签 / JSON 标量)
   examples/                node / 柯尼斯堡七桥 / 红黑树
@@ -275,7 +258,7 @@ python/
 - 结构种类:`node` / `edge`(恰好两端点)/ `container`;
 - 遍历:身份 / 共享 / 环 / 路径 / 深度与节点数上限 / 指针运行时类型检查 / `on_unknown="opaque"`;
 - Scene 写端:节点 key / label / `attrs` / 有向指针(`from -> to`)/ 无向边 / JSON;
-- `checks` + `Diagram.dumps()`:一份 JSON 同时含三种图元与检查结论;
+- `Diagram.dumps()`:一份 JSON 只含三种图元,不含结构名 / 检查结论;
 - `describe()`、`snapshot()`、`finalize()`、`subclasses=True`;
 - 三个端到端例子 + unittest。
 
@@ -285,7 +268,6 @@ python/
   不要把 `directed` 布尔塞进 `edge`;
 - **数组 / 内存块**:`list[int]` 目前明确报 `unsupported-list`,以后作为单独的结构种类加;
 - `scene=` 完全接管(矩阵 / 多重图这类默认图元拼不出来的结构);
-- `checks` 的 `details` / `node`(展开行与「定位」目标)还没有 Python API;
 - SVG / Graphviz / Matplotlib 后端,以及**布局**(像素坐标);
 - web 视觉层的"有向箭头 / 无向边"两个图元(当前 `pointers` 与 `edges` 都画成无线段)。
 
@@ -299,4 +281,4 @@ python3 -m unittest discover -s tests -t .
 测试按层分布:`test_registry.py`(注册 / 查询 / 覆盖 / 快照 / 参数校验)、
 `test_fields.py`(字段发现 / 角色推断 / edge 与 container 校验 / 报错码)、
 `test_scene.py`(标签 / attrs / 有向指针 / 无向边 / 错误)、`test_examples.py`
-(三个例子的 Scene / checks / JSON 端到端结果)。
+(三个例子的 Scene / JSON 端到端结果)。

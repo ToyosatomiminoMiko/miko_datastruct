@@ -3,6 +3,9 @@
  *
  * 钉三件事:合法文档能读成什么形状(含省略字段的默认值)、每一类结构错误的稳定错误码、
  * 以及未知字段被忽略(向前兼容:Python 侧加字段时旧 web 不拒收).
+ *
+ * 检查结论与结构名都不是文档字段:解析器只认 nodes / pointers / edges,`checks` /
+ * `structure` 这类旧字段会被当成未知字段忽略.检查由查看器的检查配置在载入后现算.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -26,15 +29,14 @@ function expectError(source: string, code: string): SceneDocumentError {
 }
 
 describe('中性场景文档:解析', () => {
-    it('最小文档:只有 nodes;指针 / 边 / 检查都默认成空数组', () => {
+    it('最小文档:只有 nodes;指针 / 边默认成空数组', () => {
         const document = parseSceneDocument('{"nodes":[{"key":0,"label":"A"}]}');
         expect(document.nodes).toEqual([{ key: 0, label: 'A', attrs: {} }]);
         expect(document.pointers).toEqual([]);
         expect(document.edges).toEqual([]);
-        expect(document.checks).toEqual([]);
     });
 
-    it('完整文档:attrs / pointer / edge / check 全部读出来', () => {
+    it('完整文档:attrs / pointer / edge 全部读出来', () => {
         const document = parseSceneDocument(JSON.stringify({
             nodes: [
                 { key: 0, label: '10', attrs: { color: 'black', weight: 2, visited: false } },
@@ -42,13 +44,6 @@ describe('中性场景文档:解析', () => {
             ],
             pointers: [{ from: 0, to: 1 }],
             edges: [{ a: 0, b: 1, label: '桥', attrs: { weight: 3 } }],
-            checks: [{
-                name: '根节点为黑色',
-                passed: true,
-                detail: '',
-                details: ['说明 1', '说明 2'],
-                node: 0,
-            }],
         }));
 
         expect(document.nodes[0]).toEqual({
@@ -63,44 +58,29 @@ describe('中性场景文档:解析', () => {
             label: '桥',
             attrs: { weight: 3 },
         }]);
-        expect(document.checks).toEqual([{
-            name: '根节点为黑色',
-            passed: true,
-            detail: '',
-            details: ['说明 1', '说明 2'],
-            node: 0,
-        }]);
     });
 
-    it('省略字段的默认值:edge label -> null,check 的 detail / details / node -> 空 / 空 / null', () => {
+    it('省略字段的默认值:edge label -> null', () => {
         const document = parseSceneDocument(JSON.stringify({
             nodes: [{ key: 0, label: 'A' }, { key: 1, label: 'B' }],
             edges: [{ a: 0, b: 1 }],
-            checks: [{ name: '有环', passed: false }],
         }));
 
         expect(document.edges[0]).toEqual({ a: 0, b: 1, label: null, attrs: {} });
-        expect(document.checks[0]).toEqual({
-            name: '有环',
-            passed: false,
-            detail: '',
-            details: [],
-            node: null,
-        });
     });
 
-    it('空文档 {}:四组都是空数组(UI 据此显示"没有内容"而不是报错)', () => {
+    it('空文档 {}:三组图元都是空的(UI 据此显示"没有内容"而不是报错)', () => {
         expect(parseSceneDocument('{}')).toEqual({
             nodes: [],
             pointers: [],
             edges: [],
-            checks: [],
         });
     });
 
-    it('未知字段忽略:向前兼容 Python 侧以后加字段', () => {
+    it('未知字段忽略:向前兼容,旧的 checks / structure 字段不再有语义也不拒收', () => {
         const document = readSceneDocument({
-            kind: 'rbt',
+            structure: 'rbt',
+            checks: [{ name: '旧字段', passed: false }],
             nodes: [{ key: 0, label: 'A', extra: 'ignored' }],
         });
         expect(document.nodes).toHaveLength(1);
@@ -171,20 +151,5 @@ describe('中性场景文档:结构错误', () => {
             '{"nodes":[{"key":0,"label":"A"}],"edges":[{"a":0,"b":0,"label":1}]}',
             'edge-shape',
         ).path).toBe('edges[0].label');
-    });
-
-    it('check 的 name / passed / details 形状错 -> check-shape', () => {
-        expect(expectError('{"checks":[{"passed":true}]}', 'check-shape').path).toBe('checks[0].name');
-        expect(expectError('{"checks":[{"name":"  ","passed":true}]}', 'check-shape').path)
-            .toBe('checks[0].name');
-        expect(expectError('{"checks":[{"name":"x","passed":"yes"}]}', 'check-shape').path)
-            .toBe('checks[0].passed');
-        expect(expectError('{"checks":[{"name":"x","passed":true,"details":[1]}]}', 'check-shape').path)
-            .toBe('checks[0].details');
-    });
-
-    it('check.node 引用不存在的节点 -> check-ref', () => {
-        expect(expectError('{"checks":[{"name":"x","passed":false,"node":3}]}', 'check-ref').path)
-            .toBe('checks[0].node');
     });
 });

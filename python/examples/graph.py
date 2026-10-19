@@ -17,7 +17,9 @@
     S-E  ×1   Hohe Brücke
 
 度数 K=5、N=3、S=3、E=3,全是奇数 —— 所以不存在欧拉回路,这正是欧拉 1736 年的结论.
-`checks` 把这件事算出来:PASS 时返回 None,否则返回一行说明.
+
+这段结论**不在 JSON 里**:web 侧注册了 `checkEulerCircuit`,在「检查配置」窗口里填上它
+就会在载入时现算并显示在检查窗口.本文件只负责描述图.
 """
 
 from __future__ import annotations
@@ -46,22 +48,7 @@ class Bridge:
     b: Place
 
 
-def _check_euler_circuit(graph: "Graph") -> str | None:
-    """欧拉回路条件:所有节点度数都是偶数.返回 None = PASS,字符串 = FAIL 细节."""
-    odd: list[str] = []
-    for place in graph.nodes:
-        degree = sum(1 for bridge in graph.edges if bridge.a is place or bridge.b is place)
-        if degree % 2 == 1:
-            odd.append(f"{place.key}(度{degree})")
-    if odd:
-        return "奇数度节点:" + ", ".join(odd) + " -- 不存在欧拉回路"
-    return None
-
-
-@graph_registry.structure(
-    as_="container",
-    checks=(_check_euler_circuit,),
-)
+@graph_registry.structure(as_="container")
 @dataclass
 class Graph:
     """整张图:自己不出现在画面里;两个字段都是 0..n 条指针."""

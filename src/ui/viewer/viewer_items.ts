@@ -12,8 +12,8 @@
  *   `<details>`(默认收起,展开态在行重建时用库的 carryDetailsOpen 保留),
  *   FAIL 且有 `node` 时行末「定位」移到违规节点.
  *
- * 不在这里做数据校验 / 文案拼接:输入已经过 datastruct/scene 的解析器,文案来自
- * JSON 本身(config 只给 PASS / FAIL 与按钮字).
+ * 不在这里做数据校验 / 文案拼接:输入已经过 datastruct/scene 的解析器,检查文案来自
+ * 检查器(config 只给 PASS / FAIL 与按钮字).
  */
 
 import {
@@ -24,7 +24,8 @@ import {
     createObjectRow,
     create_element,
 } from 'miko_ui';
-import type { SceneDocumentCheck, SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
 import {
     VIEWER_ATTRIBUTE_CLASS,
     VIEWER_CHECK_FAIL_TEXT,
@@ -139,7 +140,7 @@ export class CheckItem {
     /** 行引擎要的句柄:行根元素 */
     readonly row: HTMLElement;
 
-    constructor(check: SceneDocumentCheck, onLocate: (() => void) | null) {
+    constructor(check: SceneCheckResult, onLocate: (() => void) | null) {
         const stateClass = check.passed ? 'is-pass' : 'is-fail';
         const badge = createBadge(
             check.passed ? VIEWER_CHECK_PASS_TEXT : VIEWER_CHECK_FAIL_TEXT,
@@ -196,7 +197,7 @@ export class CheckItem {
     }
 
     /** 内容键:会被渲染的全部内容(名字 / 状态 / 一句话 / 补充行) */
-    static cacheKey(check: SceneDocumentCheck): string {
+    static cacheKey(check: SceneCheckResult): string {
         return JSON.stringify([
             check.name,
             check.passed,

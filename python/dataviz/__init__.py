@@ -12,8 +12,11 @@
 
 - `Registry.to_scene()` / `Diagram.scene`:节点 / 有向指针 / 无向边的中性场景(没有像素
   坐标;结构特有的属性在 `attrs`);
-- `Registry.diagram()` 额外跑 `checks`,并把检查结论一起放进 JSON;`Diagram.dumps()` 就是
-  一份可以直接粘进 web 的文档(`nodes` / `pointers` / `edges` / `checks`).
+- `Registry.diagram()` 把 Scene 包成 `Diagram`,`Diagram.dumps()` 就是一份可以直接粘进
+  web 的文档(`nodes` / `pointers` / `edges`).
+
+**JSON 里没有检查结论**:要跑哪些检查由 web 侧「检查配置」窗口单独决定;这个库只负责
+描述结构,不替 web 决定"什么算 PASS".
 
 典型用法:
 
@@ -37,7 +40,7 @@
 from __future__ import annotations
 
 from .backend import Backend, JsonBackend
-from .diagram import CheckResult, Diagram
+from .diagram import Diagram
 from .errors import DatavizError, RegistrationError, RenderError, TraversalError
 from .roles import Attr, Pointer, Role
 from .scene import Scene, SceneEdge, SceneNode, ScenePointer, SceneWriter
@@ -61,7 +64,6 @@ __all__ = [
     "Pointer",
     # 输出
     "Diagram",
-    "CheckResult",
     "Scene",
     "SceneNode",
     "ScenePointer",

@@ -1,10 +1,14 @@
 // JSON 查看器的显示层声明:DOM 契约、窗口清单、任务栏动作、默认 JSON 与帮助文案.
 //
-// 这里只放**显示值**:中性文档的解析与校验在 datastruct/scene,自动布局在
-// visual/layout,本文件不含图元与布局算法.红黑树的语义色只作为"一个示例结构"出现
-// (默认 JSON + 节点 red / black 变体的样式),查看器本身不认识红黑树.
+// 这里只放**显示值**:中性文档的解析与校验在 datastruct/scene,性质检查的注册与运行在
+// datastruct/checks,自动布局在 visual/layout,本文件不含图元 / 检查 / 布局算法.
+// 红黑树只作为"一个示例结构"出现(默认 JSON + 节点 red / black 变体 + 注册在 web 侧的
+// rbt 检查集),查看器的通用部分不认识红黑树.
 
 import type { DockActionSpec, WindowConfigEntry } from 'miko_ui';
+
+import { RBT_CHECKS } from '@/datastruct/rbt/rbt_checks';
+import { dumpCheckConfig } from '@/ui/viewer/check_config';
 
 // DOM 契约(id 由 src/ui/viewer/viewer.css 命中)
 
@@ -35,6 +39,10 @@ export const VIEWER_DOM = {
     checkListId: 'viewerCheckList',
     /** 检查抬头(几条中几条 FAIL) */
     checkSummaryId: 'viewerCheckSummary',
+    /** 检查配置窗口的正文根(滚动归它) */
+    checkSetupPanelId: 'viewerCheckSetupPanel',
+    /** 检查配置编辑器的宿主(库的 CodeEditor 外框长在它里面) */
+    checkSetupEditorId: 'viewerCheckSetupEditor',
 } as const;
 
 // 桌面窗口
@@ -48,6 +56,9 @@ export const VIEWER_WINDOW_ENTITY = 'entity';
 /** 检查列表窗口的 id */
 export const VIEWER_WINDOW_CHECK = 'check';
 
+/** 检查配置窗口的 id:按函数名选择性质检查 */
+export const VIEWER_WINDOW_CHECK_SETUP = 'check-setup';
+
 /** 诊断窗口的 id:解析错误 / 空输入提示都走库的消息区 */
 export const VIEWER_WINDOW_DIAGNOSTICS = 'diagnostics';
 
@@ -58,6 +69,7 @@ export const VIEWER_WINDOW_HELP = 'help';
 export type ViewerWindowId =
     | typeof VIEWER_WINDOW_JSON
     | typeof VIEWER_WINDOW_ENTITY
+    | typeof VIEWER_WINDOW_CHECK_SETUP
     | typeof VIEWER_WINDOW_CHECK
     | typeof VIEWER_WINDOW_DIAGNOSTICS
     | typeof VIEWER_WINDOW_HELP;
@@ -69,17 +81,18 @@ export const VIEWER_DESKTOP_INSET = 16;
 export const VIEWER_WINDOW_WIDTH = 430;
 
 /**
- * 五扇窗口的声明(数组顺序 = 任务栏按钮顺序 = 初始 z 序).
+ * 六扇窗口的声明(数组顺序 = 任务栏按钮顺序 = 初始 z 序).
  *
  * 左右各一栏,中间留给背景那幅结构图:
  * - JSON 窗口在左上,占工作区高度的 42%;
- * - 诊断窗口在 JSON 下方(`after`),占 20%:解析错误 / 空输入提示走库的消息区;
+ * - 诊断窗口在 JSON 下方(`after`),占 20%:解析错误 / 空输入 / 检查配置错误提示走消息区;
  * - 帮助窗口在诊断下方(`after`),接到桌面下沿;
- * - 实体窗口在右上,占 42%;
- * - 检查窗口在实体下方(`after`),接到桌面下沿.
+ * - 实体窗口在右上,占 30%;
+ * - 检查配置窗口在实体下方(`after`),占 22%:一段 JSON 数组,元素是检查函数名;
+ * - 检查窗口在检查配置下方(`after`),接到桌面下沿.
  *
- * 实体 / 检查 / 诊断各成一扇(而不是一扇里几段):三件事的列表长度互不相干,拆开之后
- * 各自滚动、各自最小化,一栏不会被另一栏挤掉;JSON 窗口因此只剩编辑器.
+ * 实体 / 检查配置 / 检查 / 诊断各成一扇(而不是一扇里几段):几件事的列表长度互不相干,
+ * 拆开之后各自滚动、各自最小化,一栏不会被另一栏挤掉;JSON 窗口因此只剩编辑器.
  */
 export const VIEWER_DESKTOP_WINDOWS = [
     {
@@ -102,9 +115,23 @@ export const VIEWER_DESKTOP_WINDOWS = [
             x: { from: 'right', inset: VIEWER_DESKTOP_INSET },
             y: { at: VIEWER_DESKTOP_INSET },
             w: { at: VIEWER_WINDOW_WIDTH },
-            h: { fraction: 0.42, of: 'usableHeight' },
+            h: { fraction: 0.3, of: 'usableHeight' },
         },
-        minSize: { w: 300, h: 160 },
+        minSize: { w: 300, h: 140 },
+    },
+    {
+        id: VIEWER_WINDOW_CHECK_SETUP,
+        title: '检查配置',
+        dock: { label: '检查配置' },
+        defaultGeometry: {
+            // y 被 after 覆盖,按库的约定写占位值
+            x: { from: 'right', inset: VIEWER_DESKTOP_INSET },
+            y: { at: 0 },
+            w: { at: VIEWER_WINDOW_WIDTH },
+            h: { fraction: 0.22, of: 'usableHeight' },
+            after: { id: VIEWER_WINDOW_ENTITY, gap: VIEWER_DESKTOP_INSET },
+        },
+        minSize: { w: 300, h: 150 },
     },
     {
         id: VIEWER_WINDOW_CHECK,
@@ -116,7 +143,7 @@ export const VIEWER_DESKTOP_WINDOWS = [
             y: { at: 0 },
             w: { at: VIEWER_WINDOW_WIDTH },
             h: { from: 'bottom', inset: VIEWER_DESKTOP_INSET },
-            after: { id: VIEWER_WINDOW_ENTITY, gap: VIEWER_DESKTOP_INSET },
+            after: { id: VIEWER_WINDOW_CHECK_SETUP, gap: VIEWER_DESKTOP_INSET },
         },
         minSize: { w: 300, h: 160 },
     },
@@ -170,7 +197,7 @@ export const VIEWER_DOCK_ACTIONS = [
 
 /** JSON 编辑器的占位文案(库没有 placeholder 选项,建完写回 textarea) */
 export const VIEWER_EDITOR_PLACEHOLDER =
-    '粘贴一份中性场景 JSON:{"nodes":[{"key":0,"label":"A"}],"checks":[]}';
+    '粘贴一份中性场景 JSON:{"nodes":[{"key":0,"label":"10"}]}';
 
 /** 编辑器行号槽的宽度下限(px),交给 CodeEditor 的 gutterMinWidth */
 export const VIEWER_EDITOR_GUTTER_MIN_WIDTH = 32;
@@ -198,6 +225,29 @@ export const VIEWER_CHECK_SUMMARY = '{total} 条中 {failed} 条 FAIL';
 /** PASS / FAIL 的可见文字 */
 export const VIEWER_CHECK_PASS_TEXT = 'PASS';
 export const VIEWER_CHECK_FAIL_TEXT = 'FAIL';
+
+/**
+ * 检查配置里有未注册的函数名时的诊断提示(警告级:已注册的检查照跑).
+ *
+ * `{ids}` 是配置里写了、登记表里没有的函数名;可用函数名见帮助窗口.
+ */
+export const VIEWER_UNKNOWN_CHECK_TEXT = '检查配置里有未找到的检查函数: {ids}';
+
+/** 检查配置解析失败(JSON 语法 / 形状错)时诊断窗口的前缀 */
+export const VIEWER_CHECK_CONFIG_ERROR_PREFIX = '检查配置: ';
+
+// 检查配置窗口:JSON 数组形式的检查函数名
+
+/** 检查配置编辑器的读屏标签 */
+export const VIEWER_CHECK_SETUP_EDITOR_LABEL = '检查函数名(JSON 数组)';
+
+/**
+ * 默认示例 JSON 是红黑树,所以检查配置也预置 rbt 的五个检查.
+ *
+ * 换 JSON 时由用户把这份数组改成新结构要跑的检查;这里不按结构名自动切换 --
+ * checks 是显式配置,不是从数据里猜出来的.可用函数名见帮助窗口.
+ */
+export const VIEWER_EXAMPLE_CHECK_CONFIG = dumpCheckConfig(RBT_CHECKS.map((check) => check.id));
 
 /** 行末「定位」按钮的文案与可访问名前缀 */
 export const VIEWER_LOCATE_BUTTON_TEXT = '定位';
@@ -269,14 +319,14 @@ export const VIEWER_TOKEN_NUMBER_CLASS = 'viewer-token--number';
 export const VIEWER_TOKEN_LITERAL_CLASS = 'viewer-token--literal';
 export const VIEWER_TOKEN_PUNCT_CLASS = 'viewer-token--punct';
 
-// 默认 JSON:一棵故意写错的 6 节点红黑树
+// 默认 JSON:一棵故意写错的 5 节点红黑树
 //
 // 选一棵**有一处 FAIL** 的树而不是全 PASS:检查列表要同时展示 PASS / FAIL 两种行,
-// FAIL 行还要展示折叠详情与「定位」.这棵树的错在第三条(黑高):左子树多一层黑,
-// 2 节点黑高的 10B 两侧不一样.树本身仍然画得出来.
+// FAIL 行还要展示折叠详情与「定位」.这棵树的错在黑高:10B 的左子树比右子树多一层黑.
+// 树本身仍然画得出来.
 //
-// 字段口径与 python/README.md 的 Scene 输出一致,只多一个 `checks`;checks 里的
-// `node` 是"这条结论指向哪个节点"(给「定位」用),`details` 是展开后的补充行.
+// 检查不写在 JSON 里:默认的检查配置(VIEWER_EXAMPLE_CHECK_CONFIG)预置了 rbt 的
+// 五条性质检查;字段口径与 python/README.md 的 Scene 输出一致(nodes / pointers / edges).
 
 export const VIEWER_EXAMPLE_JSON = `{
   "nodes": [
@@ -297,24 +347,7 @@ export const VIEWER_EXAMPLE_JSON = `{
     { "from": 1, "to": 3 },
     { "from": 0, "to": 4 }
   ],
-  "edges": [],
-  "checks": [
-    { "name": "根节点为黑色", "passed": true },
-    { "name": "红色节点的孩子都是黑色",
-      "passed": true },
-    {
-      "name": "各路径黑色节点数量相同",
-      "passed": false,
-      "detail": "节点 10B 两侧黑高不同: 较浅一侧 1, 较深一侧 2",
-      "details": [
-        "黑高按「节点到 nil 叶子」计,含节点自身的黑",
-        "左子树走 10B -> 5R -> 1B: 黑高 2",
-        "右子树走 10B -> 15R -> nil: 黑高 1"
-      ],
-      "node": 0
-    },
-    { "name": "二叉搜索树有序", "passed": true }
-  ]
+  "edges": []
 }`;
 
 // 帮助窗口:静态说明
@@ -331,8 +364,9 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
     {
         title: '输入是什么',
         lines: [
-            '一份中性场景 JSON = 一个结构:节点 (nodes)、有向指针 (pointers)、无向边 (edges)、检查结论 (checks)。',
+            '一份中性场景 JSON = 一个结构:节点 (nodes)、有向指针 (pointers)、无向边 (edges)。',
             '节点按 key 相互引用;pointers 与 edges 都引用 nodes[].key。',
+            'JSON 只描述结构内容,没有检查结论;要跑哪些检查由「检查配置」窗口单独决定。',
         ],
     },
     {
@@ -341,7 +375,15 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
             'nodes: [{ key, label, attrs? }] -- attrs 是结构特有属性 (如红黑树的 color)。',
             'pointers: [{ from, to }] -- 有向;树就是父 -> 子。',
             'edges: [{ a, b, label?, attrs? }] -- 无向;图里的边。',
-            'checks: [{ name, passed, detail?, details?, node? }] -- node 指向要定位的节点。',
+        ],
+    },
+    {
+        title: '性质检查',
+        lines: [
+            '检查器按函数名登记在查看器里,不写进 JSON;「检查配置」窗口决定这次跑哪些。',
+            '检查配置是一段 JSON 数组,元素是检查函数名;默认示例预置了 rbt 的五个检查。',
+            '可用函数名: rbt 的 checkColors / checkRootBlack / checkRedChildrenBlack / checkBlackHeight / checkBstOrder;graph 的 checkEulerCircuit。',
+            '函数名没注册:诊断窗口警告,已注册的检查照跑;配置 JSON 语法错:诊断窗口报错,检查窗口为空。',
         ],
     },
     {
@@ -356,8 +398,9 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
         title: '列表',
         lines: [
             '实体窗口: 每个节点一行, 显示 label 与 attrs。',
-            '检查窗口: 每条结论一行; FAIL 行可展开详情, 并可按 node 定位。',
-            '诊断窗口: JSON 解析失败 / 空输入提示走库的消息区 (错误 / 警告两级)。',
+            '检查窗口: 每条结论一行; FAIL 行可展开详情, 并可按结论里的节点定位。',
+            '检查配置窗口: 编辑检查函数名的 JSON 数组,内容变化后检查窗口立刻重算。',
+            '诊断窗口: JSON 解析失败 / 空输入 / 检查配置错误或未找到函数名走库的消息区 (错误 / 警告两级)。',
         ],
     },
 ];

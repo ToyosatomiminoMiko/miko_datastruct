@@ -1,20 +1,25 @@
 /*
  * JSON 查看器桌面:装配 + 每轮输入的全流程.
  *
- * 本文件只做挂载与串联:文档解析 / 校验在 datastruct/scene,自动布局在
- * visual/layout,行内容在 ui/viewer/viewer_items,窗口标记在 ui/viewer/viewer_views.
- * 装配顺序:先建内容,再 mountDesktop 建桌面三层与窗口外壳.
+ * 本文件只做挂载与串联:文档解析 / 校验在 datastruct/scene,性质检查的注册与运行在
+ * datastruct/checks(含「检查配置」窗口的函数名列表),自动布局在 visual/layout,行内容在
+ * ui/viewer/viewer_items,窗口标记在 ui/viewer/viewer_views.装配顺序:先建内容,再
+ * mountDesktop 建桌面三层与窗口外壳.
  *
  * 每轮输入(或首屏示例)的流程:
  *
  * ```text
  * textarea.value
  *   -> parseSceneDocument  (语法 / 结构校验,失败则只显示一行错误)
+ *   -> runSceneChecks      (按「检查配置」窗口里的检查函数名列表运行)
  *   -> layoutScene         (树形 / 环形,分量并排)
  *   -> 文档 + 布局 -> VisualScene (节点变体来自 attrs)
  *   -> renderScene         (整批重建世界层,量包围盒给视口)
  *   -> RowList.sync        (实体行 + 检查行,按内容键增量复用)
  * ```
+ *
+ * 检查结论**不是输入**:JSON 只描述结构,要跑哪些检查由「检查配置」窗口单独给;
+ * 换一份 JSON 不会出现"手写结论"和"真实结构"对不上的情况.
  */
 
 // 本模块引入样式:视觉层(visual.css:绘制面 / 节点 / 指针的通用观感)与查看器自己的
@@ -30,16 +35,26 @@ import {
     VIEWER_EMPTY_DOCUMENT_HINT_TEXT,
     VIEWER_EMPTY_HINT_TEXT,
     VIEWER_ERROR_UI_PREFIX,
+    VIEWER_EXAMPLE_CHECK_CONFIG,
     VIEWER_EXAMPLE_JSON,
     VIEWER_FIT_ACTION_ID,
 } from '@/ui/viewer/config';
 import { parseSceneDocument } from '@/datastruct/scene/scene_document_parse';
-import type { SceneDocument, SceneDocumentCheck, SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneDocument, SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneCheckResult } from '@/datastruct/scene/scene_check';
+import { runSceneChecks } from '@/datastruct/checks';
 import { layoutScene, type SceneLayout } from '@/visual/layout';
 import type { VisualScene } from '@/visual/scene';
 import { clearScene, renderScene } from '@/visual/render';
 import { mountPlaneViewport, type PlaneViewportHandle } from '@/visual/viewport';
-import { formatCheckSummary, formatDocumentError, nodeVariant } from '@/ui/viewer/viewer_format';
+import { parseCheckConfig } from '@/ui/viewer/check_config';
+import {
+    formatCheckConfigError,
+    formatCheckSummary,
+    formatDocumentError,
+    formatUnknownChecks,
+    nodeVariant,
+} from '@/ui/viewer/viewer_format';
 import { CheckItem, EntityItem } from '@/ui/viewer/viewer_items';
 import { createViewerViews } from '@/ui/viewer/viewer_views';
 import {
@@ -56,6 +71,7 @@ import {
 interface MountedViewer {
     readonly desktop: DesktopHandle;
     readonly editor: CodeEditorHandle;
+    readonly checkEditor: CodeEditorHandle;
     readonly viewport: PlaneViewportHandle;
 }
 
@@ -64,7 +80,7 @@ const mounted = new WeakMap<HTMLElement, MountedViewer>();
 /** 检查行在 RowList 里的唯一标识:同名检查可能重复出现,所以带上它在数组里的下标 */
 interface CheckRowItem {
     readonly id: string;
-    readonly check: SceneDocumentCheck;
+    readonly check: SceneCheckResult;
 }
 
 /**
@@ -107,6 +123,7 @@ export function mountViewer(host: HTMLElement): void {
     const previous = mounted.get(host);
     previous?.desktop.dispose();
     previous?.editor.dispose();
+    previous?.checkEditor.dispose();
     previous?.viewport.dispose();
     mounted.delete(host);
 
@@ -132,10 +149,12 @@ export function mountViewer(host: HTMLElement): void {
 
     const editor = views.editor;
     const input = editor.textarea;
+    const checkEditor = views.checkSetupEditor;
+    const checkInput = checkEditor.textarea;
     const worldEl = views.world;
     // 最近一次布局里"节点 key -> 平面坐标":「定位」按它移视口
     const positions = new Map<number, { x: number; y: number }>();
-    mounted.set(host, { desktop, editor, viewport });
+    mounted.set(host, { desktop, editor, checkEditor, viewport });
 
     const entityList = new RowList<SceneDocumentNode, EntityItem>(views.entityList);
     const checkList = new RowList<CheckRowItem, CheckItem>(views.checkList);
@@ -172,18 +191,18 @@ export function mountViewer(host: HTMLElement): void {
     };
 
     /** 实体数量 / 检查抬头 / 空状态 */
-    const updateListMeta = (document: SceneDocument): void => {
+    const updateListMeta = (document: SceneDocument, checks: readonly SceneCheckResult[]): void => {
         views.entityCount.hidden = false;
         views.entityCount.textContent = `共 ${document.nodes.length} 个节点`;
         views.entityEmpty.hidden = document.nodes.length > 0;
         views.checkSummary.hidden = false;
-        views.checkEmpty.hidden = document.checks.length > 0;
-        const failed = document.checks.filter((check) => !check.passed).length;
-        views.checkSummary.textContent = formatCheckSummary(document.checks.length, failed);
+        views.checkEmpty.hidden = checks.length > 0;
+        const failed = checks.filter((check) => !check.passed).length;
+        views.checkSummary.textContent = formatCheckSummary(checks.length, failed);
     };
 
     /** 检查行:每轮按内容键增量同步;展开态从同名旧行搬过来 */
-    const renderChecks = (checks: readonly SceneDocumentCheck[]): void => {
+    const renderChecks = (checks: readonly SceneCheckResult[]): void => {
         const items: CheckRowItem[] = checks.map((check, index) => ({ id: `check-${index}`, check }));
         checkList.sync(items, {
             name: (item) => item.id,
@@ -226,15 +245,32 @@ export function mountViewer(host: HTMLElement): void {
             return;
         }
 
-        // 既没有节点也没有检查:这份 JSON 是空的,画布与列表都没有内容可展示.
-        // 只有检查、没有节点的文档是合法的(例如"空结构"的结论),照常展示检查列表.
-        if (document.nodes.length === 0 && document.checks.length === 0) {
+        // 没有节点:画布与检查都没有对象可看,提示一句就结束(不跑检查,避免空的 PASS 行)
+        if (document.nodes.length === 0) {
             clearContent();
             showDiagnostics('warning', VIEWER_EMPTY_DOCUMENT_HINT_TEXT);
             return;
         }
 
+        /*
+          检查配置是独立的一段 JSON 数组(元素 = 检查函数名).配置本身错 / 有未注册的
+          名字都不影响画图:配置错 -> 这次不跑检查并报错;名字错 -> 已注册的照跑并警告.
+        */
+        let checkIds: readonly string[] = [];
+        let checkConfigError: unknown = null;
+        try {
+            checkIds = parseCheckConfig(checkInput.value);
+        } catch (error) {
+            checkConfigError = error;
+        }
+        const checkRun = runSceneChecks(document, checkIds);
+
         clearDiagnostics();
+        if (checkConfigError !== null) {
+            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}${formatCheckConfigError(checkConfigError)}`);
+        } else if (checkRun.unknownIds.length > 0) {
+            showDiagnostics('warning', formatUnknownChecks(checkRun.unknownIds));
+        }
 
         /*
           布局 / 落笔 / 列表是"解析通过之后"的事.解析器已经保证了引用与 key,这一步
@@ -252,8 +288,8 @@ export function mountViewer(host: HTMLElement): void {
             if (bounds !== null) viewport.contentChanged(bounds);
 
             renderEntities(document);
-            renderChecks(document.checks);
-            updateListMeta(document);
+            renderChecks(checkRun.checks);
+            updateListMeta(document, checkRun.checks);
         } catch (error) {
             clearContent();
             showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}渲染失败: ${formatDocumentError(error)}`);
@@ -261,6 +297,8 @@ export function mountViewer(host: HTMLElement): void {
     };
 
     input.addEventListener('input', render);
+    // 检查配置窗口与 JSON 窗口一样:输入即重算,不需要"应用"按钮
+    checkInput.addEventListener('input', render);
 
     /*
       打开页面时自动加载默认示例.
@@ -268,8 +306,12 @@ export function mountViewer(host: HTMLElement): void {
       走库的 `seedTextareaSource`(不抢焦点,也没有撤销历史要保);它不派发 input
       事件,所以装饰层与画布都得自己叫一次:先 refresh(重算行号 + 重绘高亮),
       再 render.
+
+      检查配置也预置一份与默认 JSON 匹配的 rbt 检查;换 JSON 时用户自己改这份数组.
     */
     seedTextareaSource(input, VIEWER_EXAMPLE_JSON);
     editor.refresh();
+    seedTextareaSource(checkInput, VIEWER_EXAMPLE_CHECK_CONFIG);
+    checkEditor.refresh();
     render();
 }

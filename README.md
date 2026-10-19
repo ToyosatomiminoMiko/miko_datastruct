@@ -1,29 +1,32 @@
 # miko_datastruct
 
 数据结构工具.仓库按"一份中性的 **JSON 表示** + 一块**可拖动缩放的平面** + 一块**列表式的检查面板**"
-组织:web 侧读 JSON 把结构画出来,并把节点属性与检查结论列成可展开的行;python 侧用普通
-Python 类描述结构,生成同一份 JSON.两侧**不是前后端**:没有 HTTP、没有进程在跑,只有
-一份共享的 JSON 契约.
+组织:web 侧读 JSON 把结构画出来,并按「检查配置」里选的函数名运行性质检查;python 侧
+用普通 Python 类描述结构,生成同一份 JSON.两侧**不是前后端**:没有 HTTP、没有进程在跑,
+只有一份共享的 JSON 契约.
 
 ```text
-Python 对象 ── dataviz 遍历 ──> 中性场景 JSON (nodes / pointers / edges + checks)
+Python 对象 ── dataviz 遍历 ──> 中性场景 JSON (nodes / pointers / edges)
                                         │ 文件 / 剪贴板
                                         ▼
                           web: JSON 查看器
-                          解析 / 校验 -> 自动布局 -> SVG 落笔
+                          解析 / 校验 -> 检查配置 -> 性质检查 -> 自动布局 -> SVG 落笔
                                      └─> 实体列表 + 检查列表
 ```
 
 web 这一半现在只认 JSON:
 
-- 输入是一份**中性场景 JSON**(一个结构 = 节点 + 有向指针 + 无向边 + 检查结论);
+- 输入是一份**中性场景 JSON**(一个结构 = 节点 + 有向指针 + 无向边);
+- **检查结论和结构名都不在 JSON 里**:JSON 只描述结构内容;要跑哪些性质检查由「检查配置」
+  窗口决定(一段 JSON 数组,元素是检查函数名),载入后现算;
 - 画布从连接关系自动推形状:只有指针且无环 -> 整齐树布局;有边 / 有环 -> 环形布局;
   多个连通分量并排;
 - 右侧**实体**与**检查**两扇窗口按 graphcalc 的**实体列表 / 求值列表**样式渲染:每个节点
   一行属性,每条检查一行结论;FAIL 行可展开详情,并可「定位」到背景平面上的对应节点;
 - 简写表达式(`13B(8R(...))`)与自定义 Term 表示已经**整套删除**:web 侧不再有表达式解析 /
   表达式高亮(JSON 编辑器自己的词法高亮保留),Python 侧也不再生成 Term;中性 JSON 是两侧
-  唯一的契约.红黑树只作为默认示例 JSON 出现在首屏.
+  唯一的契约.红黑树只作为默认示例 JSON 出现在首屏,默认的检查配置也预置了 rbt 的五个
+  检查函数名.
 
 ## 跑起来
 
@@ -55,7 +58,7 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 
 ## 输入:中性场景 JSON
 
-一份 JSON = 一个结构.`pointers` / `edges` / `checks` 可省略(默认空数组):
+一份 JSON = 一个结构.`pointers` / `edges` 可省略(默认空数组):
 
 ```json
 {
@@ -64,29 +67,20 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
     { "key": 1, "label": "5",  "attrs": { "color": "red" } }
   ],
   "pointers": [{ "from": 0, "to": 1 }],
-  "edges": [],
-  "checks": [
-    { "name": "根节点为黑色", "passed": true },
-    {
-      "name": "各路径黑色节点数量相同",
-      "passed": false,
-      "detail": "节点 10 两侧黑高不同",
-      "details": ["较浅一侧 1", "较深一侧 2"],
-      "node": 0
-    }
-  ]
+  "edges": []
 }
 ```
 
 | 字段 | 形状 | 说明 |
 | --- | --- | --- |
-| `nodes[].key` | 非负整数 | 文档内唯一;`pointers` / `edges` / `checks[].node` 都按它引用节点 |
+| `nodes[].key` | 非负整数 | 文档内唯一;`pointers` / `edges` 都按它引用节点 |
 | `nodes[].label` | 字符串 | 画在节点上、也是实体列表里的名字 |
 | `nodes[].attrs` | 对象,值只能是字符串 / 数字 / 布尔 | 结构特有属性;实体列表逐条显示,`color` 还决定节点配色(见下) |
 | `pointers[]` | `{ from, to }` | **有向**;树就是父 -> 子 |
 | `edges[]` | `{ a, b, label?, attrs? }` | **无向**;图里的一条边 |
-| `checks[]` | `{ name, passed, detail?, details?, node? }` | 检查结论;`node` 是「定位」的目标节点 |
 
+- **JSON 里没有检查结论,也没有结构名**:像"根是黑色"这种结论由 web 侧注册的检查器算,
+  不写在数据里;要跑哪些检查由「检查配置」窗口单独给;
 - 未知字段被忽略:Python 侧以后加字段时,旧的 web 不会拒收整份文档;
 - 解析器的错误带稳定错误码与路径(如 `pointers[0].to: 引用了不存在的节点 key: 9`),
   界面上显示成一行玫红文字;
@@ -95,11 +89,35 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
   其它颜色值原样进实体列表的"色块 + 明文值",没有对应样式时节点用基础填充色.
 
 **和 Python 侧的对应**:`python/dataviz/scene.py` 输出 `nodes` / `pointers` / `edges`
-(没有坐标),`checks` 由 `Diagram` 带着;`Diagram.dumps()` 把两者合并成**同一份 JSON**,
-与上面的输入契约逐字段一致.`python3 demo.py --out <目录>` 写出的 `<name>.json` 可以直接
-粘进 web(见 `python/README.md`).
+(没有坐标),`python/dataviz/diagram.py` 的 `Diagram.dumps()` 就是 web 读的同一份 JSON.
+`python3 demo.py --out <目录>` 写出的 `<name>.json` 可以直接粘进 web(见 `python/README.md`).
 
-## 界面:一个桌面,五扇窗口,一块平面
+## 性质检查:由「检查配置」窗口选择
+
+JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的知识,留在 web 侧:
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/datastruct/scene/scene_check.ts` | 注册表:检查 id -> 运行函数;`runSceneChecks` 按 id 列表运行 |
+| `src/datastruct/checks.ts` | 内置注册入口:模块加载时把 rbt / graph 的检查登记进去 |
+| `src/datastruct/rbt/rbt_checks.ts` | `rbt`:颜色合法 / 根黑 / 红孩子 / 黑高 / 搜索树有序(id 就是函数名) |
+| `src/datastruct/graph/graph_checks.ts` | `graph`:欧拉回路存在性(`checkEulerCircuit`) |
+| `src/ui/viewer/check_config.ts` | 「检查配置」编辑器内容(JSON 数组)的解析 |
+
+- **「检查配置」窗口和 JSON 窗口一样是 CodeEditor**,内容是一段 JSON 数组,元素是检查
+  函数名;默认示例预置了 rbt 的五个:`checkColors` / `checkRootBlack` /
+  `checkRedChildrenBlack` / `checkBlackHeight` / `checkBstOrder`;
+- 编辑器内容一变,检查窗口立刻重算;清空成 `[]` 就是"这次不跑检查";
+- 配置里写了没注册的函数名:已有检查照跑,诊断窗口警告"未找到的检查函数";
+- 配置 JSON 语法错 / 顶层不是数组:诊断窗口报"检查配置: ...",图照画,这次不跑检查;
+- 可用函数名在**帮助**窗口里列全;新增检查时写 `xxx_checks.ts` 导出
+  `SceneCheckDefinition[]`(`{ id, run }`),在 `src/datastruct/checks.ts` 里
+  `registerSceneChecks` 一行,再到帮助文案里补名字.
+
+为什么这样分:同一份 JSON 用不同版本的工具打开,检查结论应当由**工具**给出,而不是由
+生成数据的一方手写;检查是显式配置,不从数据里猜结构名,所以换 JSON 时检查不会被悄悄换掉.
+
+## 界面:一个桌面,六扇窗口,一块平面
 
 ```text
 #viewerViewport            桌面背景 —— 平面视口(铺满桌面、裁切、收指针手势)
@@ -109,24 +127,27 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 窗口层(压在背景之上)
 ├─ 窗口 "JSON"           只有编辑器宿主 #viewerEditor
 ├─ 窗口 "实体"           实体列表 #viewerEntityList(每个节点一行)
+├─ 窗口 "检查配置"       检查函数名 JSON 数组编辑器 #viewerCheckSetupEditor
 ├─ 窗口 "检查"           检查列表 #viewerCheckList(每条结论一行)
-├─ 窗口 "诊断"           库的消息区 #viewerDiagnosticsPanel(解析错误 / 空输入提示)
+├─ 窗口 "诊断"           库的消息区 #viewerDiagnosticsPanel(解析错误 / 空输入 / 检查配置错误)
 └─ 窗口 "帮助"           JSON 字段说明 + 画布手势 + 回正 / 定位的用法
 
 任务栏(库的 .dock)
-├─ 窗口按钮组           JSON / 实体 / 检查 / 诊断 / 帮助
+├─ 窗口按钮组           JSON / 实体 / 检查配置 / 检查 / 诊断 / 帮助
 └─ 桌面动作区           回正视图 + 全部还原(库的)
 ```
 
 - **树是背景,窗口是操作**:结构图铺在桌面上,JSON 窗口在左上、诊断 / 帮助依次在它下方,
-  实体在右上、检查在右下;窗口没盖住的地方就是平面本身;
-- 实体 / 检查 / 诊断各成一扇:几件事的列表长度互不相干,各自滚动 / 各自最小化,一栏不会
-  被另一栏挤掉;JSON 窗口因此只有编辑器,解析错误与空输入提示走诊断窗口的库消息区;
+  实体在右上、检查配置与检查在右下;窗口没盖住的地方就是平面本身;
+- 实体 / 检查配置 / 检查 / 诊断各成一扇:几件事的列表长度互不相干,各自滚动 / 各自最小化,
+  一栏不会被另一栏挤掉;JSON 窗口与检查配置窗口都只有编辑器,提示 / 错误走诊断或帮助窗口;
+- 「检查配置」是显式的检查函数名数组,不进 JSON:换一份 JSON 不会清掉你写的配置;说明与
+  可用函数名都收在**帮助**窗口,不在检查配置窗口里重复;
 - 平面**没有坐标系**(不画网格 / 轴 / 刻度):左键拖动平移、滚轮以指针为锚缩放;
 - 「回正视图」是桌面级动作(窗口最小化了背景仍然在),所以进库的任务栏,与「全部还原」
   并排;用户没手动挪过视角之前,每次重绘都会自动适应,挪过之后重绘不再动视角;
 - 「定位」是行级动作:实体行末的按钮把这个节点移到视口中心;FAIL 检查行末的按钮移到
-  `checks[].node` 指向的节点.定位按当前缩放与"至少 0.8"的较大者执行(整幅图很大时
+  检查结论里的 `node` 指向的节点.定位按当前缩放与"至少 0.8"的较大者执行(整幅图很大时
   自动适应会把视角压得很小),之后进入手动模式,要回自动适应就点「回正视图」.
 
 列表行沿用 graphcalc 的对象行骨架(库的 `RowList` + `createObjectRow` + `ui-badge`):
@@ -135,16 +156,18 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
   行末「定位」;窗口顶部一行 `共 N 个节点`;
 - **检查行**:PASS / FAIL 徽章 + 检查名 + 一行 `detail`;有 `details` 时收进 `<details>`
   (默认收起,行重建时展开态保留),FAIL 且有 `node` 时行末「定位」;窗口顶部一行
-  `n 条中 m 条 FAIL`.
+  `n 条中 m 条 FAIL`.检查名与文案来自注册的检查器,不读 JSON.
 
 ## 分层:datastruct / visual / ui
 
 依赖方向只有两条:**ui -> datastruct** 与 **ui -> visual**;`datastruct` 与 `visual` 互不
 认识.
 
-- **`src/datastruct/scene/`**:中性场景文档的**类型与解析 / 校验**.纯逻辑,不碰 DOM;
-  输入来自人(或 Python),所以所有结构性问题(JSON 语法 / 字段形状 / 悬空引用)都收在
-  这里,错误带稳定错误码与路径.
+- **`src/datastruct/`**:纯逻辑,不碰 DOM.
+  - `scene/` 中性场景文档的**类型与解析 / 校验**:输入来自人(或 Python),所以所有
+    结构性问题(JSON 语法 / 字段形状 / 悬空引用)都收在这里,错误带稳定错误码与路径;
+  - `scene/scene_check.ts` 性质检查的**注册表**:检查 id -> 运行函数,按配置列表运行;
+  - `rbt/` / `graph/` 两种结构各自的检查函数;`checks.ts` 是内置检查集的注册入口.
 - **`src/visual/`**:所有结构共用的视觉层——
   - `scene.ts` 场景模型(节点 / 指针;内存块等有结构用到再补);
   - `render.ts` 场景 -> SVG,并用 `getBBox()` 量内容实际占多大;
@@ -154,11 +177,12 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
   - `config.ts` / `tokens.css` / `visual.css` 类名契约、取景参数与图元通用观感.
 - **`src/ui/viewer/`**:界面层——
   - `config.ts` 窗口清单 / DOM 契约 / 默认 JSON / 帮助文案 / 类名与令牌名;
-  - `viewer_views.ts` 桌面背景与五扇窗口正文的标记(纯函数);其中诊断窗口正文就是库的 `createMessageArea` 容器;
+  - `viewer_views.ts` 桌面背景与六扇窗口正文的标记(纯函数);其中诊断窗口正文就是库的 `createMessageArea` 容器;
   - `viewer_items.ts` 实体行 / 检查行(RowList 的两种行对象);
-  - `viewer_format.ts` 解析错误文案 / 检查抬头 / `attrs` -> 视觉变体;
+  - `viewer_format.ts` 解析错误 / 检查抬头 / 检查配置报错与未找到函数名的提示 / `attrs` -> 视觉变体;
+  - `check_config.ts` 「检查配置」编辑器内容的解析(JSON 数组 -> 函数名数组);
   - `viewer_highlight.ts` JSON 分词 -> 高亮 HTML;
-  - `viewer.ts` 挂载:装配桌面 + 视口 + 每轮"解析 -> 布局 -> 画布 -> 列表"的全流程.
+  - `viewer.ts` 挂载:装配桌面 + 视口 + 每轮"解析 -> 检查 -> 布局 -> 画布 -> 列表"的全流程.
 
 **为什么自动布局在视觉层**:它只吃"节点 / 指针 / 边"这三种中性连接,不认识红黑树 / 图 /
 链表;换成任何一种结构,同一套规则都能画.真正与结构语义有关的只有 `attrs -> 视觉变体`
@@ -206,7 +230,13 @@ index.html              页面上只有一颗手写宿主 #app
 src/main.ts             入口:引库样式 + 应用样式,再 mountViewer(#app)
 css/app.css             应用层:页面基线 + 从主站继承的令牌(--font-code / 桌面底色)
 
-src/datastruct/scene/   中性场景文档:类型 + 解析 / 校验(纯逻辑)
+src/datastruct/         纯逻辑:中性场景文档 + 性质检查注册表
+src/datastruct/scene/scene_document.ts       文档类型(nodes / pointers / edges)
+src/datastruct/scene/scene_document_parse.ts 解析 / 校验(错误码 + 路径)
+src/datastruct/scene/scene_check.ts          检查注册表:检查 id -> 运行函数
+src/datastruct/checks.ts                     内置检查集注册入口(rbt / graph)
+src/datastruct/rbt/rbt_checks.ts             红黑树性质检查
+src/datastruct/graph/graph_checks.ts         图(欧拉回路)检查
 
 src/visual/             视觉层:所有结构共用(场景模型 / 落笔 / 绘制面 / 视口 / 自动布局)
 src/visual/scene.ts        场景模型:节点 / 指针的正式表示
@@ -220,11 +250,12 @@ src/visual/visual.css      视觉层观感(视口裁切与手势 / 绘制面 / �
 
 src/ui/viewer/          界面:JSON 编辑 + 实体 / 检查列表 + 帮助
 src/ui/viewer/config.ts         窗口清单 / DOM 契约 / 默认 JSON / 帮助文案 / 类名与令牌名
-src/ui/viewer/viewer.ts         挂载:装配桌面 + 视口 + 每轮解析 / 布局 / 落笔 / 列表
-src/ui/viewer/viewer_views.ts   桌面背景与五扇窗口正文(纯函数;诊断窗口用库的 createMessageArea)
+src/ui/viewer/viewer.ts         挂载:装配桌面 + 视口 + 每轮解析 / 检查 / 布局 / 落笔 / 列表
+src/ui/viewer/viewer_views.ts   桌面背景与六扇窗口正文(纯函数;诊断窗口用库的 createMessageArea)
 src/ui/viewer/viewer_items.ts   实体行 / 检查行(RowList 的两种行对象)
-src/ui/viewer/viewer_format.ts  解析错误 / 检查抬头 / attrs -> 视觉变体
+src/ui/viewer/viewer_format.ts  解析错误 / 检查抬头 / 检查配置报错 / attrs -> 视觉变体
 src/ui/viewer/viewer_highlight.ts JSON 分词 -> 高亮 HTML(纯函数)
+src/ui/viewer/check_config.ts    检查配置(JSON 数组)的解析(纯函数)
 src/ui/viewer/tokens.css        查看器令牌(--viewer-*:列表 / 状态色 / 词法 / 示例节点色)
 src/ui/viewer/viewer.css        查看器观感(窗口正文 / 列表行 / 检查详情 / JSON 词法)
 
@@ -254,9 +285,11 @@ python/                 中性 JSON 生成(纯标准库;与 web 不是前后端�
 npm test        # vitest
 ```
 
-- 纯逻辑(node 环境):中性文档解析器 / 自动布局 / JSON 高亮 / 文案映射;
-- 标记契约与行为(happy-dom):桌面装配、窗口清单、编辑器、实体 / 检查两个列表窗口、
-  诊断消息区、定位 / 回正接线.
+- 纯逻辑(node 环境):中性文档解析器 / 检查注册表 / 红黑树与图检查 / 自动布局 /
+  JSON 高亮 / 文案映射;
+- 标记契约与行为(happy-dom):桌面装配、六扇窗口清单、两个 CodeEditor、实体 / 检查两个
+  列表窗口、按检查配置现算 / 重算检查、检查配置错误与未找到函数名的诊断提示、定位 /
+  回正接线.
 
 ## 历史
 
@@ -267,7 +300,11 @@ SVG.之后依次做过:编辑器换成库的 `CodeEditor`、面板换成桌面�
 - 新增通用自动布局(树 / 图),web 不再只画红黑树;
 - 原来的"性质检查"窗口拆成 graphcalc 风格的**实体** / **检查**两扇窗口,支持折叠详情与
   节点定位;
+- 检查结论从 JSON 里拿掉:JSON 只描述结构(三种图元),web 按检查配置现算;Python 侧不再
+  输出 `checks`;
+- 新增「检查配置」窗口:与 JSON 窗口同构的编辑器,内容是一段检查函数名的 JSON 数组;
+  结构名也一并从 JSON 里删掉,检查完全由这份配置决定;
 - 解析错误 / 空输入提示改用库的**消息区**(诊断窗口),JSON 窗口只剩下编辑器;
 - 原来的三行提示挪进独立的"帮助"窗口;
-- 之后删掉了旧的表达式解析 / 性质检查核心与 Python 侧的 Term 写端:两侧只剩 JSON 一种
+- 之后删掉了旧的表达式解析 / 旧红黑树检查核心与 Python 侧的 Term 写端:两侧只剩 JSON 一种
   表示,Python 的 `Diagram.dumps()` 直接产出 web 读的同一份文档.

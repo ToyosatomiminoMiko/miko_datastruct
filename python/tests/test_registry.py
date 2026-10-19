@@ -180,11 +180,11 @@ class RegistryTest(unittest.TestCase):
             reg.finalize()
         self.assertEqual(caught.exception.code, "bad-label")
 
-    def test_bad_check_rejected(self):
+    def test_checks_is_not_a_registration_option(self):
+        # 检查结论不进 JSON,也不再由 Python 注册:性质检查按结构名注册在 web 侧
         reg = Registry()
-        with self.assertRaises(RegistrationError) as caught:
-            reg.structure(PlainNode, checks=(1,))
-        self.assertEqual(caught.exception.code, "bad-check")
+        with self.assertRaises(TypeError):
+            reg.structure(PlainNode, checks=())  # type: ignore[call-arg]
 
 
 if __name__ == "__main__":

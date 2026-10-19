@@ -8,9 +8,11 @@
  *
  * 校验口径(与 python/README.md 的输出契约一致):
  * - `nodes` 必填,数组;`key` 是整数且在文档内唯一,`label` 是字符串,`attrs` 可省略;
- * - `pointers` / `edges` / `checks` 可省略(默认空数组);
- * - pointer / edge / check.node 引用的 key 必须存在;
+ * - `pointers` / `edges` 可省略(默认空数组);
+ * - pointer / edge 引用的 key 必须存在;
  * - 未知字段一律忽略:Python 侧以后加字段时,旧的 web 不该因此拒收整份文档.
+ *
+ * JSON 里没有检查结论,也没有结构名:要跑哪些检查由「检查配置」窗口单独给.
  *
  * 错误只给稳定错误码 + 人话,不抛原始 TypeError;UI 文案由显示层拼.
  */
@@ -18,7 +20,6 @@
 import type {
     SceneAttribute,
     SceneDocument,
-    SceneDocumentCheck,
     SceneDocumentEdge,
     SceneDocumentNode,
     SceneDocumentPointer,
@@ -36,9 +37,7 @@ export type SceneDocumentErrorCode =
     | 'pointer-shape'
     | 'pointer-ref'
     | 'edge-shape'
-    | 'edge-ref'
-    | 'check-shape'
-    | 'check-ref';
+    | 'edge-ref';
 
 /**
  * 文档解析失败.
@@ -187,45 +186,6 @@ function readEdges(raw: readonly unknown[], nodeKeys: ReadonlySet<number>): read
     });
 }
 
-function readChecks(raw: readonly unknown[], nodeKeys: ReadonlySet<number>): readonly SceneDocumentCheck[] {
-    return raw.map((item, index) => {
-        const path = `checks[${index}]`;
-        if (!isRecord(item)) fail('check-shape', path, '必须是对象');
-
-        const name = optional(item, 'name');
-        if (typeof name !== 'string' || name.trim() === '') {
-            fail('check-shape', `${path}.name`, '必须是非空字符串');
-        }
-        const passed = optional(item, 'passed');
-        if (typeof passed !== 'boolean') fail('check-shape', `${path}.passed`, '必须是布尔值');
-
-        const detail = optional(item, 'detail');
-        if (detail !== undefined && typeof detail !== 'string') {
-            fail('check-shape', `${path}.detail`, '必须是字符串');
-        }
-
-        const details = optional(item, 'details');
-        if (details !== undefined && (!Array.isArray(details) || !details.every((line) => typeof line === 'string'))) {
-            fail('check-shape', `${path}.details`, '必须是字符串数组');
-        }
-
-        const node = optional(item, 'node');
-        let nodeKey: number | null = null;
-        if (node !== undefined && node !== null) {
-            nodeKey = readNodeKey(node, `${path}.node`, 'check-shape');
-            if (!nodeKeys.has(nodeKey)) fail('check-ref', `${path}.node`, `引用了不存在的节点 key: ${nodeKey}`);
-        }
-
-        return {
-            name,
-            passed,
-            detail: (detail as string | undefined) ?? '',
-            details: (details as string[] | undefined) ?? [],
-            node: nodeKey,
-        };
-    });
-}
-
 /**
  * 把已经 `JSON.parse` 出来的值校验成 SceneDocument.
  *
@@ -240,7 +200,6 @@ export function readSceneDocument(value: unknown): SceneDocument {
         nodes,
         pointers: readPointers(readOptionalArray(value, 'pointers', '$', 'document-shape'), nodeKeys),
         edges: readEdges(readOptionalArray(value, 'edges', '$', 'document-shape'), nodeKeys),
-        checks: readChecks(readOptionalArray(value, 'checks', '$', 'document-shape'), nodeKeys),
     };
 }
 

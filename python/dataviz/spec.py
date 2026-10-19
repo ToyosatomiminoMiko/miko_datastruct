@@ -71,7 +71,6 @@ class StructureSpec:
         name: str,
         as_: str,
         label: Callable[[Any], str] | str | None,
-        checks: tuple[Callable[[Any], Any], ...],
         subclasses: bool,
         doc: str,
     ) -> None:
@@ -80,7 +79,6 @@ class StructureSpec:
         self.name = name
         self.as_ = as_
         self.label = label
-        self.checks = checks
         self.subclasses = subclasses
         self.doc = doc
         self._fields: tuple[FieldSpec, ...] | None = None

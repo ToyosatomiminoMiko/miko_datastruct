@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { SceneDocumentError } from '@/datastruct/scene/scene_document_parse';
 import {
     formatAttributeValue,
+    formatCheckConfigError,
     formatCheckSummary,
     formatDocumentError,
+    formatUnknownChecks,
     nodeVariant,
 } from '@/ui/viewer/viewer_format';
 
@@ -20,8 +22,19 @@ describe('查看器:文案', () => {
     });
 
     it('检查抬头:两个占位符都换成数字', () => {
-        expect(formatCheckSummary(4, 1)).toBe('4 条中 1 条 FAIL');
+        expect(formatCheckSummary(5, 1)).toBe('5 条中 1 条 FAIL');
         expect(formatCheckSummary(0, 0)).toBe('0 条中 0 条 FAIL');
+    });
+
+    it('检查配置错误:统一加"检查配置: "前缀', () => {
+        expect(formatCheckConfigError(new Error('JSON 解析失败: x')))
+            .toBe('检查配置: JSON 解析失败: x');
+        expect(formatCheckConfigError('plain')).toBe('检查配置: plain');
+    });
+
+    it('未注册函数名:一条警告里列全', () => {
+        expect(formatUnknownChecks(['checkNope', 'checkMissing']))
+            .toBe('检查配置里有未找到的检查函数: checkNope, checkMissing');
     });
 
     it('属性值原样转字符串(字符串不加 JSON 引号)', () => {

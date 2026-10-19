@@ -1,0 +1,347 @@
+/*
+ * 红黑树性质检查:登记为 `checkColors` / `checkRootBlack` 等函数名,由「检查配置」
+ * 窗口按 id 选取后运行.
+ *
+ * 检查对象是**中性文档**,不是 Python 对象:手上只有节点(key / label / attrs)与有向
+ * 指针.所以三条约定要先写清楚:
+ *
+ * - 颜色从 `attrs.color` 读(`red` / `black`,大小写不敏感);颜色写错本身就是一条
+ *   FAIL,不能让"没有颜色"被当成"不是红色"而蒙混通过;
+ * - 父子关系从 `pointers` 读:出边是孩子;左右顺序按 pointers 数组顺序(与树形布局
+ *   同一口径:第一个孩子是左,第二个是右).中性表示丢掉了 Python 字段名(left /
+ *   right),单孩子因此分不出左右:有序检查对"左 / 右"两种解释都试一次,任一成立
+ *   即算有序;
+ * - 值从 `label` 读,只认十进制数;不是数的标签跳过该节点的比较(与旧实现一致).
+ *
+ * 五条结论独立运行、不短路:检查窗口要一次把问题列全,而不是修一条看一次.
+ */
+
+import type { SceneDocument, SceneDocumentNode } from '@/datastruct/scene/scene_document';
+import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/datastruct/scene/scene_check';
+
+type NodeColor = 'red' | 'black';
+
+/** 一次检查要用的文档索引:节点表 / 出边(孩子)表 / 入度(找根) */
+interface TreeIndex {
+    readonly nodeByKey: ReadonlyMap<number, SceneDocumentNode>;
+    readonly childrenOf: ReadonlyMap<number, readonly number[]>;
+    readonly roots: readonly number[];
+}
+
+function buildTreeIndex(document: SceneDocument): TreeIndex {
+    const nodeByKey = new Map<number, SceneDocumentNode>(document.nodes.map((node) => [node.key, node] as const));
+    const childrenOf = new Map<number, number[]>(document.nodes.map((node) => [node.key, []] as const));
+    const incoming = new Map<number, number>(document.nodes.map((node) => [node.key, 0] as const));
+
+    for (const pointer of document.pointers) {
+        childrenOf.get(pointer.from)?.push(pointer.to);
+        const count = incoming.get(pointer.to);
+        if (count !== undefined) incoming.set(pointer.to, count + 1);
+    }
+
+    const roots = document.nodes
+        .filter((node) => (incoming.get(node.key) ?? 0) === 0)
+        .map((node) => node.key);
+    return { nodeByKey, childrenOf, roots };
+}
+
+function colorOf(node: SceneDocumentNode): NodeColor | null {
+    const raw = node.attrs.color;
+    if (typeof raw !== 'string') return null;
+    const normalized = raw.toLowerCase();
+    return normalized === 'red' || normalized === 'black' ? normalized : null;
+}
+
+/** 构造一条 PASS 结论(没有细节、不定位) */
+function pass(name: string): SceneCheckResult {
+    return { name, passed: true, detail: '', details: [], node: null };
+}
+
+/** 构造一条 FAIL 结论:行内一句话 + 可选的展开行与定位目标 */
+function fail(
+    name: string,
+    detail: string,
+    node: number | null,
+    details: readonly string[] = [],
+): SceneCheckResult {
+    return { name, passed: false, detail, details, node };
+}
+
+/** 节点在文案里的称呼(标签是给人看的,key 只用于定位) */
+function nameOf(index: TreeIndex, key: number): string {
+    return index.nodeByKey.get(key)?.label ?? `#${key}`;
+}
+
+// 1. 颜色合法
+
+/**
+ * 每个节点都必须有 `attrs.color`,取值只能是 red / black.
+ *
+ * 这条不是 CLRS 的性质,而是"检查可以建立在什么之上"的前提:颜色缺失 / 拼错时,
+ * 后面几条颜色性质要么空真、要么误判,所以先单列一条明确报出来.
+ */
+const checkColors: SceneCheckFunction = (document) => {
+    const name = '节点颜色合法';
+    const invalid = document.nodes.filter((node) => colorOf(node) === null);
+    if (invalid.length === 0) return pass(name);
+    const first = invalid[0] as SceneDocumentNode;
+    return fail(
+        name,
+        `节点 ${invalid.map((node) => node.label).join(', ')} 的 attrs.color 不是 red / black`,
+        first.key,
+        invalid.map((node) => `节点 #${node.key}「${node.label}」: attrs.color = ${JSON.stringify(node.attrs.color)}`),
+    );
+};
+
+// 2. 根节点为黑色
+
+const checkRootBlack: SceneCheckFunction = (document) => {
+    const name = '根节点为黑色';
+    if (document.nodes.length === 0) return pass(name);
+
+    const index = buildTreeIndex(document);
+    if (index.roots.length === 0) {
+        return fail(name, '找不到根节点:每个节点都有父节点(结构里可能有环)', document.nodes[0]?.key ?? null);
+    }
+    if (index.roots.length > 1) {
+        return fail(
+            name,
+            `根不唯一:有 ${index.roots.length} 个节点没有父节点`,
+            index.roots[0] ?? null,
+        );
+    }
+
+    const rootKey = index.roots[0] as number;
+    const color = colorOf(index.nodeByKey.get(rootKey) as SceneDocumentNode);
+    if (color === 'red') {
+        return fail(name, `根节点 ${nameOf(index, rootKey)} 是红色`, rootKey);
+    }
+    if (color === null) {
+        return fail(name, `根节点 ${nameOf(index, rootKey)} 没有合法的颜色`, rootKey);
+    }
+    return pass(name);
+};
+
+// 3. 红节点的孩子都是黑色
+
+/**
+ * 扫所有节点而不是只扫从根可达的节点:红红相接是局部错误,不依赖"根唯一 / 无环"这些
+ * 前提;结构坏掉时也能报出来.
+ */
+const checkRedChildrenBlack: SceneCheckFunction = (document) => {
+    const name = '红色节点的孩子都是黑色';
+    if (document.nodes.length === 0) return pass(name);
+
+    const index = buildTreeIndex(document);
+    for (const node of document.nodes) {
+        if (colorOf(node) !== 'red') continue;
+        for (const childKey of index.childrenOf.get(node.key) ?? []) {
+            const child = index.nodeByKey.get(childKey);
+            if (child !== undefined && colorOf(child) === 'red') {
+                return fail(
+                    name,
+                    `节点 ${node.label} 是红色,孩子 ${child.label} 也是红色`,
+                    node.key,
+                    [`红色节点「${node.label}」-> 红色孩子「${child.label}」`],
+                );
+            }
+        }
+    }
+    return pass(name);
+};
+
+// 4. 各路径黑色节点数量相同
+
+/** 黑高从"后代 nil 叶子"算起:nil 叶子算一个黑,节点自身是黑再加一(与旧实现同一口径) */
+interface BlackHeightViolation {
+    readonly kind: 'cycle' | 'black-height';
+    readonly node: number;
+    /** 两侧黑高;只有 kind 为 black-height 时有意义 */
+    readonly low: number;
+    readonly high: number;
+}
+
+type HeightOutcome = number | BlackHeightViolation;
+
+const checkBlackHeight: SceneCheckFunction = (document) => {
+    const name = '各路径黑色节点数量相同';
+    if (document.nodes.length === 0) return pass(name);
+
+    const index = buildTreeIndex(document);
+    if (index.roots.length !== 1) {
+        return fail(name, '找不到唯一的根节点,无法计算黑高', index.roots[0] ?? null);
+    }
+
+    const visited = new Set<number>();
+
+    const heightOf = (key: number): HeightOutcome => {
+        if (visited.has(key)) return { kind: 'cycle', node: key, low: 0, high: 0 };
+        visited.add(key);
+
+        const node = index.nodeByKey.get(key) as SceneDocumentNode;
+        let expected: number | null = null;
+        for (const childKey of index.childrenOf.get(key) ?? []) {
+            const childHeight = heightOf(childKey);
+            if (typeof childHeight !== 'number') return childHeight;
+            if (expected === null) {
+                expected = childHeight;
+            } else if (expected !== childHeight) {
+                return {
+                    kind: 'black-height',
+                    node: key,
+                    low: Math.min(expected, childHeight),
+                    high: Math.max(expected, childHeight),
+                };
+            }
+        }
+
+        // 没有孩子时 expected 还是 null:路径走到 nil 叶子,黑高从 1 起算
+        const own = colorOf(node) === 'black' ? 1 : 0;
+        return (expected ?? 1) + own;
+    };
+
+    const outcome = heightOf(index.roots[0] as number);
+    if (typeof outcome !== 'number') {
+        if (outcome.kind === 'cycle') {
+            return fail(name, `节点 ${nameOf(index, outcome.node)} 被重复引用(有环或共享孩子)`, outcome.node);
+        }
+        return fail(
+            name,
+            `节点 ${nameOf(index, outcome.node)} 两侧黑高不同: 较浅一侧 ${outcome.low}, 较深一侧 ${outcome.high}`,
+            outcome.node,
+            [
+                '黑高按「节点到 nil 叶子」计,含节点自身的黑',
+                `较浅一侧 ${outcome.low}, 较深一侧 ${outcome.high}`,
+            ],
+        );
+    }
+
+    if (visited.size !== document.nodes.length) {
+        const unreachable = document.nodes.find((node) => !visited.has(node.key)) as SceneDocumentNode;
+        return fail(
+            name,
+            `有 ${document.nodes.length - visited.size} 个节点从根不可达`,
+            unreachable.key,
+        );
+    }
+    return pass(name);
+};
+
+// 5. 二叉搜索树有序
+
+/** 比较容差,只兜浮点写法的误差;相等值仍然算违规 */
+const COMPARISON_TOLERANCE = 1e-9;
+
+/**
+ * 取标签参与比较时用的数;认不出来返回 null.
+ *
+ * 不用 `Number()`:它会把 `''` 当 0、`0x10` 当 16,这些"看着是数字其实不是"的写法
+ * 在这里只会让人对不上号.
+ */
+function toComparable(label: string): number | null {
+    return /^[+-]?\d+(\.\d+)?$/.test(label) ? Number(label) : null;
+}
+
+type BstViolationReason = 'range' | 'shape' | 'cycle' | 'unreachable';
+
+interface BstViolation {
+    readonly node: number;
+    readonly reason: BstViolationReason;
+}
+
+/**
+ * 第 5 条:二叉搜索树有序(左子树全部小于节点,右子树全部大于节点).
+ *
+ * - 用区间递归而不是只比父子:只比父子会漏掉"孙子比爷爷大"这种错;
+ * - 区间是开区间:等于祖先的值也算乱序(查找时这个值落在哪一边不确定);
+ * - 节点最多两个孩子,出边顺序第一个是左、第二个是右;只有一个孩子时左右都可能,
+ *   两种解释任一成立即算有序.
+ */
+const checkBstOrder: SceneCheckFunction = (document) => {
+    const name = '二叉搜索树有序';
+    if (document.nodes.length === 0) return pass(name);
+
+    const index = buildTreeIndex(document);
+    if (index.roots.length !== 1) {
+        return fail(name, '找不到唯一的根节点,无法检查有序性', index.roots[0] ?? null);
+    }
+
+    const reached = new Set<number>();
+
+    const validate = (
+        key: number,
+        low: number | null,
+        high: number | null,
+        path: readonly number[],
+    ): BstViolation | null => {
+        if (path.includes(key)) return { node: key, reason: 'cycle' };
+        reached.add(key);
+
+        const node = index.nodeByKey.get(key) as SceneDocumentNode;
+        const value = toComparable(node.label);
+        if (value !== null) {
+            if (low !== null && value <= low + COMPARISON_TOLERANCE) return { node: key, reason: 'range' };
+            if (high !== null && value >= high - COMPARISON_TOLERANCE) return { node: key, reason: 'range' };
+        }
+
+        const children = index.childrenOf.get(key) ?? [];
+        if (children.length > 2) return { node: key, reason: 'shape' };
+        if (children.length === 0) return null;
+
+        const nextPath = [...path, key];
+        if (value === null) {
+            // 这一层无从判定:区间原样往下传,子树照查
+            for (const childKey of children) {
+                const bad = validate(childKey, low, high, nextPath);
+                if (bad !== null) return bad;
+            }
+            return null;
+        }
+
+        if (children.length === 1) {
+            const childKey = children[0] as number;
+            const asLeft = validate(childKey, low, value, nextPath);
+            if (asLeft === null) return null;
+            // 单孩子也可能是右孩子:同一棵子树换到右侧再试一次
+            return validate(childKey, value, high, nextPath);
+        }
+
+        const leftBad = validate(children[0] as number, low, value, nextPath);
+        if (leftBad !== null) return leftBad;
+        return validate(children[1] as number, value, high, nextPath);
+    };
+
+    const violation = validate(index.roots[0] as number, null, null, []);
+    if (violation !== null) {
+        const label = nameOf(index, violation.node);
+        switch (violation.reason) {
+            case 'shape':
+                return fail(name, `节点 ${label} 的子节点超过 2 个,二叉搜索树每个节点最多两个`, violation.node);
+            case 'cycle':
+                return fail(name, `节点 ${label} 被重复引用(有环或共享孩子)`, violation.node);
+            case 'range':
+                return fail(name, `节点 ${label} 破坏了有序性(左子树应全小于、右子树应全大于;相等也算违规)`, violation.node);
+            default:
+                return fail(name, `节点 ${label} 从根不可达`, violation.node);
+        }
+    }
+
+    if (reached.size !== document.nodes.length) {
+        const unreachable = document.nodes.find((node) => !reached.has(node.key)) as SceneDocumentNode;
+        return fail(name, `节点 ${unreachable.label} 从根不可达`, unreachable.key);
+    }
+    return pass(name);
+};
+
+/**
+ * `rbt` 结构注册的全部检查(顺序 = 默认运行顺序 = 检查窗口里的行顺序).
+ *
+ * `id` 显式写成函数名:检查配置窗口里把 `checkRootBlack` 这类名字写进 JSON 数组即可运行.
+ */
+export const RBT_CHECKS: readonly SceneCheckDefinition[] = [
+    { id: 'checkColors', run: checkColors },
+    { id: 'checkRootBlack', run: checkRootBlack },
+    { id: 'checkRedChildrenBlack', run: checkRedChildrenBlack },
+    { id: 'checkBlackHeight', run: checkBlackHeight },
+    { id: 'checkBstOrder', run: checkBstOrder },
+];

@@ -9,11 +9,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    VIEWER_CHECK_SETUP_EDITOR_LABEL,
     VIEWER_DESKTOP_WINDOWS,
     VIEWER_DOM,
     VIEWER_EDITOR_PLACEHOLDER,
     VIEWER_HELP_ENTRIES,
     VIEWER_WINDOW_CHECK,
+    VIEWER_WINDOW_CHECK_SETUP,
     VIEWER_WINDOW_DIAGNOSTICS,
     VIEWER_WINDOW_ENTITY,
     VIEWER_WINDOW_HELP,
@@ -26,12 +28,13 @@ import {
     VISUAL_WORLD_CLASS,
 } from '@/visual/config';
 
-/** 建一次视图,顺手取五扇窗口的正文根 */
+/** 建一次视图,顺手取六扇窗口的正文根 */
 function buildViews(): {
     views: ViewerViews;
     editorPanel: HTMLElement;
     entityPanel: HTMLElement;
     checkPanel: HTMLElement;
+    checkSetupPanel: HTMLElement;
     diagnosticsPanel: HTMLElement;
     helpPanel: HTMLElement;
 } {
@@ -41,17 +44,27 @@ function buildViews(): {
         editorPanel: views.content(VIEWER_WINDOW_JSON).body?.[0] as HTMLElement,
         entityPanel: views.content(VIEWER_WINDOW_ENTITY).body?.[0] as HTMLElement,
         checkPanel: views.content(VIEWER_WINDOW_CHECK).body?.[0] as HTMLElement,
+        checkSetupPanel: views.content(VIEWER_WINDOW_CHECK_SETUP).body?.[0] as HTMLElement,
         diagnosticsPanel: views.content(VIEWER_WINDOW_DIAGNOSTICS).body?.[0] as HTMLElement,
         helpPanel: views.content(VIEWER_WINDOW_HELP).body?.[0] as HTMLElement,
     };
 }
 
 describe('JSON 查看器:视图标记(挂载之前)', () => {
-    it('五扇窗口各交回一根正文根,未知 id 交回空内容', () => {
-        const { views, editorPanel, entityPanel, checkPanel, diagnosticsPanel, helpPanel } = buildViews();
+    it('六扇窗口各交回一根正文根,未知 id 交回空内容', () => {
+        const {
+            views,
+            editorPanel,
+            entityPanel,
+            checkPanel,
+            checkSetupPanel,
+            diagnosticsPanel,
+            helpPanel,
+        } = buildViews();
         expect(editorPanel.id).toBe(VIEWER_DOM.editorPanelId);
         expect(entityPanel.id).toBe(VIEWER_DOM.entityPanelId);
         expect(checkPanel.id).toBe(VIEWER_DOM.checkPanelId);
+        expect(checkSetupPanel.id).toBe(VIEWER_DOM.checkSetupPanelId);
         expect(diagnosticsPanel.id).toBe(VIEWER_DOM.diagnosticsPanelId);
         expect(helpPanel.id).toBe(VIEWER_DOM.helpPanelId);
         expect(views.content('nope')).toEqual({});
@@ -113,6 +126,21 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.checkEmpty.hidden).toBe(true);
     });
 
+    it('检查配置窗口:与 JSON 窗口同构的 CodeEditor(宿主 + 外框 + textarea + 行号 + 高亮)', () => {
+        const { views, checkSetupPanel } = buildViews();
+
+        expect(checkSetupPanel).toBe(views.checkSetupPanel);
+        expect(checkSetupPanel.children).toHaveLength(1);
+        const host = checkSetupPanel.querySelector(`#${VIEWER_DOM.checkSetupEditorId}`);
+        expect(host).not.toBeNull();
+        expect(host).toBe(checkSetupPanel.children[0]);
+        expect(host).toBe(views.checkSetupEditor.element.parentElement);
+        expect(views.checkSetupEditor.textarea.getAttribute('aria-label')).toBe(VIEWER_CHECK_SETUP_EDITOR_LABEL);
+        // 行号槽与高亮层缺一不可,否则它就退化成裸 textarea
+        expect(host?.querySelector('.code-editor-lines')).not.toBeNull();
+        expect(host?.querySelector('.code-editor-highlight-code')).toBe(views.checkSetupEditor.highlightCode);
+    });
+
     it('帮助窗口:每一条帮助都有一个标题和若干行说明', () => {
         const { helpPanel } = buildViews();
         const sections = [...helpPanel.querySelectorAll('.viewer-help-section')];
@@ -138,10 +166,11 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.world.children).toHaveLength(0);
     });
 
-    it('窗口清单按 config 声明:五扇窗口的标题与 id 一一对应', () => {
+    it('窗口清单按 config 声明:六扇窗口的标题与 id 一一对应', () => {
         expect(VIEWER_DESKTOP_WINDOWS.map((window) => window.id)).toEqual([
             VIEWER_WINDOW_JSON,
             VIEWER_WINDOW_ENTITY,
+            VIEWER_WINDOW_CHECK_SETUP,
             VIEWER_WINDOW_CHECK,
             VIEWER_WINDOW_DIAGNOSTICS,
             VIEWER_WINDOW_HELP,

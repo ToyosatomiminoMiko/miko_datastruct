@@ -12,8 +12,8 @@
 3. rbt       红黑树(有向指针 + Enum 属性).
 
 这个 demo 演示的是"生成中性表示"这一半:Python 只产出**没有坐标的 JSON**
-(`nodes` / `pointers` / `edges` / `checks`).布局与像素在 web 那一半,两边通过 JSON
-衔接,不是前后端关系.
+(`nodes` / `pointers` / `edges`).布局、像素与性质检查都在 web 那一半;检查由 web 的
+「检查配置」窗口按函数名选择,所以 JSON 里不带检查结论.
 """
 
 from __future__ import annotations
