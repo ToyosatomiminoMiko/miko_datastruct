@@ -1,15 +1,16 @@
-"""demo:用普通 Python 类描述三种结构,生成 web 直接消费的中性 JSON.
+"""demo:用普通 Python 类描述四种结构,生成 web 直接消费的中性 JSON.
 
 运行(在 `python/` 目录下,纯标准库,不用装任何东西):
 
     python3 demo.py
     python3 demo.py --out /tmp/dataviz        # 顺便把 JSON 写成文件
 
-三个例子:
+四个例子:
 
 1. node      只有属性的最小节点;
 2. graph     柯尼斯堡七桥(4 块陆地 + 7 座无向桥);
-3. rbt       红黑树(有向指针 + Enum 属性).
+3. bst       二叉搜索树(只有两条 0..1 有向指针,没有 attrs);
+4. rbt       红黑树(有向指针 + Enum 属性).
 
 这个 demo 演示的是"生成中性表示"这一半:Python 只产出**没有坐标的 JSON**
 (`nodes` / `pointers` / `edges`).布局、像素与性质检查都在 web 那一半;检查由 web 的
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Sequence
 
 from dataviz import Diagram, RegistrationError, Registry
+from examples import bst as bst_example
 from examples import graph as graph_example
 from examples import node as node_example
 from examples import rbt as rbt_example
@@ -53,7 +55,7 @@ class BrokenNode:
 
 def _show_inference_error() -> None:
     """演示最重要的约定:字段角色推断不出来时,注册期就报错,而不是渲染时乱猜."""
-    _section("4. 约定:推断不出来就报错")
+    _section("5. 约定:推断不出来就报错")
     broken = Registry("broken-demo")
     broken.structure(BrokenNode)
     try:
@@ -82,19 +84,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     _section("2. 柯尼斯堡七桥:4 块陆地 + 7 座无向桥")
     _print_diagram(graph_diagram)
 
-    # 3. 红黑树:有向指针 + Enum + label 钩子
+    # 3. 二叉搜索树:只有两条 0..1 有向指针,没有 attrs
+    bst_root = bst_example.sample_tree()
+    bst_diagram = bst_example.bst_registry.diagram(bst_root)
+    _section("3. 二叉搜索树:标注即指针 + label,没有 attrs")
+    _print_diagram(bst_diagram)
+
+    # 4. 红黑树:有向指针 + Enum + label 钩子
     rbt_root = rbt_example.sample_tree()
     rbt_diagram = rbt_example.rbt_registry.diagram(rbt_root)
-    _section("3. 红黑树:标注即指针 + label / attrs")
+    _section("4. 红黑树:标注即指针 + label / attrs")
     _print_diagram(rbt_diagram)
 
-    # 4. 推断失败的错误形态
+    # 5. 推断失败的错误形态
     _show_inference_error()
 
     if args.out is not None:
-        _section(f"5. 写出文件到 {args.out}")
+        _section(f"6. 写出文件到 {args.out}")
         _write(args.out, "node", node_diagram)
         _write(args.out, "graph", graph_diagram)
+        _write(args.out, "bst", bst_diagram)
         _write(args.out, "rbt", rbt_diagram)
 
     return 0

@@ -299,6 +299,7 @@ src/ui/viewer/viewer.css        查看器观感(窗口正文 / 列表行 / 检�
 src/test_support/       标记契约测试的两个小助手(renderHost / expectNoDuplicateIds)
 scripts/dev_ui_link.py  本地联调:miko_ui 换成指向工作副本的软链(link / unlink / status)
 docs/checks.md          性质检查实现速查(显示名 / id / 函数位置 / 判据)
+docs/animation.md       动画演示设计(轨迹 / 场景形变 / 镜头缓动 / BST 与 RBT 剧本;**尚未实现**)
 
 python/                 中性 JSON 生成(纯标准库;与 web 不是前后端关系,见 python/README.md)
 ```

@@ -36,7 +36,7 @@
 
 ```bash
 cd python
-python3 demo.py                          # node / 柯尼斯堡七桥 / 红黑树
+python3 demo.py                          # node / 柯尼斯堡七桥 / 二叉搜索树 / 红黑树
 python3 demo.py --out /tmp/dataviz       # 顺便把 JSON 写成文件
 python3 -m unittest discover -s tests -t .
 ```
@@ -48,6 +48,20 @@ python3 -m unittest discover -s tests -t .
   "nodes": [{"key": 0, "label": "K"}, "...": "..."],
   "pointers": [],
   "edges": [{"a": 0, "b": 1}, "...": "..."]
+}
+```
+
+二叉搜索树那段(与 web 内置的「二叉搜索树」示例同形,可直接对照):
+
+```json
+{
+  "nodes": [
+    {"key": 0, "label": "8"},
+    {"key": 1, "label": "4"},
+    {"key": 2, "label": "2"}
+  ],
+  "pointers": [{"from": 0, "to": 1}, {"from": 1, "to": 2}],
+  "edges": []
 }
 ```
 
@@ -179,7 +193,26 @@ diagram = reg.diagram(Node(key="A", value=5))
 print(diagram.dumps())   # web 读的 JSON
 ```
 
-### L1:红黑树(标注即指针 + Enum + label 钩子)
+### L1:二叉搜索树(只有指针,没有额外 attrs)
+
+```python
+@reg.structure(name="bst", label="key")
+@dataclass
+class BstNode:
+    key: int
+    left: "BstNode | None" = None
+    right: "BstNode | None" = None
+```
+
+- 两个 `T | None` 字段就是两条有向指针,不需要 `roles=`;没有 `parent`,Scene 就是一棵
+  干净的有向树;
+- 节点只有 `key` / `label`,没有 attrs —— 写出的 JSON 是最小形状;
+- "有序"不是类能声明的约束,不进 JSON:由 web 的 `checkBstOrder` 在载入时现算。
+- 与 `examples/rbt.py` 的关系:红黑树在同样的字段上多一个 `color` 属性,BST 是没有
+  颜色的那一半;先跑通 BST,再加颜色与检查就是 RBT。
+- 这棵 BST 同时是 web 动画演示的起手结构:演示设计见根目录 `docs/animation.md`。
+
+### L2:红黑树(标注即指针 + Enum + label 钩子)
 
 ```python
 from enum import Enum
@@ -243,7 +276,7 @@ python/
   dataviz/diagram.py       Diagram(scene)+ 完整 JSON
   dataviz/backend.py       JsonBackend / Backend 协议
   dataviz/formatting.py    属性值格式化(标签 / JSON 标量)
-  examples/                node / 柯尼斯堡七桥 / 红黑树
+  examples/                node / 柯尼斯堡七桥 / 二叉搜索树 / 红黑树
   demo.py                  演示入口
   tests/                   unittest
 ```
@@ -260,7 +293,7 @@ python/
 - Scene 写端:节点 key / label / `attrs` / 有向指针(`from -> to`)/ 无向边 / JSON;
 - `Diagram.dumps()`:一份 JSON 只含三种图元,不含结构名 / 检查结论;
 - `describe()`、`snapshot()`、`finalize()`、`subclasses=True`;
-- 三个端到端例子 + unittest。
+- 四个端到端例子 + unittest。
 
 **未实现(下一步)**
 
