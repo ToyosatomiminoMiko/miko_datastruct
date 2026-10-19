@@ -38,8 +38,3 @@ class Diagram:
     term: str
     scene: Scene
     checks: tuple[CheckResult, ...] = ()
-
-    @property
-    def shape(self) -> str | None:
-        """布局提示(tree / graph),来自根结构的 spec."""
-        return self.scene.shape

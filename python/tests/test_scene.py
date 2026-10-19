@@ -72,7 +72,7 @@ class SceneTest(unittest.TestCase):
         reg.structure(SNode)
         root = SNode(key="A", left=SNode(key="B"))
         scene = reg.to_scene(root)
-        self.assertEqual([node.id for node in scene.nodes], ["n0", "n1"])
+        self.assertEqual([node.key for node in scene.nodes], [0, 1])
         self.assertEqual([node.label for node in scene.nodes], ["A", "B"])
 
     def test_node_label_without_key_joins_attributes(self):
@@ -95,30 +95,30 @@ class SceneTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, "hook-failed")
         self.assertEqual(caught.exception.path, "root")
 
-    def test_pointers_are_directed_and_carry_field_name(self):
+    def test_pointers_are_directed_and_only_carry_endpoint_keys(self):
         reg = Registry()
         reg.structure(SNode)
         root = SNode(key="A", left=SNode(key="B"), right=SNode(key="C"))
         scene = reg.to_scene(root)
         self.assertEqual(
-            [(pointer.from_, pointer.to, pointer.variant) for pointer in scene.pointers],
-            [("n0", "n1", "left"), ("n0", "n2", "right")],
+            [(pointer.from_, pointer.to) for pointer in scene.pointers],
+            [(0, 1), (0, 2)],
         )
+        # 字段名(left / right)不是中性场景的一部分:方向已经由 from -> to 表达
+        self.assertFalse(hasattr(scene.pointers[0], "variant"))
 
     def test_graph_scene_has_nodes_and_edges_but_no_pointers(self):
         reg = Registry()
         reg.structure(Place)
         reg.structure(Bridge, as_="edge")
-        reg.structure(Graph, as_="container", shape="graph")
+        reg.structure(Graph, as_="container")
         a, b, c = Place(key="K"), Place(key="N"), Place(key="S")
         graph = Graph(nodes=[a, b, c], edges=[Bridge(a=a, b=b), Bridge(a=b, b=c)])
         scene = reg.to_scene(graph)
-        self.assertEqual(scene.shape, "graph")
-        self.assertEqual([node.id for node in scene.nodes], ["n0", "n1", "n2"])
+        self.assertEqual([node.key for node in scene.nodes], [0, 1, 2])
         self.assertEqual([node.label for node in scene.nodes], ["K", "N", "S"])
         self.assertEqual(scene.pointers, ())
-        self.assertEqual([edge.id for edge in scene.edges], ["e0", "e1"])
-        self.assertEqual([(edge.a, edge.b) for edge in scene.edges], [("n0", "n1"), ("n1", "n2")])
+        self.assertEqual([(edge.a, edge.b) for edge in scene.edges], [(0, 1), (1, 2)])
 
     def test_edge_label_from_attributes(self):
         reg = Registry()
@@ -164,17 +164,25 @@ class SceneTest(unittest.TestCase):
         self.assertEqual(scene.nodes[0].variant, "opaque")
         self.assertIn("Unknown object", scene.nodes[0].label)
 
-    def test_json_shape(self):
+    def test_json_has_integer_keys_and_no_shape(self):
         reg = Registry()
         reg.structure(Place)
         reg.structure(Bridge, as_="edge")
-        reg.structure(Graph, as_="container", shape="graph")
+        reg.structure(Graph, as_="container")
         a, b = Place(key="A"), Place(key="B")
         data = json.loads(reg.to_scene(Graph(nodes=[a, b], edges=[Bridge(a=a, b=b)])).dumps())
-        self.assertEqual(data["shape"], "graph")
-        self.assertEqual(data["nodes"][0], {"id": "n0", "label": "A"})
-        self.assertEqual(data["edges"][0], {"id": "e0", "a": "n0", "b": "n1"})
+        # 场景不标树 / 图:布局由渲染端从内容推
+        self.assertNotIn("shape", data)
+        # 节点 key 是整数,不再有 "n0" / "e0" 前缀;连接图元自己不需要 key
+        self.assertEqual(data["nodes"][0], {"key": 0, "label": "A"})
+        self.assertEqual(data["edges"][0], {"a": 0, "b": 1})
         self.assertEqual(data["pointers"], [])
+
+    def test_pointer_json_is_just_from_and_to(self):
+        reg = Registry()
+        reg.structure(SNode)
+        data = reg.to_scene(SNode(key="A", left=SNode(key="B"))).to_dict()
+        self.assertEqual(data["pointers"], [{"from": 0, "to": 1}])
 
 
 if __name__ == "__main__":

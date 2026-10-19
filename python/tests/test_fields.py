@@ -176,9 +176,9 @@ class FieldsTest(unittest.TestCase):
     def test_container_accepts_many_pointers(self):
         reg = Registry()
         reg.structure(Place)
-        reg.structure(GraphContainer, as_="container", shape="graph")
+        reg.structure(GraphContainer, as_="container")
         reg.finalize()
-        self.assertEqual(reg.get(GraphContainer).shape, "graph")
+        self.assertEqual(reg.get(GraphContainer).as_, "container")
 
     def test_pointer_runtime_type_is_checked(self):
         reg = Registry()

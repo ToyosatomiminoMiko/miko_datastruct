@@ -128,7 +128,7 @@ class TermTest(unittest.TestCase):
         reg = Registry()
         reg.structure(GNode)
         reg.structure(GEdge, as_="edge")
-        reg.structure(GGraph, as_="container", shape="graph")
+        reg.structure(GGraph, as_="container")
         graph = GGraph(nodes=[GNode(key="A"), GNode(key="B")])
         graph.edges = [GEdge(a=graph.nodes[0], b=graph.nodes[1])]
         self.assertEqual(

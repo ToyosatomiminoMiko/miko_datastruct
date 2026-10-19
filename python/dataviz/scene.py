@@ -2,8 +2,8 @@
 
 三种图元,方向语义严格区分:
 
-- **node**:一个圆节点(id / 标签 / 可选变体);
-- **pointer**:一条**有向**指针,来自某个 node 的指针字段(字段名作为 variant);
+- **node**:一个圆节点(整数 key / 标签 / 可选变体);
+- **pointer**:一条**有向**指针,`from -> to`,两端都是节点 key;
 - **edge**:一条**无向**边,来自 `as_="edge"` 的结构(恰好两个端点,可选标签).
 
 没有 block / 数组:数组类结构以后作为单独种类再加.
@@ -11,14 +11,27 @@
 JSON 形状(值为 None 的键省略):
 
     {
-      "shape": "graph",
-      "nodes":    [{"id": "n0", "label": "K"}],
-      "pointers": [{"from": "n0", "to": "n1", "variant": "left"}],
-      "edges":    [{"id": "e0", "a": "n0", "b": "n1"}]
+      "nodes":    [{"key": 0, "label": "K"}],
+      "pointers": [{"from": 0, "to": 1}],
+      "edges":    [{"a": 0, "b": 1}]
     }
 
-id 规则(稳定、可快照):节点按遍历顺序 `n0`、`n1`…,边按遍历顺序 `e0`、`e1`…
-(scene 的编号与 Term 的 `id(n)` 编号是两套独立的编号).
+key 规则(稳定、可快照):
+
+- `nodes[].key` 是**整数**,在 nodes 内唯一,按遍历顺序从 0 开始;
+- `pointers[].from` / `to` 与 `edges[].a` / `b` 都引用节点 key;
+- pointer / edge **自己不带 key**:现在没有任何图元引用它们,带了也没人读.
+
+为什么不用 `"n0"` / `"e0"` 这种字符串编号:
+
+- 三种图元已经各自住在三个数组里,角色由数组区分,前缀字母是重复信息;
+- 引用端点需要的是"哪一个节点",整数 key 比再拼一个字符串直接;
+- 没有前缀之后,`key` 也不必再叫 `id`:它只是本场景内的局部编号,与数据对象自己的
+  `key` / `id` 属性不是一回事.
+
+场景**不标 shape**:树 / 图 / 链是内容本身的性质,由渲染端的布局器从 nodes / pointers /
+edges 推出来(度数、是否有环、有没有无向边),不靠一个自报的标签.`as_` 只决定一个对象
+被写成哪种图元.
 
 默认观感(没有 `label` / `variant` 钩子时):
 
@@ -50,59 +63,61 @@ __all__ = [
 
 @dataclass(frozen=True)
 class SceneNode:
-    """一个圆节点:没有坐标,只有 id / 标签 / 语义变体."""
+    """一个圆节点:没有坐标,只有 key / 标签 / 语义变体."""
 
-    id: str
+    key: int
     label: str
     variant: str | None = None
 
 
 @dataclass(frozen=True)
 class ScenePointer:
-    """一条**有向**指针;variant 是产生它的字段名(left / right / parent …)."""
+    """一条**有向**指针:从 `from_` 指向 `to`,两端是节点 key.
 
-    from_: str
-    to: str
-    variant: str | None = None
+    不带 `variant`:字段名(left / right / parent)是数据结构语义,不属于中性场景;方向
+    已经由 `from -> to` 表达.将来真要在箭头上显示文字,再加 `label`.
+    """
+
+    from_: int
+    to: int
 
 
 @dataclass(frozen=True)
 class SceneEdge:
-    """一条**无向**边;两端是节点 id,label 是可选边标签."""
+    """一条**无向**边:两端是节点 key,label 是可选边标签.
 
-    id: str
-    a: str
-    b: str
+    不带 key:现在没有别的图元引用边,这个字段没有消费者.
+    """
+
+    a: int
+    b: int
     label: str | None = None
 
 
 @dataclass(frozen=True)
 class Scene:
-    """一幅中性场景;`shape` 只是给后端的布局提示(tree / graph)."""
+    """一幅中性场景:节点 / 有向指针 / 无向边;不标树或图,也不带坐标."""
 
-    shape: str | None
     nodes: tuple[SceneNode, ...]
     pointers: tuple[ScenePointer, ...]
     edges: tuple[SceneEdge, ...]
 
     def to_dict(self) -> dict[str, Any]:
         """转成可以 json.dumps 的 dict(键按 nodes / pointers / edges 的固定顺序)."""
-        data: dict[str, Any] = {}
-        if self.shape is not None:
-            data["shape"] = self.shape
-        data["nodes"] = [
-            _compact({"id": node.id, "label": node.label, "variant": node.variant})
-            for node in self.nodes
-        ]
-        data["pointers"] = [
-            _compact({"from": pointer.from_, "to": pointer.to, "variant": pointer.variant})
-            for pointer in self.pointers
-        ]
-        data["edges"] = [
-            _compact({"id": edge.id, "a": edge.a, "b": edge.b, "label": edge.label})
-            for edge in self.edges
-        ]
-        return data
+        return {
+            "nodes": [
+                _compact({"key": node.key, "label": node.label, "variant": node.variant})
+                for node in self.nodes
+            ],
+            "pointers": [
+                {"from": pointer.from_, "to": pointer.to}
+                for pointer in self.pointers
+            ],
+            "edges": [
+                _compact({"a": edge.a, "b": edge.b, "label": edge.label})
+                for edge in self.edges
+            ],
+        }
 
     def dumps(self, *, indent: int = 2) -> str:
         """转成 JSON 文本(中文不转义,方便人读)."""
@@ -115,27 +130,24 @@ def _compact(pairs: dict[str, Any]) -> dict[str, Any]:
 
 
 class SceneWriter:
-    """一次 Scene 写出的状态:节点 / 边的输出 id."""
+    """一次 Scene 写出的状态:节点输出 key 的分配.
+
+    key 只在 nodes 内编号;pointer / edge 引用节点 key,自己不需要编号.
+    """
 
     def __init__(self, graph: Graph) -> None:
         self.graph = graph
-        self._node_ids: dict[int, str] = {}
-        self._edge_ids: dict[int, str] = {}
+        self._node_keys: dict[int, int] = {}
         node_index = 0
-        edge_index = 0
         for record in graph.order:
             if record.opaque or (record.spec is not None and record.spec.as_ == "node"):
-                self._node_ids[id(record.obj)] = f"n{node_index}"
+                self._node_keys[id(record.obj)] = node_index
                 node_index += 1
-            elif record.spec is not None and record.spec.as_ == "edge":
-                self._edge_ids[id(record.obj)] = f"e{edge_index}"
-                edge_index += 1
 
     # 出口
 
     def write(self) -> Scene:
         return Scene(
-            shape=self.graph.shape,
             nodes=tuple(self._nodes()),
             pointers=tuple(self._pointers()),
             edges=tuple(self._edges()),
@@ -147,13 +159,13 @@ class SceneWriter:
         nodes: list[SceneNode] = []
         for record in self.graph.order:
             if record.opaque:
-                nodes.append(SceneNode(self._node_ids[id(record.obj)], _opaque_label(record.obj), "opaque"))
+                nodes.append(SceneNode(self._node_keys[id(record.obj)], _opaque_label(record.obj), "opaque"))
                 continue
             if record.spec is None or record.spec.as_ != "node":
                 continue
             label = _hook_text(record.spec.label, record.obj, _default_node_label(record.spec, record.values), record.path, "label")
             variant = _hook_text(record.spec.variant, record.obj, None, record.path, "variant")
-            nodes.append(SceneNode(self._node_ids[id(record.obj)], label, variant or None))
+            nodes.append(SceneNode(self._node_keys[id(record.obj)], label, variant or None))
         return nodes
 
     # 边
@@ -172,7 +184,7 @@ class SceneWriter:
                 )
             values = {field_value.field.name: field_value.value for field_value in record.values}
             endpoints_values = [values[endpoint.name] for endpoint in endpoints]
-            node_ids: list[str] = []
+            node_keys: list[int] = []
             for endpoint, endpoint_value in zip(endpoints, endpoints_values):
                 if endpoint_value is None:
                     raise RenderError(
@@ -187,9 +199,9 @@ class SceneWriter:
                         f"边 {record.spec.name} 的端点 {endpoint.name} 必须指向 node 结构",
                         path=f"{record.path}.{endpoint.name}",
                     )
-                node_ids.append(self._node_ids[id(endpoint_value)])
+                node_keys.append(self._node_keys[id(endpoint_value)])
             label = _hook_text(record.spec.label, record.obj, _default_edge_label(record.values), record.path, "label")
-            edges.append(SceneEdge(self._edge_ids[id(record.obj)], node_ids[0], node_ids[1], label or None))
+            edges.append(SceneEdge(node_keys[0], node_keys[1], label or None))
         return edges
 
     # 指针
@@ -201,11 +213,11 @@ class SceneWriter:
             if source.spec is None or source.spec.as_ != "node":
                 # container 的引用是聚合、edge 的两个指针是端点:都不画成 node 指针
                 continue
-            from_id = self._node_ids.get(edge.from_oid)
-            to_id = self._node_ids.get(edge.to_oid)
-            if from_id is None:
+            from_key = self._node_keys.get(edge.from_oid)
+            to_key = self._node_keys.get(edge.to_oid)
+            if from_key is None:
                 continue
-            if to_id is None:
+            if to_key is None:
                 target = self.graph.records[edge.to_oid]
                 target_name = target.spec.name if target.spec is not None else "未注册对象"
                 raise RenderError(
@@ -213,7 +225,7 @@ class SceneWriter:
                     f"节点指针 {edge.field_name} 指向了 {target_name},它不是一个 node",
                     path=edge.path,
                 )
-            pointers.append(ScenePointer(from_id, to_id, edge.field_name))
+            pointers.append(ScenePointer(from_key, to_key))
         return pointers
 
 

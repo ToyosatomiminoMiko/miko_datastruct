@@ -55,6 +55,9 @@ class StructureSpec:
     - `"node"`(默认):画成一个圆节点;
     - `"edge"`:一条无向边(恰好两个端点指针,可选若干属性);
     - `"container"`:聚合根,自己不出现在画面里(如整张图).
+
+    注册信息里**没有布局提示**(树 / 图):那是场景内容自己的性质,由渲染端从
+    nodes / pointers / edges 推,不由结构自报.
     """
 
     def __init__(
@@ -67,7 +70,6 @@ class StructureSpec:
         label: Callable[[Any], str] | None,
         variant: Callable[[Any], str] | None,
         term_hook: Callable[[Any, list[str]], str] | None,
-        shape: str | None,
         checks: tuple[Callable[[Any], Any], ...],
         subclasses: bool,
         doc: str,
@@ -79,7 +81,6 @@ class StructureSpec:
         self.label = label
         self.variant = variant
         self.term_hook = term_hook
-        self.shape = shape
         self.checks = checks
         self.subclasses = subclasses
         self.doc = doc

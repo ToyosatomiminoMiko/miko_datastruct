@@ -60,7 +60,6 @@ def _check_euler_circuit(graph: "Graph") -> str | None:
 
 @graph_registry.structure(
     as_="container",
-    shape="graph",
     checks=(_check_euler_circuit,),
 )
 @dataclass

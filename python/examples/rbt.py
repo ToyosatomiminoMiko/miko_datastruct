@@ -40,7 +40,6 @@ def _rbt_term(node: "RbtNode", parts: list[str]) -> str:
     label=lambda node: str(node.key),
     variant=lambda node: "red" if node.color == RED else "black",
     term=_rbt_term,
-    shape="tree",
 )
 @dataclass
 class RbtNode:

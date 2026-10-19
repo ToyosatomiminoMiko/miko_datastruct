@@ -69,7 +69,6 @@ class Graph:
     records: dict[int, NodeRecord]
     order: list[NodeRecord]
     ref_edges: list[RefEdge]
-    shape: str | None
 
 
 class RenderContext:
@@ -101,8 +100,7 @@ class RenderContext:
         """从根开始遍历,交回一张图.根是 None 时直接报错(调用方该先判空)."""
         if self.root is None:
             raise TraversalError("empty-root", "根是 None:没有可画的结构")
-        root_record = self._visit(self.root, "root", 0)
-        shape = root_record.spec.shape if root_record.spec is not None else None
+        self._visit(self.root, "root", 0)
         return Graph(
             root_oid=id(self.root),
             root=self.root,
@@ -110,7 +108,6 @@ class RenderContext:
             records=self._records,
             order=self._order,
             ref_edges=self._ref_edges,
-            shape=shape,
         )
 
     # 单个对象

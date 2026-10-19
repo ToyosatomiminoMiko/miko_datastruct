@@ -35,7 +35,6 @@ from .traversal import Graph, RenderContext
 __all__ = ["Registry", "default_registry", "structure"]
 
 _AS_VALUES = ("node", "edge", "container")
-_SHAPE_VALUES = ("tree", "graph")
 _SCALAR_TYPES = (bool, int, float, str)
 _UNION_ORIGINS = (typing.Union, types.UnionType)
 _SEQUENCE_ORIGINS = (
@@ -71,7 +70,6 @@ class Registry:
         label: Callable[[Any], str] | None = None,
         variant: Callable[[Any], str] | None = None,
         term: Callable[[Any, list[str]], str] | None = None,
-        shape: str | None = None,
         checks: Iterable[Callable[[Any], Any]] = (),
         subclasses: bool = False,
         override: bool = False,
@@ -90,7 +88,6 @@ class Registry:
                 label=label,
                 variant=variant,
                 term_hook=term,
-                shape=shape,
                 checks=checks,
                 subclasses=subclasses,
                 override=override,
@@ -110,7 +107,6 @@ class Registry:
         label: Callable[[Any], str] | None,
         variant: Callable[[Any], str] | None,
         term_hook: Callable[[Any, list[str]], str] | None,
-        shape: str | None,
         checks: Iterable[Callable[[Any], Any]],
         subclasses: bool,
         override: bool,
@@ -120,8 +116,6 @@ class Registry:
             raise RegistrationError("not-a-class", f"@structure 只能用在类上,实际 {cls!r}")
         if as_ not in _AS_VALUES:
             raise RegistrationError("bad-as", f"as_ 只能是 {_AS_VALUES},实际 {as_!r}")
-        if shape is not None and shape not in _SHAPE_VALUES:
-            raise RegistrationError("bad-shape", f"shape 只能是 {_SHAPE_VALUES} 或 None,实际 {shape!r}")
 
         term_name = name if name is not None else _snake_case(cls.__name__)
         _validate_atom(term_name, "结构名")
@@ -152,7 +146,6 @@ class Registry:
             label=label,
             variant=variant,
             term_hook=term_hook,
-            shape=shape,
             checks=check_tuple,
             subclasses=subclasses,
             doc=doc or inspect.getdoc(cls) or "",
@@ -224,8 +217,6 @@ class Registry:
         lines = [f"Registry {self.name!r}:{len(self._order)} 种结构"]
         for spec in self._order:
             extras = []
-            if spec.shape:
-                extras.append(f"shape={spec.shape}")
             if spec.subclasses:
                 extras.append("subclasses=True")
             suffix = ("  " + " ".join(extras)) if extras else ""
@@ -248,7 +239,6 @@ class Registry:
             data[spec.name] = {
                 "cls": spec.fqn,
                 "as_": spec.as_,
-                "shape": spec.shape,
                 "doc": spec.doc,
                 "subclasses": spec.subclasses,
                 "fingerprint": spec.fingerprint,
@@ -273,7 +263,7 @@ class Registry:
         return TermWriter(self._graph(root), options).write()
 
     def to_scene(self, root: Any) -> Scene:
-        """生成中性场景(节点 / 有向指针 / 无向边,无坐标)."""
+        """生成中性场景(节点 / 有向指针 / 无向边,无坐标、不标树或图)."""
         return SceneWriter(self._graph(root)).write()
 
     def diagram(self, root: Any) -> Diagram:

@@ -34,7 +34,7 @@ class RegistryTest(unittest.TestCase):
     def test_decorator_with_options(self):
         reg = Registry()
 
-        @reg.structure(name="rbt", shape="tree")
+        @reg.structure(name="rbt")
         @dataclass
         class RbtNode:
             key: int = 0
@@ -42,7 +42,6 @@ class RegistryTest(unittest.TestCase):
         spec = reg.get(RbtNode)
         self.assertEqual(spec.name, "rbt")
         self.assertEqual(spec.as_, "node")
-        self.assertEqual(spec.shape, "tree")
 
     def test_get_accepts_instance(self):
         reg = Registry()
@@ -112,6 +111,8 @@ class RegistryTest(unittest.TestCase):
         entry = snapshot["data_node"]
         self.assertEqual([field["name"] for field in entry["fields"]], ["key", "value"])
         self.assertEqual(entry["as_"], "node")
+        # 布局提示不属于注册信息:Scene 的形状由内容推
+        self.assertNotIn("shape", entry)
         self.assertEqual(len(entry["fingerprint"]), 16)
 
     def test_new_dataclass(self):
@@ -149,11 +150,10 @@ class RegistryTest(unittest.TestCase):
             reg.structure(PlainNode, as_="cell")
         self.assertEqual(caught.exception.code, "bad-as")
 
-    def test_bad_shape_rejected(self):
+    def test_shape_is_not_a_registration_option(self):
         reg = Registry()
-        with self.assertRaises(RegistrationError) as caught:
-            reg.structure(PlainNode, shape="circle")
-        self.assertEqual(caught.exception.code, "bad-shape")
+        with self.assertRaises(TypeError):
+            reg.structure(PlainNode, shape="tree")  # type: ignore[call-arg]
 
     def test_bad_check_rejected(self):
         reg = Registry()

@@ -24,6 +24,7 @@
 - **没有 HTTP、没有进程间调用**:Python 生成文件(或一段文本),web 读文件或在别处使用。
 - **Term 是数据表示**(通用项字面量),**Scene 是可视化表示**(节点 / 有向指针 / 无向边,
   **没有像素坐标**)。"画在哪、长什么样"只属于渲染端。
+- Scene **不标树 / 图**:那是内容本身的性质,由渲染端从图元推出来,不进中性表示。
 - 两半共用同一套词汇:**属性 / 指针 / 边 / 聚合根**。
 
 ## 快速开始
@@ -41,10 +42,9 @@ python3 -m unittest discover -s tests -t .
 term:
   graph(children(place(id(1), K), ...), children(bridge(ref(1), ref(2)), ...))
 scene:
-  { "shape": "graph",
-    "nodes":    [{"id": "n0", "label": "K"}, ...],
+  { "nodes":    [{"key": 0, "label": "K"}, ...],
     "pointers": [],
-    "edges":    [{"id": "e0", "a": "n0", "b": "n1"}, ...] }
+    "edges":    [{"a": 0, "b": 1}, ...] }
 checks:
   _check_euler_circuit: FAIL  奇数度节点:K(度5), N(度3), S(度3), E(度3) -- 不存在欧拉回路
 ```
@@ -54,7 +54,7 @@ checks:
 ```text
 term(简写): 13B(8R(1B,11R),17R(15B,25B))
 term(通用): rbt(13, B, rbt(8, R, rbt(1, B, nil, nil), ...))
-scene:      {"shape":"tree","nodes":[{"id":"n0","label":"13","variant":"black"},...],"pointers":[...]}
+scene:      {"nodes":[{"key":0,"label":"13","variant":"black"},...],"pointers":[{"from":0,"to":1},...],"edges":[]}
 ```
 
 `13B(8R(1B,11R),17R(15B,25B))` **就是 web 现有红黑树表达式输入的子集**:这一份输出现在
@@ -97,12 +97,14 @@ scene:      {"shape":"tree","nodes":[{"id":"n0","label":"13","variant":"black"},
 | `"edge"` | 一条无向边;恰好两个端点指针(顺序 = a / b),其余字段是属性 | `edges` |
 | `"container"` | 聚合根(如整张图),自己不出现在画面里 | 不输出自己;它的指针只用于遍历 |
 
-`shape`(`"tree"` / `"graph"`)只是给渲染端的布局提示,不是布局算法。
+三种图元已经足以表达树 / 图;Scene 不再另标 `shape`(布局由渲染端从内容推)。
 
 ### 身份与 key
 
 - 身份是 **`id(obj)`**:同一个对象第二次遇到只加指针;值相等的两个对象是两个节点;
 - `key` / `id` 属性只影响**标签**(默认优先用它),**不代表唯一性约束**;库不会按 key 合并。
+- 场景里的 `nodes[].key` 是**输出编号**,与数据对象的 `key` / `id` 属性无关:前者按遍历
+  顺序从 0 开始,后者只影响标签。
 
 ## 输出契约
 
@@ -135,19 +137,23 @@ atom   := 1+ 个非 '( ) , " 空白' 的字符 | 双引号字符串
 
 ```json
 {
-  "shape": "graph",
-  "nodes":    [{"id": "n0", "label": "K"}, {"id": "n1", "label": "N"}],
-  "pointers": [{"from": "n0", "to": "n1", "variant": "left"}],
-  "edges":    [{"id": "e0", "a": "n0", "b": "n1", "label": "name=桥1"}]
+  "nodes":    [{"key": 0, "label": "K"}, {"key": 1, "label": "N"}],
+  "pointers": [{"from": 0, "to": 1}],
+  "edges":    [{"a": 0, "b": 1, "label": "name=桥1"}]
 }
 ```
 
 - `nodes` / `pointers` / `edges` 是三种图元,方向语义严格区分;
-- 节点 id 按遍历顺序 `n0`、`n1`…;边 id 按遍历顺序 `e0`、`e1`…;
-  (Term 的 `id(n)` 是另一套编号,有 container 时两者不一致);
-- `pointers[].variant` 是产生它的**字段名**(`left` / `right` / `parent`…);
+- `nodes[].key` 是**整数**,按遍历顺序从 0 开始,在 nodes 内唯一;
+- `pointers[].from` / `to`、`edges[].a` / `b` 都引用节点 key;
+- pointer / edge **自己不带 key**:现在没有别的图元引用它们,`n0` / `e0` 这种前缀也因此
+  是多余的(角色已经由数组区分);将来需要选中边 / 给边挂东西时再加;
+- `pointers` 的方向就是 `from -> to`,**没有 `variant`**:`left` / `right` 这类字段名是
+  数据结构语义,不属于中性场景;树布局需要左右顺序时按 pointers 数组顺序即可;
+- **没有 `shape`**:树 / 图 / 链是内容本身的性质,由渲染端从 nodes / pointers / edges 推
+  (度数、是否有环、有没有无向边),不靠一个自报的标签;
 - 默认标签:节点有 `key` / `id` 属性就用它,否则拼 `名字=值`;边把属性拼 `名字=值`;
-- `variant` 只能由 `variant=` 钩子给(颜色是普通属性,不是角色)。
+- 节点 `variant` 只能由 `variant=` 钩子给(颜色是普通属性,不是角色)。
 
 ### 和 web 侧的一一对应
 
@@ -155,14 +161,14 @@ atom   := 1+ 个非 '( ) , " 空白' 的字符 | 双引号字符串
 | --- | --- |
 | `spec.name` + `fields` 顺序 | Term 构造子 + 参数顺序(codec 契约) |
 | `Attr` | 节点标签 |
-| `Pointer` | `VisualPointer`(**有向**;web 目前没有箭头字段,接的时候要补) |
+| `Pointer` | 有向连接(web 侧要补箭头图元) |
 | `as_="edge"` | 无向边(web 视觉层还没有这个图元) |
 | `label` / `variant` / `term` 钩子 | `ui/<结构>/` 的翻译与文案 |
-| `shape` | 布局提示 |
 
 **关键差异**:web 的 `VisualScene` 带世界坐标,Python 的 Scene **不带**。所以 web 要直接
-消费 Scene JSON,还需要一个"Scene -> 布局 -> VisualScene"的通用布局器;另外它的
-`VisualPointer` 要补方向 / 箭头,无向边要新增图元。这些都是接 web 时的一次性工作。
+消费 Scene JSON,还需要一个"Scene -> 布局 -> VisualScene"的通用布局器:布局器按内容推
+形状(有 `edges` -> 图;只有 `pointers` 且入度 ≤ 1 / 无环 -> 树;每个节点出度 ≤ 1 -> 链),
+另外它的 `VisualPointer` 要补方向 / 箭头,无向边要新增图元。这些都是接 web 时的一次性工作。
 
 ## 用法
 
@@ -192,7 +198,6 @@ reg.to_scene(Node(key="A"))            # 一个圆,标签 A
     label=lambda n: str(n.key),
     variant=lambda n: "red" if n.color == "R" else "black",
     term=lambda n, parts: f"{parts[0]}{parts[1]}({parts[2]},{parts[3]})",
-    shape="tree",
 )
 @dataclass
 class RbtNode:
@@ -219,7 +224,7 @@ class Bridge:
     a: Place
     b: Place
 
-@reg.structure(as_="container", shape="graph", checks=(check_euler_circuit,))
+@reg.structure(as_="container", checks=(check_euler_circuit,))
 @dataclass
 class Graph:
     nodes: list[Place] = field(default_factory=list)
@@ -260,7 +265,7 @@ python/
 - 遍历:身份 / 共享 / 环 / 路径 / 深度与节点数上限 / 指针运行时类型检查 / `on_unknown="opaque"`;
 - Term 写端:内联、`id` / `ref`、`children(...)`、atom 转义、`term=` 简写、
   `TermOptions(always_ids, shorthand)`;
-- Scene 写端:节点标签 / `variant` 钩子 / 有向指针(字段名作 variant)/ 无向边 / JSON;
+- Scene 写端:节点标签 / `variant` 钩子 / 有向指针(`from -> to`)/ 无向边 / 整数 key / JSON;
 - `checks`、`describe()`、`snapshot()`、`finalize()`、`subclasses=True`;
 - 三个端到端例子 + unittest。
 

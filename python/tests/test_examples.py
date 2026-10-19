@@ -34,19 +34,18 @@ class GraphExampleTest(unittest.TestCase):
 
     def test_scene_nodes(self):
         scene = self.diagram.scene
-        self.assertEqual(scene.shape, "graph")
         self.assertEqual([node.label for node in scene.nodes], ["K", "N", "S", "E"])
-        self.assertEqual([node.id for node in scene.nodes], ["n0", "n1", "n2", "n3"])
+        self.assertEqual([node.key for node in scene.nodes], [0, 1, 2, 3])
         self.assertEqual(scene.pointers, ())
 
     def test_scene_edges(self):
         edges = [(edge.a, edge.b) for edge in self.diagram.scene.edges]
         self.assertEqual(len(edges), 7)
-        self.assertEqual(edges.count(("n0", "n1")), 2)  # K-N 两座桥
-        self.assertEqual(edges.count(("n0", "n2")), 2)  # K-S 两座桥
-        self.assertEqual(edges.count(("n0", "n3")), 1)  # K-E
-        self.assertEqual(edges.count(("n1", "n3")), 1)  # N-E
-        self.assertEqual(edges.count(("n2", "n3")), 1)  # S-E
+        self.assertEqual(edges.count((0, 1)), 2)  # K-N 两座桥
+        self.assertEqual(edges.count((0, 2)), 2)  # K-S 两座桥
+        self.assertEqual(edges.count((0, 3)), 1)  # K-E
+        self.assertEqual(edges.count((1, 3)), 1)  # N-E
+        self.assertEqual(edges.count((2, 3)), 1)  # S-E
 
     def test_euler_check_fails(self):
         self.assertEqual(len(self.diagram.checks), 1)
@@ -72,7 +71,6 @@ class RbtExampleTest(unittest.TestCase):
     def test_scene_nodes_and_pointers(self):
         root = rbt_example.sample_tree()
         scene = rbt_example.rbt_registry.to_scene(root)
-        self.assertEqual(scene.shape, "tree")
         self.assertEqual(len(scene.nodes), 7)
         self.assertEqual(len(scene.pointers), 6)
         self.assertEqual(scene.edges, ())
@@ -81,16 +79,16 @@ class RbtExampleTest(unittest.TestCase):
             [node.variant for node in scene.nodes],
             ["black", "red", "black", "red", "red", "black", "black"],
         )
-        self.assertEqual([node.id for node in scene.nodes], ["n0", "n1", "n2", "n3", "n4", "n5", "n6"])
+        self.assertEqual([node.key for node in scene.nodes], [0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(
-            [(pointer.from_, pointer.to, pointer.variant) for pointer in scene.pointers],
+            [(pointer.from_, pointer.to) for pointer in scene.pointers],
             [
-                ("n0", "n1", "left"),
-                ("n1", "n2", "left"),
-                ("n1", "n3", "right"),
-                ("n0", "n4", "right"),
-                ("n4", "n5", "left"),
-                ("n4", "n6", "right"),
+                (0, 1),
+                (1, 2),
+                (1, 3),
+                (0, 4),
+                (4, 5),
+                (4, 6),
             ],
         )
 
