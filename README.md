@@ -73,6 +73,33 @@
 最后一刀(2026-10)是把显示层里"所有结构共用"的部分(场景模型 / SVG 落笔 / 绘制面 / 视口)
 提成 `src/visual/`,红黑树只留自己的布局与 `-> VisualScene` 翻译,行为仍然一条没改.
 
+## 两个部分:web 展示 / python 生成表示法
+
+仓库现在分两半,**不是前后端**:没有 HTTP、没有进程在跑,只有一份共享的中间表示.
+
+- **web**(本目录其余部分):把结构图画出来 —— 场景模型 / SVG 落笔 / 平面视口 / 桌面窗口;
+- **python**(`python/`):用普通 Python 类描述一种结构,遍历后生成**表示法** —— 通用
+  Term 文本(项字面量)与中性 Scene JSON(节点 / 指针 / 边,**没有像素坐标**).
+
+```text
+Python 对象 ── dataviz 遍历 ──> Term 文本 / Scene JSON ──(文件 / 剪贴板)──> web 展示
+                                       │
+                                       └── 中性表示:布局与像素属于渲染端
+```
+
+两半通过文件 / 文本衔接,各自可以单独跑、单独测.设计约定见
+[`python/README.md`](python/README.md):两种字段角色、三种结构种类、Term / Scene 的形状、
+以及"布局归渲染端"这条边界.
+
+已经打通的一条衔接:web 现有的红黑树表达式输入**就是 Term 语法的一个子集**,所以
+`python/examples/rbt.py` 生成的简写 Term 可以原样粘进 web 的表达式编辑器.更通用的接班点
+是 web 端再补一个"Scene JSON -> 排列 -> 视觉场景"的布局器(web 现在只有红黑树专用布局).
+
+```bash
+cd python && python3 demo.py                    # 三种结构的 Term / Scene / checks
+cd python && python3 -m unittest discover -s tests -t .
+```
+
 ## 跑起来
 
 ```bash
@@ -206,6 +233,13 @@ src/ui/rbt/rbt.css         红黑树观感(窗口正文滚动区 / 编辑器宿�
 
 src/test_support/       标记契约测试的两个小助手(renderHost / expectNoDuplicateIds)
 scripts/dev_ui_link.py  本地联调:miko_ui 换成指向工作副本的软链(link / unlink / status)
+
+python/                 表示法生成(纯标准库;与 web 不是前后端关系,见上文)
+python/dataviz/         注册表 / 字段角色 / 遍历 / Term 写端 / Scene 写端 / 后端
+python/examples/        三个例子:node / 柯尼斯堡七桥 / 红黑树
+python/demo.py          演示入口:生成 Term 文本 + Scene JSON(可 --out 写文件)
+python/tests/           unittest
+python/README.md        两半的边界、输出契约与用法
 ```
 
 跨目录导入一律用源码根别名 `@/`(`@/datastruct/rbt/rbt_tree`,`@/ui/rbt/config`,
