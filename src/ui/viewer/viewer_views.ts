@@ -1,12 +1,12 @@
 /*
  * JSON 查看器的**桌面视图组件**(声明式):按 config.ts 的声明产出桌面背景(平面绘制面
- * 由视觉层 visual/surface.ts 建)与四扇窗口的正文节点,由 ui/viewer/viewer.ts 的
+ * 由视觉层 visual/surface.ts 建)与五扇窗口的正文节点,由 ui/viewer/viewer.ts 的
  * `mountViewer` 交给库的 `mountDesktop` 装配.
  *
  * 本模块是纯函数:不读页面,不改全局,不绑业务事件;列表行内容的装配在 viewer_items.ts,
  * 解析 / 布局 / 每轮重绘在 viewer.ts.
  *
- * 四扇窗口各装一件事:JSON 输入(含解析提示 / 错误行)、实体列表、检查列表、帮助.
+ * 五扇窗口各装一件事:JSON 输入、实体列表、检查列表、诊断消息、帮助.
  * 实体与检查拆成两扇而不是一扇里两段:两件事的列表长度互不相干,拆开之后各自滚动、
  * 各自最小化,一栏不会被另一栏挤掉.
  */
@@ -14,8 +14,10 @@
 import {
     create_element,
     createCodeEditor,
+    createMessageArea,
     type Child,
     type CodeEditorHandle,
+    type MessageAreaHandle,
     type WindowContentSpec,
 } from 'miko_ui';
 import {
@@ -31,6 +33,7 @@ import {
     VIEWER_CHECK_EMPTY_TEXT,
     VIEWER_ENTITY_EMPTY_TEXT,
     VIEWER_WINDOW_CHECK,
+    VIEWER_WINDOW_DIAGNOSTICS,
     VIEWER_WINDOW_ENTITY,
     VIEWER_WINDOW_HELP,
     VIEWER_WINDOW_JSON,
@@ -42,7 +45,7 @@ import { createVisualSurface } from '@/visual/surface';
 /** 结构图那块绘制面的读屏标签(它不是纯装饰:画的是这一份 JSON 的结构) */
 const VIEWER_TREE_LABEL = '结构图';
 
-/** JSON 查看器的桌面视图:桌面背景 + 四扇窗口正文 + 行为代码要用的引用 */
+/** JSON 查看器的桌面视图:桌面背景 + 五扇窗口正文 + 行为代码要用的引用 */
 export interface ViewerViews {
     /** 平面视口(交给库当桌面背景,挂 `.desktop-background`) */
     readonly viewport: HTMLElement;
@@ -54,8 +57,13 @@ export interface ViewerViews {
     readonly content: (id: string) => WindowContentSpec;
     /** JSON 编辑器句柄(值的唯一真相源 + refresh) */
     readonly editor: CodeEditorHandle;
-    /** 解析提示 / 错误行(中性提示与错误共用;挂在 JSON 窗口编辑器下方) */
-    readonly message: HTMLElement;
+    /**
+     * 诊断窗口:库的消息区句柄(容器 + 条目接口).
+     *
+     * 不自己画提示行:`MessageList` 管 `aria-live`、增量渲染与错误 / 警告两级配色,
+     * 应用只决定"往窗口里放什么".
+     */
+    readonly diagnostics: MessageAreaHandle;
     /** 实体列表容器(RowList 宿主) */
     readonly entityList: HTMLElement;
     /** 检查列表容器(RowList 宿主) */
@@ -112,13 +120,6 @@ export function createViewerViews(): ViewerViews {
         viewportClass: 'desktop-background',
     });
 
-    /*
-      提示 / 错误行:挂在 JSON 窗口的编辑器下方 -- "输入不对"这句话属于输入窗口,
-      不该让两个结果窗口各说一遍.同一颗元素靠类名区分中性提示 / 解析错误.
-    */
-    const message = create_element({ tag: 'p' }, { id: VIEWER_DOM.messageId });
-    message.hidden = true;
-
     // 实体窗口:数量行 + 列表 + 空状态
     const entityCount = create_element({ tag: 'p' }, { class: VIEWER_LIST_COUNT_CLASS });
     entityCount.hidden = true;
@@ -132,14 +133,25 @@ export function createViewerViews(): ViewerViews {
     checkEmpty.hidden = true;
 
     /*
-      四扇窗口的正文根各自是滚动容器(`ui-scrollbar` 是库的滚动条类):滑条贴着窗口边.
-      不套"卡片":库的 `.window-body` 已经裁好高度,窗口描边就是内容框.
+      诊断窗口:库的消息区**就是**窗口正文根(没有第二层宿主).容器给 `ui-scrollbar`
+      挂滚动条外观;`message-area--unframed` 去掉它自带的框体 -- 窗口外壳那圈描边就是
+      它的框,再套一层就是两层边框.错误 / 警告条目的配色与 `aria-live` 都归库.
+    */
+    const diagnostics = createMessageArea({
+        modifier: 'message-area--unframed',
+        class: 'ui-scrollbar',
+    });
+    diagnostics.element.id = VIEWER_DOM.diagnosticsPanelId;
+
+    /*
+      五扇窗口的正文根各自是滚动容器(`ui-scrollbar` 是库的滚动条类):滑条贴着窗口边.
+      不套"卡片":库的 `.window-body` 已经裁好高度,窗口描边就是内容框. JSON 窗口
+      只有编辑器(提示 / 错误在诊断窗口里).
     */
     const editorPanel = create_element(
         { tag: 'div' },
         { class: 'ui-scrollbar', id: VIEWER_DOM.editorPanelId },
         editorHost,
-        message,
     );
     const entity = createListPanel(
         VIEWER_DOM.entityPanelId,
@@ -176,6 +188,7 @@ export function createViewerViews(): ViewerViews {
         [VIEWER_WINDOW_JSON]: [editorPanel],
         [VIEWER_WINDOW_ENTITY]: [entity.panel],
         [VIEWER_WINDOW_CHECK]: [check.panel],
+        [VIEWER_WINDOW_DIAGNOSTICS]: [diagnostics.element],
         [VIEWER_WINDOW_HELP]: [helpPanel],
     };
 
@@ -188,7 +201,7 @@ export function createViewerViews(): ViewerViews {
         world,
         content: (id) => (isViewerWindowId(id) ? { body: bodies[id] } : {}),
         editor,
-        message,
+        diagnostics,
         entityList: entity.list,
         checkList: check.list,
         entityCount,

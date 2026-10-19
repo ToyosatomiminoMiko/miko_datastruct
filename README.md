@@ -97,7 +97,7 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 `edges`(没有坐标),`checks` 由 `Diagram` 单独带着;web 需要的是把两者放进同一份 JSON.
 Python 侧对齐这一点是下一步(见 `python/README.md`).
 
-## 界面:一个桌面,四扇窗口,一块平面
+## 界面:一个桌面,五扇窗口,一块平面
 
 ```text
 #viewerViewport            桌面背景 —— 平面视口(铺满桌面、裁切、收指针手势)
@@ -105,20 +105,21 @@ Python 侧对齐这一点是下一步(见 `python/README.md`).
    └─ g.visual-world       世界层:场景里的一切都在这里,视口只改这一层的 transform
 
 窗口层(压在背景之上)
-├─ 窗口 "JSON"           编辑器宿主 #viewerEditor + 提示 / 错误行 #viewerMessage
+├─ 窗口 "JSON"           只有编辑器宿主 #viewerEditor
 ├─ 窗口 "实体"           实体列表 #viewerEntityList(每个节点一行)
 ├─ 窗口 "检查"           检查列表 #viewerCheckList(每条结论一行)
+├─ 窗口 "诊断"           库的消息区 #viewerDiagnosticsPanel(解析错误 / 空输入提示)
 └─ 窗口 "帮助"           JSON 字段说明 + 画布手势 + 回正 / 定位的用法
 
 任务栏(库的 .dock)
-├─ 窗口按钮组           JSON / 实体 / 检查 / 帮助
+├─ 窗口按钮组           JSON / 实体 / 检查 / 诊断 / 帮助
 └─ 桌面动作区           回正视图 + 全部还原(库的)
 ```
 
-- **树是背景,窗口是操作**:结构图铺在桌面上,JSON 窗口在左上、帮助在左下、实体在右上、
-  检查在右下;窗口没盖住的地方就是平面本身;
-- 实体与检查拆成两扇窗口:两件事的列表长度互不相干,各自滚动 / 各自最小化,一栏不会被
-  另一栏挤掉;JSON 的提示 / 错误行挂在 JSON 窗口编辑器下方(输入的问题归输入窗口);
+- **树是背景,窗口是操作**:结构图铺在桌面上,JSON 窗口在左上、诊断 / 帮助依次在它下方,
+  实体在右上、检查在右下;窗口没盖住的地方就是平面本身;
+- 实体 / 检查 / 诊断各成一扇:几件事的列表长度互不相干,各自滚动 / 各自最小化,一栏不会
+  被另一栏挤掉;JSON 窗口因此只有编辑器,解析错误与空输入提示走诊断窗口的库消息区;
 - 平面**没有坐标系**(不画网格 / 轴 / 刻度):左键拖动平移、滚轮以指针为锚缩放;
 - 「回正视图」是桌面级动作(窗口最小化了背景仍然在),所以进库的任务栏,与「全部还原」
   并排;用户没手动挪过视角之前,每次重绘都会自动适应,挪过之后重绘不再动视角;
@@ -151,9 +152,9 @@ Python 侧对齐这一点是下一步(见 `python/README.md`).
   - `config.ts` / `tokens.css` / `visual.css` 类名契约、取景参数与图元通用观感.
 - **`src/ui/viewer/`**:界面层——
   - `config.ts` 窗口清单 / DOM 契约 / 默认 JSON / 帮助文案 / 类名与令牌名;
-  - `viewer_views.ts` 桌面背景与四扇窗口正文的标记(纯函数);
+  - `viewer_views.ts` 桌面背景与五扇窗口正文的标记(纯函数);其中诊断窗口正文就是库的 `createMessageArea` 容器;
   - `viewer_items.ts` 实体行 / 检查行(RowList 的两种行对象);
-  - `viewer_format.ts` 解析错误 / 检查抬头 / `attrs` -> 视觉变体;
+  - `viewer_format.ts` 解析错误文案 / 检查抬头 / `attrs` -> 视觉变体;
   - `viewer_highlight.ts` JSON 分词 -> 高亮 HTML;
   - `viewer.ts` 挂载:装配桌面 + 视口 + 每轮"解析 -> 布局 -> 画布 -> 列表"的全流程.
 
@@ -219,7 +220,7 @@ src/visual/visual.css      视觉层观感(视口裁切与手势 / 绘制面 / �
 src/ui/viewer/          界面:JSON 编辑 + 实体 / 检查列表 + 帮助
 src/ui/viewer/config.ts         窗口清单 / DOM 契约 / 默认 JSON / 帮助文案 / 类名与令牌名
 src/ui/viewer/viewer.ts         挂载:装配桌面 + 视口 + 每轮解析 / 布局 / 落笔 / 列表
-src/ui/viewer/viewer_views.ts   桌面背景与四扇窗口正文(纯函数)
+src/ui/viewer/viewer_views.ts   桌面背景与五扇窗口正文(纯函数;诊断窗口用库的 createMessageArea)
 src/ui/viewer/viewer_items.ts   实体行 / 检查行(RowList 的两种行对象)
 src/ui/viewer/viewer_format.ts  解析错误 / 检查抬头 / attrs -> 视觉变体
 src/ui/viewer/viewer_highlight.ts JSON 分词 -> 高亮 HTML(纯函数)
@@ -254,7 +255,7 @@ npm test        # vitest
 
 - 纯逻辑(node 环境):中性文档解析器 / 自动布局 / JSON 高亮 / 文案映射 / 旧的 RBT 核心;
 - 标记契约与行为(happy-dom):桌面装配、窗口清单、编辑器、实体 / 检查两个列表窗口、
-  定位 / 回正接线.
+  诊断消息区、定位 / 回正接线.
 
 ## 历史
 
@@ -265,4 +266,5 @@ SVG.之后依次做过:编辑器换成库的 `CodeEditor`、面板换成桌面�
 - 新增通用自动布局(树 / 图),web 不再只画红黑树;
 - 原来的"性质检查"窗口拆成 graphcalc 风格的**实体** / **检查**两扇窗口,支持折叠详情与
   节点定位;
+- 解析错误 / 空输入提示改用库的**消息区**(诊断窗口),JSON 窗口只剩下编辑器;
 - 原来的三行提示挪进独立的"帮助"窗口.

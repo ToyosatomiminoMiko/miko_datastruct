@@ -25,9 +25,8 @@
 }
 
 /*
- * JSON 窗口的正文根是一列:编辑器宿主占满整高,提示 / 错误行在它下面.
- * `.code-editor` 的 `min-height: 100%` 需要宿主高度确定才解析得出来;提示行出现时
- * 由它让出高度(不让编辑器把错误行挤到窗口外).
+ * JSON 窗口的正文根是一列:编辑器宿主占满整高(窗口里只有它一件).
+ * `.code-editor` 的 `min-height: 100%` 需要宿主高度确定才解析得出来.
  */
 #viewerEditor {
     flex: 1 1 auto;
@@ -71,21 +70,16 @@
     color: var(--viewer-token-punct-color);
 }
 
-/* 提示 / 错误行:中性说明与解析失败共用一颗元素,类名决定颜色 */
-#viewerMessage {
-    margin: 0;
+/*
+ * 诊断窗口:库的 `.message-area` **就是**正文根(无框变体).应用只给排版口径 --
+ * 等宽小字 -- 与窗口内边距;错误 / 警告条目的底色、文字色、`aria-live` 全归库的
+ * feedback.css,这里不抄第二份.
+ */
+#viewerDiagnosticsPanel {
+    padding: var(--viewer-window-padding);
     font-family: var(--font-code);
     font-size: 13px;
-    line-height: 1.4;
-}
-
-#viewerMessage.viewer-hint {
-    color: var(--viewer-hint-color);
-}
-
-#viewerMessage.viewer-error {
-    color: var(--viewer-error-color);
-    overflow-wrap: anywhere;
+    line-height: 1.5;
 }
 
 /*

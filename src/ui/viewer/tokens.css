@@ -16,9 +16,8 @@
     --viewer-window-padding: 12px;
     --viewer-input-min-height: 120px;
 
-    /* 中性提示 / 错误:错误色与检查 FAIL 同色(都是"这份输入不对") */
+    /* 中性提示(占位文案 / 空状态);诊断窗口的错误 / 警告配色归库的 .diagnostic-* */
     --viewer-hint-color: #94a3b8;
-    --viewer-error-color: #e11d48;
 
     /* 分区标题 / 计数 / 空状态 */
     --viewer-section-color: #cbd5e1;

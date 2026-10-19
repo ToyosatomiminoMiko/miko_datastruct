@@ -29,11 +29,9 @@ import {
     VIEWER_DOCK_ACTIONS,
     VIEWER_EMPTY_DOCUMENT_HINT_TEXT,
     VIEWER_EMPTY_HINT_TEXT,
-    VIEWER_ERROR_CLASS,
     VIEWER_ERROR_UI_PREFIX,
     VIEWER_EXAMPLE_JSON,
     VIEWER_FIT_ACTION_ID,
-    VIEWER_HINT_CLASS,
 } from '@/ui/viewer/config';
 import { parseSceneDocument } from '@/datastruct/scene/scene_document_parse';
 import type { SceneDocument, SceneDocumentCheck, SceneDocumentNode } from '@/datastruct/scene/scene_document';
@@ -51,6 +49,7 @@ import {
     seedTextareaSource,
     type CodeEditorHandle,
     type DesktopHandle,
+    type MessageLevel,
 } from 'miko_ui';
 
 /** 已挂载的一次桌面(按宿主记):dispose 才会摘掉编辑器与视口挂在 window / 元素上的监听 */
@@ -148,11 +147,14 @@ export function mountViewer(host: HTMLElement): void {
         viewport.focusPoint(point.x, point.y);
     };
 
-    /** 提示 / 错误行:同一颗元素按类名切换语义 */
-    const showMessage = (className: string, text: string): void => {
-        views.message.className = className;
-        views.message.textContent = text;
-        views.message.hidden = false;
+    /** 诊断窗口:一条消息(警告 / 错误两级由库的消息条目配色) */
+    const showDiagnostics = (level: MessageLevel, text: string): void => {
+        views.diagnostics.list.render([{ level, message: text }]);
+    };
+
+    /** 清空诊断窗口 */
+    const clearDiagnostics = (): void => {
+        views.diagnostics.list.render([]);
     };
 
     /** 清空画布与两个列表(空输入 / 解析失败 / 空文档三种情况共用) */
@@ -211,7 +213,7 @@ export function mountViewer(host: HTMLElement): void {
 
         if (source === '') {
             clearContent();
-            showMessage(VIEWER_HINT_CLASS, VIEWER_EMPTY_HINT_TEXT);
+            showDiagnostics('warning', VIEWER_EMPTY_HINT_TEXT);
             return;
         }
 
@@ -220,7 +222,7 @@ export function mountViewer(host: HTMLElement): void {
             document = parseSceneDocument(source);
         } catch (error) {
             clearContent();
-            showMessage(VIEWER_ERROR_CLASS, `${VIEWER_ERROR_UI_PREFIX}${formatDocumentError(error)}`);
+            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}${formatDocumentError(error)}`);
             return;
         }
 
@@ -228,12 +230,11 @@ export function mountViewer(host: HTMLElement): void {
         // 只有检查、没有节点的文档是合法的(例如"空结构"的结论),照常展示检查列表.
         if (document.nodes.length === 0 && document.checks.length === 0) {
             clearContent();
-            showMessage(VIEWER_HINT_CLASS, VIEWER_EMPTY_DOCUMENT_HINT_TEXT);
+            showDiagnostics('warning', VIEWER_EMPTY_DOCUMENT_HINT_TEXT);
             return;
         }
 
-        views.message.hidden = true;
-        views.message.textContent = '';
+        clearDiagnostics();
 
         /*
           布局 / 落笔 / 列表是"解析通过之后"的事.解析器已经保证了引用与 key,这一步
@@ -255,7 +256,7 @@ export function mountViewer(host: HTMLElement): void {
             updateListMeta(document);
         } catch (error) {
             clearContent();
-            showMessage(VIEWER_ERROR_CLASS, `${VIEWER_ERROR_UI_PREFIX}渲染失败: ${formatDocumentError(error)}`);
+            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}渲染失败: ${formatDocumentError(error)}`);
         }
     };
 

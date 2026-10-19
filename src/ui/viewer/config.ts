@@ -19,7 +19,7 @@ export const VIEWER_DOM = {
     treeId: 'viewerTree',
     /** JSON 编辑器宿主:库的 CodeEditor 外框长在它里面 */
     editorId: 'viewerEditor',
-    /** JSON 编辑器窗口的正文根(滚动归它;提示 / 错误行也在这一扇里) */
+    /** JSON 编辑器窗口的正文根(滚动归它;这一扇里只有编辑器) */
     editorPanelId: 'viewerEditorPanel',
     /** 实体窗口的正文根(滚动归它) */
     entityPanelId: 'viewerEntityPanel',
@@ -27,8 +27,8 @@ export const VIEWER_DOM = {
     checkPanelId: 'viewerCheckPanel',
     /** 帮助窗口的正文根:静态说明,滚动归它 */
     helpPanelId: 'viewerHelpPanel',
-    /** 解析提示 / 错误行(中性提示与错误共用这一个元素) */
-    messageId: 'viewerMessage',
+    /** 诊断窗口的正文根:库的 `createMessageArea` 建的那颗容器(解析错误 / 提示) */
+    diagnosticsPanelId: 'viewerDiagnosticsPanel',
     /** 实体列表容器(RowList 的宿主) */
     entityListId: 'viewerEntityList',
     /** 检查列表容器(RowList 的宿主) */
@@ -48,6 +48,9 @@ export const VIEWER_WINDOW_ENTITY = 'entity';
 /** 检查列表窗口的 id */
 export const VIEWER_WINDOW_CHECK = 'check';
 
+/** 诊断窗口的 id:解析错误 / 空输入提示都走库的消息区 */
+export const VIEWER_WINDOW_DIAGNOSTICS = 'diagnostics';
+
 /** 帮助窗口的 id */
 export const VIEWER_WINDOW_HELP = 'help';
 
@@ -56,6 +59,7 @@ export type ViewerWindowId =
     | typeof VIEWER_WINDOW_JSON
     | typeof VIEWER_WINDOW_ENTITY
     | typeof VIEWER_WINDOW_CHECK
+    | typeof VIEWER_WINDOW_DIAGNOSTICS
     | typeof VIEWER_WINDOW_HELP;
 
 /** 窗口与桌面边缘的间隙(px):默认几何与库的 edgeGap 引同一个数 */
@@ -65,16 +69,17 @@ export const VIEWER_DESKTOP_INSET = 16;
 export const VIEWER_WINDOW_WIDTH = 430;
 
 /**
- * 四扇窗口的声明(数组顺序 = 任务栏按钮顺序 = 初始 z 序).
+ * 五扇窗口的声明(数组顺序 = 任务栏按钮顺序 = 初始 z 序).
  *
  * 左右各一栏,中间留给背景那幅结构图:
- * - JSON 窗口在左上,占工作区高度的 55%;
- * - 帮助窗口在 JSON 窗口下方(`after`),接到桌面下沿:两者共用左栏;
+ * - JSON 窗口在左上,占工作区高度的 42%;
+ * - 诊断窗口在 JSON 下方(`after`),占 20%:解析错误 / 空输入提示走库的消息区;
+ * - 帮助窗口在诊断下方(`after`),接到桌面下沿;
  * - 实体窗口在右上,占 42%;
- * - 检查窗口在实体窗口下方(`after`),接到桌面下沿:两者共用右栏.
+ * - 检查窗口在实体下方(`after`),接到桌面下沿.
  *
- * 实体与检查分成两扇窗口(而不是一扇里两段):两件事的列表长度互不相干,拆开之后
- * 各自滚动、各自最小化,一栏不会被另一栏挤掉.
+ * 实体 / 检查 / 诊断各成一扇(而不是一扇里几段):三件事的列表长度互不相干,拆开之后
+ * 各自滚动、各自最小化,一栏不会被另一栏挤掉;JSON 窗口因此只剩编辑器.
  */
 export const VIEWER_DESKTOP_WINDOWS = [
     {
@@ -85,7 +90,7 @@ export const VIEWER_DESKTOP_WINDOWS = [
             x: { at: VIEWER_DESKTOP_INSET },
             y: { at: VIEWER_DESKTOP_INSET },
             w: { at: VIEWER_WINDOW_WIDTH },
-            h: { fraction: 0.55, of: 'usableHeight' },
+            h: { fraction: 0.42, of: 'usableHeight' },
         },
         minSize: { w: 300, h: 200 },
     },
@@ -116,6 +121,20 @@ export const VIEWER_DESKTOP_WINDOWS = [
         minSize: { w: 300, h: 160 },
     },
     {
+        id: VIEWER_WINDOW_DIAGNOSTICS,
+        title: '诊断',
+        dock: { label: '诊断' },
+        defaultGeometry: {
+            // y 被 after 覆盖,按库的约定写占位值
+            x: { at: VIEWER_DESKTOP_INSET },
+            y: { at: 0 },
+            w: { at: VIEWER_WINDOW_WIDTH },
+            h: { fraction: 0.2, of: 'usableHeight' },
+            after: { id: VIEWER_WINDOW_JSON, gap: VIEWER_DESKTOP_INSET },
+        },
+        minSize: { w: 300, h: 100 },
+    },
+    {
         id: VIEWER_WINDOW_HELP,
         title: '帮助',
         dock: { label: '帮助' },
@@ -125,7 +144,7 @@ export const VIEWER_DESKTOP_WINDOWS = [
             y: { at: 0 },
             w: { at: VIEWER_WINDOW_WIDTH },
             h: { from: 'bottom', inset: VIEWER_DESKTOP_INSET },
-            after: { id: VIEWER_WINDOW_JSON, gap: VIEWER_DESKTOP_INSET },
+            after: { id: VIEWER_WINDOW_DIAGNOSTICS, gap: VIEWER_DESKTOP_INSET },
         },
         minSize: { w: 300, h: 160 },
     },
@@ -233,10 +252,6 @@ export const VIEWER_LIST_COUNT_CLASS = 'viewer-list-count';
 /** 列表的空状态说明 */
 export const VIEWER_EMPTY_CLASS = 'viewer-empty';
 
-/** 解析提示 / 错误行 */
-export const VIEWER_HINT_CLASS = 'viewer-hint';
-export const VIEWER_ERROR_CLASS = 'viewer-error';
-
 /** 检查抬头 */
 export const VIEWER_CHECK_SUMMARY_CLASS = 'viewer-check-summary';
 
@@ -343,6 +358,7 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
         lines: [
             '实体窗口: 每个节点一行, 显示 label 与 attrs。',
             '检查窗口: 每条结论一行; FAIL 行可展开详情, 并可按 node 定位。',
+            '诊断窗口: JSON 解析失败 / 空输入提示走库的消息区 (错误 / 警告两级)。',
         ],
     },
 ];

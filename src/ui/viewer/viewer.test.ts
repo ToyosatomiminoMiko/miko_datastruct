@@ -13,12 +13,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     VIEWER_DOM,
+    VIEWER_EMPTY_DOCUMENT_HINT_TEXT,
     VIEWER_EMPTY_HINT_TEXT,
     VIEWER_ERROR_UI_PREFIX,
-    VIEWER_ERROR_CLASS,
     VIEWER_EXAMPLE_JSON,
     VIEWER_FIT_BUTTON_TEXT,
-    VIEWER_HINT_CLASS,
 } from '@/ui/viewer/config';
 import { mountViewer } from '@/ui/viewer/viewer';
 import {
@@ -50,10 +49,15 @@ function setSource(input: HTMLTextAreaElement, source: string): void {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-/** 挂一次查看器,交回输入框 / 消息行 / 世界层 / 那棵 SVG */
+/** 诊断窗口里某一级的消息(库的条目文案形如 `[error] ...`) */
+function diagnosticMessages(level: 'warning' | 'error'): string[] {
+    return [...document.querySelectorAll(`#${VIEWER_DOM.diagnosticsPanelId} .diagnostic-${level}`)]
+        .map((node) => node.textContent ?? '');
+}
+
+/** 挂一次查看器,交回输入框 / 世界层 / 那棵 SVG */
 function mountPanel(): {
     input: HTMLTextAreaElement;
-    message: HTMLElement;
     world: SVGGElement;
     tree: SVGSVGElement;
 } {
@@ -63,12 +67,7 @@ function mountPanel(): {
     const tree = byId<SVGSVGElement>(VIEWER_DOM.treeId);
     const world = tree.querySelector<SVGGElement>(`.${VISUAL_WORLD_CLASS}`);
     if (!world) throw new Error('树里找不到世界层');
-    return {
-        input: editorTextarea(),
-        message: byId<HTMLElement>(VIEWER_DOM.messageId),
-        world,
-        tree,
-    };
+    return { input: editorTextarea(), world, tree };
 }
 
 /** 世界层里的节点 / 连线 */
@@ -103,10 +102,12 @@ beforeEach(() => {
 
 describe('查看器:首屏默认示例', () => {
     it('默认 JSON 种进编辑器,画布画出 5 个节点 / 4 条指针,两段列表就位', () => {
-        const { input, message, tree } = mountPanel();
+        const { input, tree } = mountPanel();
 
         expect(input.value).toBe(VIEWER_EXAMPLE_JSON);
-        expect(message.hidden).toBe(true);
+        // 合法输入没有诊断消息
+        expect(diagnosticMessages('warning')).toEqual([]);
+        expect(diagnosticMessages('error')).toEqual([]);
         expect(treeNodes(tree)).toHaveLength(5);
         expect(treePointers(tree)).toHaveLength(4);
         expect(treeLabels(tree).sort()).toEqual(['1', '10', '15', '5', '8']);
@@ -114,7 +115,7 @@ describe('查看器:首屏默认示例', () => {
         // 实体与检查在两个窗口里:实体列表与检查列表各挂在各自的面板下
         expect(byId<HTMLElement>(VIEWER_DOM.entityListId).closest(`#${VIEWER_DOM.entityPanelId}`)).not.toBeNull();
         expect(byId<HTMLElement>(VIEWER_DOM.checkListId).closest(`#${VIEWER_DOM.checkPanelId}`)).not.toBeNull();
-        expect(byId<HTMLElement>(VIEWER_DOM.messageId).closest(`#${VIEWER_DOM.editorPanelId}`)).not.toBeNull();
+        expect(byId<HTMLElement>(VIEWER_DOM.editorPanelId).children).toHaveLength(1);
 
         // 实体:每个节点一行,行末都有「定位」
         expect(document.querySelectorAll('.entity-row')).toHaveLength(5);
@@ -147,8 +148,8 @@ describe('查看器:首屏默认示例', () => {
 
         expectNoDuplicateIds();
         expect(host.querySelectorAll('.window-layer')).toHaveLength(1);
-        expect(host.querySelectorAll('.window')).toHaveLength(4);
-        expect(host.querySelectorAll('.dock .dock-btn')).toHaveLength(4);
+        expect(host.querySelectorAll('.window')).toHaveLength(5);
+        expect(host.querySelectorAll('.dock .dock-btn')).toHaveLength(5);
         expect(host.querySelectorAll(`.${VISUAL_NODE_CLASS}`)).toHaveLength(5);
     });
 });
@@ -182,36 +183,34 @@ describe('查看器:输入变化', () => {
     });
 
     it('空输入:只留一行提示,画布与两段列表都清空', () => {
-        const { input, message, tree } = mountPanel();
+        const { input, tree } = mountPanel();
         setSource(input, '   ');
 
-        expect(message.hidden).toBe(false);
-        expect(message.classList.contains(VIEWER_HINT_CLASS)).toBe(true);
-        expect(message.textContent).toBe(VIEWER_EMPTY_HINT_TEXT);
+        expect(diagnosticMessages('warning')).toEqual([`[warning] ${VIEWER_EMPTY_HINT_TEXT}`]);
+        expect(diagnosticMessages('error')).toEqual([]);
         expect(treeNodes(tree)).toHaveLength(0);
         expect(document.querySelectorAll('.entity-row')).toHaveLength(0);
         expect(document.querySelectorAll('.check-row')).toHaveLength(0);
     });
 
     it('非法 JSON / 悬空引用:只显示一行错误,上一轮内容清干净', () => {
-        const { input, message, tree } = mountPanel();
+        const { input, tree } = mountPanel();
         setSource(input, '{"nodes":[{"key":0,"label":"A"}],"pointers":[{"from":0,"to":9}]}');
 
-        expect(message.hidden).toBe(false);
-        expect(message.classList.contains(VIEWER_ERROR_CLASS)).toBe(true);
-        expect(message.textContent).toBe(
-            `${VIEWER_ERROR_UI_PREFIX}pointers[0].to: 引用了不存在的节点 key: 9`,
-        );
+        expect(diagnosticMessages('error')).toEqual([
+            `[error] ${VIEWER_ERROR_UI_PREFIX}pointers[0].to: 引用了不存在的节点 key: 9`,
+        ]);
+        expect(diagnosticMessages('warning')).toEqual([]);
         expect(treeNodes(tree)).toHaveLength(0);
         expect(document.querySelectorAll('.entity-row')).toHaveLength(0);
         expect(document.querySelectorAll('.check-row')).toHaveLength(0);
     });
 
     it('没有节点也没有检查的空文档:提示"没有东西可画"', () => {
-        const { input, message } = mountPanel();
+        const { input } = mountPanel();
         setSource(input, '{}');
-        expect(message.hidden).toBe(false);
-        expect(message.classList.contains(VIEWER_HINT_CLASS)).toBe(true);
+        expect(diagnosticMessages('warning')).toEqual([`[warning] ${VIEWER_EMPTY_DOCUMENT_HINT_TEXT}`]);
+        expect(diagnosticMessages('error')).toEqual([]);
     });
 
     it('只有检查、没有节点的文档:检查列表照常展示', () => {

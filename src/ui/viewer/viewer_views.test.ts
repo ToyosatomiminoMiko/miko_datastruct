@@ -14,6 +14,7 @@ import {
     VIEWER_EDITOR_PLACEHOLDER,
     VIEWER_HELP_ENTRIES,
     VIEWER_WINDOW_CHECK,
+    VIEWER_WINDOW_DIAGNOSTICS,
     VIEWER_WINDOW_ENTITY,
     VIEWER_WINDOW_HELP,
     VIEWER_WINDOW_JSON,
@@ -25,12 +26,13 @@ import {
     VISUAL_WORLD_CLASS,
 } from '@/visual/config';
 
-/** 建一次视图,顺手取四扇窗口的正文根 */
+/** 建一次视图,顺手取五扇窗口的正文根 */
 function buildViews(): {
     views: ViewerViews;
     editorPanel: HTMLElement;
     entityPanel: HTMLElement;
     checkPanel: HTMLElement;
+    diagnosticsPanel: HTMLElement;
     helpPanel: HTMLElement;
 } {
     const views = createViewerViews();
@@ -39,16 +41,18 @@ function buildViews(): {
         editorPanel: views.content(VIEWER_WINDOW_JSON).body?.[0] as HTMLElement,
         entityPanel: views.content(VIEWER_WINDOW_ENTITY).body?.[0] as HTMLElement,
         checkPanel: views.content(VIEWER_WINDOW_CHECK).body?.[0] as HTMLElement,
+        diagnosticsPanel: views.content(VIEWER_WINDOW_DIAGNOSTICS).body?.[0] as HTMLElement,
         helpPanel: views.content(VIEWER_WINDOW_HELP).body?.[0] as HTMLElement,
     };
 }
 
 describe('JSON 查看器:视图标记(挂载之前)', () => {
-    it('四扇窗口各交回一根正文根,未知 id 交回空内容', () => {
-        const { views, editorPanel, entityPanel, checkPanel, helpPanel } = buildViews();
+    it('五扇窗口各交回一根正文根,未知 id 交回空内容', () => {
+        const { views, editorPanel, entityPanel, checkPanel, diagnosticsPanel, helpPanel } = buildViews();
         expect(editorPanel.id).toBe(VIEWER_DOM.editorPanelId);
         expect(entityPanel.id).toBe(VIEWER_DOM.entityPanelId);
         expect(checkPanel.id).toBe(VIEWER_DOM.checkPanelId);
+        expect(diagnosticsPanel.id).toBe(VIEWER_DOM.diagnosticsPanelId);
         expect(helpPanel.id).toBe(VIEWER_DOM.helpPanelId);
         expect(views.content('nope')).toEqual({});
     });
@@ -68,11 +72,21 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.editor.textarea.classList.contains('is-highlighted')).toBe(true);
     });
 
-    it('提示 / 错误行挂在 JSON 窗口编辑器下方(输入的问题归输入窗口)', () => {
-        const { views, editorPanel } = buildViews();
-        expect(editorPanel.children).toHaveLength(2);
-        expect(editorPanel.children[1]).toBe(views.message);
-        expect(views.message.hidden).toBe(true);
+    it('JSON 窗口只有编辑器(提示 / 错误走诊断窗口,不在输入窗口里)', () => {
+        const { editorPanel } = buildViews();
+        expect(editorPanel.children).toHaveLength(1);
+        expect(editorPanel.children[0].id).toBe(VIEWER_DOM.editorId);
+    });
+
+    it('诊断窗口:库的消息区容器本身就是正文根(aria-live + 滚动条 + 无框)', () => {
+        const { views, diagnosticsPanel } = buildViews();
+        expect(diagnosticsPanel).toBe(views.diagnostics.element);
+        expect(diagnosticsPanel.classList.contains('message-area')).toBe(true);
+        expect(diagnosticsPanel.classList.contains('message-area--unframed')).toBe(true);
+        expect(diagnosticsPanel.classList.contains('ui-scrollbar')).toBe(true);
+        expect(diagnosticsPanel.getAttribute('aria-live')).toBe('polite');
+        // 初始没有消息;条目由 viewer 每轮 render() 增量写入
+        expect(diagnosticsPanel.children).toHaveLength(0);
     });
 
     it('实体窗口:数量行 + 实体列表 + 空状态', () => {
@@ -84,7 +98,6 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.entityList.children).toHaveLength(0);
         expect(views.entityCount.hidden).toBe(true);
         expect(views.entityEmpty.hidden).toBe(true);
-        expect(views.message.parentElement).not.toBe(entityPanel);
     });
 
     it('检查窗口:抬头 + 检查列表 + 空状态', () => {
@@ -98,7 +111,6 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.checkSummary.textContent).toBe('');
         expect(views.checkSummary.hidden).toBe(true);
         expect(views.checkEmpty.hidden).toBe(true);
-        expect(views.message.parentElement).not.toBe(checkPanel);
     });
 
     it('帮助窗口:每一条帮助都有一个标题和若干行说明', () => {
@@ -126,11 +138,12 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.world.children).toHaveLength(0);
     });
 
-    it('窗口清单按 config 声明:四扇窗口的标题与 id 一一对应', () => {
+    it('窗口清单按 config 声明:五扇窗口的标题与 id 一一对应', () => {
         expect(VIEWER_DESKTOP_WINDOWS.map((window) => window.id)).toEqual([
             VIEWER_WINDOW_JSON,
             VIEWER_WINDOW_ENTITY,
             VIEWER_WINDOW_CHECK,
+            VIEWER_WINDOW_DIAGNOSTICS,
             VIEWER_WINDOW_HELP,
         ]);
     });
