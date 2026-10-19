@@ -24,6 +24,8 @@ web 这一半现在只认 JSON,并且**输入与运行是分开的**:
   窗口决定(一段 JSON 数组,元素是检查函数名),载入后现算;
 - 标题栏的**示例**菜单内置多种结构(红黑树 / 二叉搜索树 / 最小堆 / 单链表 / 柯尼斯堡七桥),
   选中一份会同时换掉 JSON 与检查配置并运行;
+- 任务栏的**演示**动作按步骤演示 BST / 红黑树:每步一份完整场景 + 一句讲解,镜头自动跟随,
+  底部浮条提供播放 / 暂停 / 单步 / 回退 / 进度条 / 0.5×–2× / 跟随镜头开关(见下节);
 - 画布从连接关系自动推形状:只有指针且无环 -> 整齐树布局;有边 / 有环 -> 环形布局;
   多个连通分量并排;
 - 有向指针画成带箭头的线段,无向边是普通线段;同一对节点之间的多条线(平行边 / 反向指针)
@@ -149,7 +151,7 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 
 任务栏(库的 .dock)
 ├─ 窗口按钮组           JSON / 实体 / 检查配置 / 检查 / 诊断 / 帮助
-└─ 桌面动作区           回正视图 + 全部还原(库的)
+└─ 桌面动作区           演示(剧本菜单) + 回正视图 + 全部还原(库的)
 ```
 
 - **树是背景,窗口是操作**:结构图铺在桌面上,JSON 窗口在左上、诊断 / 帮助依次在它下方,
@@ -161,8 +163,9 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 - 「检查配置」是显式的检查函数名数组,不进 JSON:手写 / 粘贴 JSON 不会清掉你写的配置,
   只有「示例」菜单会整组替换它;说明与可用函数名都收在**帮助**窗口,不在检查配置窗口里重复;
 - 平面**没有坐标系**(不画网格 / 轴 / 刻度):左键拖动平移、滚轮以指针为锚缩放;
-- 「回正视图」是桌面级动作(窗口最小化了背景仍然在),所以进库的任务栏,与「全部还原」
-  并排;用户没手动挪过视角之前,每次重绘都会自动适应,挪过之后重绘不再动视角;
+- 「演示」与「回正视图」是桌面级动作(窗口最小化了背景仍然在),所以进库的任务栏,与
+  「全部还原」并排;「演示」按钮点开剧本菜单(按 BST / 红黑树分组),播放控制仍在演示浮条上;
+- 「回正视图」:用户没手动挪过视角之前,每次重绘都会自动适应,挪过之后重绘不再动视角;
 - 「定位」是行级动作:实体行末的按钮把这个节点移到视口中心;FAIL 检查行末的按钮移到
   检查结论里的 `node` 指向的节点.定位按当前缩放与"至少 0.8"的较大者执行(整幅图很大时
   自动适应会把视角压得很小),之后进入手动模式,要回自动适应就点「回正视图」.
@@ -174,6 +177,35 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 - **检查行**:PASS / FAIL 徽章 + 检查名 + 一行 `detail`;有 `details` 时收进 `<details>`
   (默认收起,行重建时展开态保留),FAIL 且有 `node` 时行末「定位」;窗口顶部一行
   `n 条中 m 条 FAIL`.检查名与文案来自注册的检查器,不读 JSON.
+
+## 动画演示:按步骤看 BST / 红黑树
+
+**演示 = 回放一条轨迹**,不是手写关键帧:算法在纯逻辑层逐拍改结构并 `yield` 一帧完整
+中性 JSON,播放器把第 i−1 帧插值到第 i 帧.所以回退 / 拖进度条只是"重画第 i 帧",暂停 /
+变速只动虚拟时钟,自动化测试可以逐帧断言"这一帧的树长什么样、检查是否 PASS".
+设计与数据契约见 [`docs/animation.md`](docs/animation.md).
+
+```text
+菜单「演示」-> 选剧本(3 个 BST + 4 个 RBT)
+  -> 剧本:初始结构 + 操作序列 + 检查 id + 章节
+  -> datastruct/bst | rbt 的 generator 逐拍产出 TraceFrame(记录器在 yield 时取快照)
+  -> visual/anchor 对齐两帧布局 -> visual/motion 插值 -> visual/painter 增量落笔
+  -> ui/viewer/demo_player 虚拟时钟 / 镜头请求 / 检查与列表同步
+```
+
+进入演示后 JSON / 实体 / 检查配置 / 诊断 / 帮助窗口最小化,只保留**检查**窗口(不变量是
+教学的一部分);底部浮条排在检查窗口左侧,并作为镜头的底部避让区.退出时恢复进入前的窗口
+状态,并把最后一次 RUN 的静态结构画回来;演示**不改 JSON 编辑器**.
+
+- 镜头:每步按 `focus / frame / framing` 取景,中心 + 对数缩放插值、`easeInOutCubic`,
+  时长 280–900ms 随距离自适应;拖动 / 滚轮只打断当前镜头动画,「跟随镜头」关掉后不再抢镜头;
+- 几何:先按 `anchor / anchorAt` 平移整帧布局再插值(否则插一个最左叶子也会"整棵树一起滑");
+  旋转用 `motion: rotate` 让 x / y 绕旧边中点走弧线,β 子树绕移动中的 x 走短弧;
+- 高亮:`visual-state--active / path / visited / found / ghost / fresh` 叠在结构色变体上,
+  连线端点每帧按插值后的节点坐标 + 分道偏移重算,不会脱开圆边;
+- 键盘(演示模式、焦点不在输入框):`Space` 播放 / 暂停,`←/→` 单步,`Home/End` 首尾,
+  `Esc` 退出;
+- `prefers-reduced-motion` 下结构与镜头瞬移,步骤仍可自动 / 手动前进.
 
 ## 分层:datastruct / visual / ui
 
@@ -266,19 +298,27 @@ src/scene/scene_document_parse.ts 解析 / 校验(错误码 + 路径)
 src/scene/scene_check.ts          检查注册表:检查 id -> 运行函数
 src/scene/label_value.ts          label -> 数值的共用口径(rbt / heap / list)
 
-src/datastruct/         纯逻辑:各数据结构的性质检查
+src/datastruct/         纯逻辑:性质检查 + 演示轨迹生成(不碰 DOM)
 src/datastruct/checks.ts                     内置检查集注册入口(rbt / graph / heap / list)
 src/datastruct/rbt/rbt_checks.ts             红黑树性质检查
 src/datastruct/graph/graph_checks.ts         图(欧拉回路)检查
 src/datastruct/heap/heap_checks.ts           最小堆检查
 src/datastruct/list/list_checks.ts           单链表检查
+src/datastruct/trace/trace.ts                动画轨迹契约(TraceStep / SceneTrace / TraceBuilder / TreeOp)
+src/datastruct/bst/bst.ts                    BST 模型(稳定 key / 快照)+ 查找 / 插入 / 删除 / 遍历 / 旋转
+src/datastruct/rbt/rbt_ops.ts                红黑树插入 / 删除 / 五条性质讲解帧
 
-src/visual/             视觉层:所有结构共用(场景模型 / 落笔 / 绘制面 / 视口 / 自动布局)
+src/visual/             视觉层:所有结构共用(场景模型 / 落笔 / 绘制面 / 视口 / 自动布局 / 动画)
 src/visual/scene.ts        场景模型:节点 / 连线(有向指针 / 无向边)的正式表示
-src/visual/render.ts       场景 -> SVG:整批重建世界层,并用 getBBox 量内容实际占多大
+src/visual/render.ts       静态落笔:场景 -> SVG,整批重建世界层,并用 getBBox 量内容实际占多大
+src/visual/elements.ts     图元构造 / 就地写入 / 包围盒测量(静态与动画两条路径共用)
+src/visual/painter.ts      ScenePainter:稳定 id 的增量落笔(动画路径;落定帧才移除退场元素)
 src/visual/surface.ts      平面绘制面标记:视口 div -> 绘制面 svg -> 世界层 g
-src/visual/viewport.ts     平面视口:变换数学 + 拖动 / 滚轮手势 + 回正 + 定位
-src/visual/layout.ts       中性场景自动布局:树形(轮廓合并)/ 环形 / 多分量并排
+src/visual/viewport.ts     平面视口:变换数学 + 拖动 / 滚轮手势 + 回正 + 镜头缓动 / 打断
+src/visual/layout.ts       中性场景自动布局:树形(轮廓合并)/ 环形 / 多分量并排;连线端点公式
+src/visual/tween.ts        可注入时钟 + 缓动 + 补间(单帧 delta 夹取)
+src/visual/anchor.ts       帧间锚定:按 anchor / anchorAt 平移整帧布局
+src/visual/motion.ts       两帧场景插值:直线 / 极坐标(旋转)/ 子树平移;连线端点重算
 src/visual/config.ts       视觉层的类名契约、节点半径 / 箭头 / 分道参数、取景与布局参数
 src/visual/tokens.css      视觉层令牌(--visual-*:颜色 / 线宽 / 字号 / 进入动画)
 src/visual/visual.css      视觉层观感(视口裁切与手势 / 绘制面 / 节点 / 连线 / 箭头 / 动画)
@@ -286,8 +326,11 @@ src/visual/visual.css      视觉层观感(视口裁切与手势 / 绘制面 / �
 src/ui/viewer/          界面:JSON 编辑 + 实体 / 检查列表 + 帮助
 src/ui/viewer/config.ts         窗口清单 / DOM 契约 / 标题栏节点表 / 默认示例 / 帮助文案
 src/ui/viewer/examples.ts        内置示例结构:JSON + 配套检查 id + 菜单分组
-src/ui/viewer/viewer_chrome.ts   JSON 窗口标题栏:示例 / RUN 按钮 + 示例菜单面板
-src/ui/viewer/viewer.ts         挂载:装配桌面 + 视口 + RUN / 示例 / 检查配置的全流程
+src/ui/viewer/viewer_chrome.ts   JSON 窗口标题栏:示例 / RUN 按钮 + 示例菜单面板(任务栏「演示」动作在 config.ts)
+src/ui/viewer/demo_scenarios.ts  7 个演示剧本(初始结构 + 操作序列 + 检查 id + 章节)
+src/ui/viewer/demo_player.ts     播放器状态机:虚拟时钟 / 步骤 / 镜头请求 / 列表同步
+src/ui/viewer/demo_views.ts      演示浮条 / 章节进度条 / 键盘绑定
+src/ui/viewer/viewer.ts         挂载:装配桌面 + 视口 + RUN / 示例 / 演示 / 检查配置的全流程
 src/ui/viewer/viewer_views.ts   桌面背景与六扇窗口正文(纯函数;诊断窗口用库的 createMessageArea)
 src/ui/viewer/viewer_items.ts   实体行 / 检查行(RowList 的两种行对象)
 src/ui/viewer/viewer_format.ts  解析错误 / 检查抬头 / 检查配置报错 / attrs -> 视觉变体
@@ -296,10 +339,10 @@ src/ui/viewer/check_config.ts    检查配置(JSON 数组)的解析(纯函数)
 src/ui/viewer/tokens.css        查看器令牌(--viewer-*:列表 / 状态色 / 词法 / 示例节点色)
 src/ui/viewer/viewer.css        查看器观感(窗口正文 / 列表行 / 检查详情 / JSON 词法)
 
-src/test_support/       标记契约测试的两个小助手(renderHost / expectNoDuplicateIds)
+src/test_support/       测试小助手(renderHost / expectNoDuplicateIds / ManualClock)
 scripts/dev_ui_link.py  本地联调:miko_ui 换成指向工作副本的软链(link / unlink / status)
 docs/checks.md          性质检查实现速查(显示名 / id / 函数位置 / 判据)
-docs/animation.md       动画演示设计(轨迹 / 场景形变 / 镜头缓动 / BST 与 RBT 剧本;**尚未实现**)
+docs/animation.md       动画演示设计与实现(轨迹 / 场景形变 / 镜头缓动 / BST 与 RBT 剧本;M0–M4 已实现)
 
 python/                 中性 JSON 生成(纯标准库;与 web 不是前后端关系,见 python/README.md)
 ```
@@ -325,10 +368,12 @@ npm test        # vitest
 ```
 
 - 纯逻辑(node 环境):中性文档解析器 / 检查注册表 / 红黑树 / 图 / 堆 / 链表检查 /
-  内置示例清单 / 自动布局 / JSON 高亮 / 文案映射;
-- 标记契约与行为(happy-dom):桌面装配、六扇窗口清单、标题栏示例 / RUN、两个 CodeEditor、
-  实体 / 检查两个列表窗口、输入不自动运行而 RUN / Ctrl+Enter 才运行、示例菜单整组换
-  JSON + 检查配置、按检查配置重算、检查配置错误与未找到函数名的诊断提示、定位 / 回正接线.
+  内置示例清单 / 自动布局 / JSON 高亮 / 文案映射;演示轨迹(BST / RBT 逐帧合法、教学情形、
+  确定性)、锚定 / 场景插值 / 补间 / 7 个剧本的契约;
+- 标记契约与行为(happy-dom):桌面装配、六扇窗口清单、标题栏示例 / RUN + 任务栏演示、两个
+  CodeEditor、实体 / 检查两个列表窗口、输入不自动运行而 RUN / Ctrl+Enter 才运行、示例菜单
+  整组换 JSON + 检查配置、按检查配置重算、检查配置错误与未找到函数名的诊断提示、定位 /
+  回正接线;演示模式进出 / 窗口让位与恢复 / 浮条控制 / 键盘 / RUN 冲突 / 增量落笔复用.
 
 ## 历史
 
@@ -354,3 +399,8 @@ SVG.之后依次做过:编辑器换成库的 `CodeEditor`、面板换成桌面�
 - 2026-10 补:箭头收窄为底宽 7 / 长 10(原来底宽 = 长 = 10,张角 90°,放大后是一枚
   等腰直角三角形,像鼠标指针).线宽不变,指向仍然清楚.
 - 2026-10 补:线段止于箭头底边,不再画到尖端;尖端的线头(2px 方头)不会再破坏箭头的尖角.
+- 2026-10 补:**动画演示**落地(M0–M4):轨迹生成(`datastruct/{trace,bst,rbt}`)、场景形变
+  (`visual/{tween,anchor,motion,painter,elements}`)、镜头缓动 / 打断 / 上下 insets
+  (`visual/viewport.ts`)、演示播放器与底部浮条(`ui/viewer/demo_*`),内置 3 个 BST 剧本
+  (原理 / 旋转 / 退化)与 4 个 RBT 剧本(入门 / 生根 / 综合插入 / 删除).设计见
+  [`docs/animation.md`](docs/animation.md);M5(自由操作沙盒 / BST·RBT 对照 / 写回 JSON)未做.

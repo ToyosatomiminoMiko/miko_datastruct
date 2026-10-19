@@ -353,21 +353,20 @@ function linkPairKey(a: number, b: number): string {
 }
 
 /**
- * 给每条连线算端点:收进节点圆边界 + 同对连线横向分道.
+ * 同一对无向节点之间每条线的**分道偏移**(px,沿固定法向).
  *
- * 分道规则:同一无向节点对之间有 n 条线时,按输入顺序取
+ * 规则:同一无向节点对之间有 n 条线时,按输入顺序取
  * `(位置 - (n-1)/2) * VISUAL_LINK_LANE_GAP` 的横向偏移,整组以连线为中心左右对称.
  * 两个效果:
  * - 平行边(柯尼斯堡的 K-N ×2 / K-S ×2)不再重叠成一条;
  * - 反向指针 `a->b` + `b->a` 分到两侧,两枚箭头都看得见.
  *
- * 法向取"无向对"的固定方向(按 key 大小定正负),而不是每条线自己的方向:否则反向
- * 指针的局部法向会翻回来,两条线又叠到一起.
+ * 单独导出是因为动画每帧要**插值**这个偏移(分道数变化时不能瞬跳),不能每帧重新
+ * 从零分组算完就丢:见 src/visual/motion.ts.
  */
-function buildLinks(
-    rawLinks: readonly { readonly from: number; readonly to: number; readonly directed: boolean }[],
-    pointOf: (key: number) => SceneLayoutPoint,
-): SceneLayoutLink[] {
+export function assignLinkLanes(
+    rawLinks: readonly { readonly from: number; readonly to: number }[],
+): number[] {
     const laneOffsets = new Array<number>(rawLinks.length).fill(0);
     const groups = new Map<string, number[]>();
     rawLinks.forEach((link, index) => {
@@ -383,39 +382,70 @@ function buildLinks(
             laneOffsets[linkIndex] = (position - center) * VISUAL_LINK_LANE_GAP;
         });
     }
+    return laneOffsets;
+}
+
+/**
+ * 一条连线的端点:从节点圆心方向收进圆边界(半径 + 空隙),再沿固定法向分道.
+ *
+ * 这是布局与动画**共用**的端点公式:静态路径在 `buildLinks` 里用;动画每帧先用
+ * 插值后的节点坐标,再对 `laneOffset` 插值,最后调这里重算端点 -- 节点在动时线段
+ * 端点不会脱开圆边(见 docs/animation.md §5.3).
+ *
+ * `laneOffset` 已经带符号(调用方把"同对序号"折成正负),这里不再判断方向:
+ * 法向固定为 `(-uy, ux)`,反向指针由调用方给负偏移来决定分到哪一侧.
+ */
+export function linkEndpoints(
+    from: SceneLayoutPoint,
+    to: SceneLayoutPoint,
+    laneOffset: number,
+): { readonly start: SceneLayoutPoint; readonly end: SceneLayoutPoint } {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1e-9) {
+        // 自环:没有"从圆心指向圆心"的方向可收,交给渲染层时是零长度线段
+        return { start: from, end: to };
+    }
+
+    const ux = dx / length;
+    const uy = dy / length;
+    const offsetX = -uy * laneOffset;
+    const offsetY = ux * laneOffset;
+    // 收进半径 + 空隙;线太短时最多收到一半,避免端点交叉
+    const shorten = Math.max(0, Math.min(VISUAL_NODE_RADIUS + VISUAL_LINK_NODE_GAP, length / 2 - 0.5));
+
+    return {
+        start: {
+            x: from.x + ux * shorten + offsetX,
+            y: from.y + uy * shorten + offsetY,
+        },
+        end: {
+            x: to.x - ux * shorten + offsetX,
+            y: to.y - uy * shorten + offsetY,
+        },
+    };
+}
+
+/**
+ * 给每条连线算端点:收进节点圆边界 + 同对连线横向分道.
+ *
+ * 法向取"无向对"的固定方向(按 key 大小定正负),而不是每条线自己的方向:否则反向
+ * 指针的局部法向会翻回来,两条线又叠到一起.`linkEndpoints` 只认带符号的偏移,
+ * 这个 canonical 符号在这里折进去.
+ */
+function buildLinks(
+    rawLinks: readonly { readonly from: number; readonly to: number; readonly directed: boolean }[],
+    pointOf: (key: number) => SceneLayoutPoint,
+): SceneLayoutLink[] {
+    const laneOffsets = assignLinkLanes(rawLinks);
 
     return rawLinks.map((link, index) => {
         const from = pointOf(link.from);
         const to = pointOf(link.to);
-        const dx = to.x - from.x;
-        const dy = to.y - from.y;
-        const length = Math.hypot(dx, dy);
-        const laneOffset = laneOffsets[index] ?? 0;
-        if (length < 1e-9) {
-            // 自环:没有"从圆心指向圆心"的方向可收,交给渲染层时是零长度线段
-            return { ...link, start: from, end: to };
-        }
-
-        const ux = dx / length;
-        const uy = dy / length;
-        // 固定法向:见上面的说明,反向指针不能再翻一次
         const canonical = link.from <= link.to ? 1 : -1;
-        const offsetX = -uy * canonical * laneOffset;
-        const offsetY = ux * canonical * laneOffset;
-        // 收进半径 + 空隙;线太短时最多收到一半,避免端点交叉
-        const shorten = Math.max(0, Math.min(VISUAL_NODE_RADIUS + VISUAL_LINK_NODE_GAP, length / 2 - 0.5));
-
-        return {
-            ...link,
-            start: {
-                x: from.x + ux * shorten + offsetX,
-                y: from.y + uy * shorten + offsetY,
-            },
-            end: {
-                x: to.x - ux * shorten + offsetX,
-                y: to.y - uy * shorten + offsetY,
-            },
-        };
+        const endpoints = linkEndpoints(from, to, (laneOffsets[index] ?? 0) * canonical);
+        return { ...link, ...endpoints };
     });
 }
 

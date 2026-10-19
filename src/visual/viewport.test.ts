@@ -19,15 +19,22 @@ import {
 } from '@/visual/config';
 import {
     fitPlaneView,
+    focusPlaneView,
+    framePlaneView,
+    interpolatePlaneView,
     mountPlaneViewport,
     panPlaneView,
+    planeViewCenter,
     planeViewTransform,
+    viewAnimationDurationMs,
     wheelZoomFactor,
     zoomPlaneView,
     type PlaneBox,
+    type PlaneInsets,
     type PlaneViewState,
     type PlaneViewportHandle,
 } from '@/visual/viewport';
+import { ManualClock } from '@/test_support/manual_clock';
 
 // 变换数学
 
@@ -344,5 +351,179 @@ describe('平面视口:手势绑定', () => {
         wheel(host, 500, 400, -100);
 
         expect(world.getAttribute('transform')).toBe(frozen);
+    });
+});
+
+// 镜头取景数学(纯函数)
+
+describe('平面视口:镜头取景数学', () => {
+    const insets: PlaneInsets = { top: 40, bottom: 120 };
+
+    it('focusPlaneView:点落在可用区正中,缩放取 max(当前, 下限)', () => {
+        const target = focusPlaneView(
+            { k: 0.2, x: 0, y: 0 },
+            { x: 1234, y: 56 },
+            viewportBox(1000, 800),
+            insets,
+            VISUAL_FOCUS_MIN_ZOOM,
+        );
+        expect(target.k).toBe(VISUAL_FOCUS_MIN_ZOOM);
+        // 可用区 = top 40 到 800-120,中点 y = 40 + 640/2 = 360
+        expect(target.x).toBeCloseTo(500 - 1234 * target.k, 6);
+        expect(target.y).toBeCloseTo(360 - 56 * target.k, 6);
+        // 反解中心点就是目标点(浮点误差在 1e-9 内)
+        const center = planeViewCenter(target, viewportBox(1000, 800), insets);
+        expect(center.centerX).toBeCloseTo(1234, 9);
+        expect(center.centerY).toBeCloseTo(56, 9);
+    });
+
+    it('framePlaneView:框住一组点,装进可用区并留出圆半径余量;空数组原样返回', () => {
+        const current: PlaneViewState = { k: 3, x: 7, y: 9 };
+        // 两个点相距 200:包围盒 + 半径余量后仍装得下,放大上限 1
+        const target = framePlaneView(
+            current,
+            [{ x: 0, y: 0 }, { x: 200, y: 100 }],
+            viewportBox(1000, 800),
+            insets,
+            VISUAL_FIT_MAX_ZOOM,
+        );
+        expect(target.k).toBe(VISUAL_FIT_MAX_ZOOM);
+        // 包围盒中心 (100,50) 对到可用区中心
+        expect(planeViewCenter(target, viewportBox(1000, 800), insets))
+            .toEqual({ centerX: 100, centerY: 50 });
+
+        expect(framePlaneView(current, [], viewportBox(1000, 800), insets, VISUAL_FIT_MAX_ZOOM))
+            .toBe(current);
+    });
+
+    it('interpolatePlaneView:端点精确,缩放取对数(中点 = 几何平均),中心线性', () => {
+        const from: PlaneViewState = { k: 0.25, x: 100, y: 50 };
+        const to: PlaneViewState = { k: 1, x: -300, y: 250 };
+        const viewport = viewportBox(1000, 800);
+        const start = interpolatePlaneView(from, to, viewport, insets, 0);
+        const end = interpolatePlaneView(from, to, viewport, insets, 1);
+        expect(start.k).toBeCloseTo(from.k, 9);
+        expect(start.x).toBeCloseTo(from.x, 6);
+        expect(end.k).toBeCloseTo(to.k, 9);
+        expect(end.x).toBeCloseTo(to.x, 6);
+
+        const middle = interpolatePlaneView(from, to, viewport, insets, 0.5);
+        expect(middle.k).toBeCloseTo(Math.sqrt(from.k * to.k), 9);
+        const cFrom = planeViewCenter(from, viewport, insets);
+        const cTo = planeViewCenter(to, viewport, insets);
+        const cMiddle = planeViewCenter(middle, viewport, insets);
+        expect(cMiddle.centerX).toBeCloseTo((cFrom.centerX + cTo.centerX) / 2, 6);
+        expect(cMiddle.centerY).toBeCloseTo((cFrom.centerY + cTo.centerY) / 2, 6);
+    });
+
+    it('viewAnimationDurationMs:近处 ~280,远处 / 大缩放变化封顶 900', () => {
+        const near = viewAnimationDurationMs(
+            { k: 1, x: 0, y: 0 },
+            { k: 1, x: 10, y: 0 },
+            viewportBox(1000, 800),
+            insets,
+        );
+        // 公式 280 + 0.5 * 10 = 285,仍在 280~300 的"近距离"区间
+        expect(near).toBe(285);
+
+        const far = viewAnimationDurationMs(
+            { k: 1, x: 0, y: 0 },
+            { k: 0.1, x: 20000, y: 20000 },
+            viewportBox(1000, 800),
+            insets,
+        );
+        expect(far).toBe(900);
+    });
+});
+
+// 镜头动画(happy-dom 里的真视口 + 手动时钟)
+
+describe('平面视口:镜头动画 / 打断', () => {
+    function mountAnimated(): { world: SVGGElement; viewport: PlaneViewportHandle; clock: ManualClock } {
+        document.body.innerHTML = '';
+        const host = document.createElement('div');
+        Object.defineProperty(host, 'clientWidth', { value: 1000, configurable: true });
+        Object.defineProperty(host, 'clientHeight', { value: 800, configurable: true });
+        document.body.append(host);
+        const world = create_svg_element({ tag: 'g' });
+        const clock = new ManualClock();
+        const viewport = mountPlaneViewport(host, world, {
+            insets: { top: 40, bottom: 120 },
+            clock,
+            reducedMotion: false,
+        });
+        return { world, viewport, clock };
+    }
+
+    it('animateTo 在虚拟时钟上插值:中间帧在动,推完落到目标', () => {
+        const { world, viewport, clock } = mountAnimated();
+        viewport.contentChanged(box(0, 0, 400, 200));
+        const from = viewport.getView();
+        const target = framePlaneView(
+            from,
+            [{ x: 0, y: 0 }, { x: 200, y: 100 }],
+            viewportBox(1000, 800),
+            { top: 40, bottom: 120 },
+            1,
+        );
+
+        viewport.framePoints([{ x: 0, y: 0 }, { x: 200, y: 100 }]);
+        const first = readTransform(world);
+        // 第一帧同步写 e(0):还在出发视角
+        expect(first.k).toBeCloseTo(from.k, 9);
+
+        for (let index = 0; index < 5; index += 1) clock.advance(50);
+        const middle = readTransform(world);
+        // 这一段的缩放没变(1 -> 1),但中心在动:中间帧不是起点
+        expect(middle.x).not.toBeCloseTo(from.x, 6);
+
+        for (let index = 0; index < 40; index += 1) clock.advance(50);
+        const settled = readTransform(world);
+        expect(settled.k).toBeCloseTo(target.k, 9);
+        expect(settled.x).toBeCloseTo(target.x, 6);
+        expect(settled.y).toBeCloseTo(target.y, 6);
+    });
+
+    it('用户拖动立即打断镜头动画,停在当前位置;之后不再被动画接管', () => {
+        const { world, viewport, clock } = mountAnimated();
+        const host = document.querySelector('div') as HTMLElement;
+        viewport.contentChanged(box(0, 0, 400, 200));
+
+        viewport.framePoints([{ x: 0, y: 0 }, { x: 400, y: 300 }]);
+        for (let index = 0; index < 3; index += 1) clock.advance(50);
+        const beforeDrag = readTransform(world);
+
+        drag(host, { x: 500, y: 400 }, { x: 520, y: 400 });
+        const afterDrag = readTransform(world);
+        expect(afterDrag.k).toBeCloseTo(beforeDrag.k, 9);
+        expect(afterDrag.x).toBeCloseTo(beforeDrag.x + 20, 6);
+
+        // 动画已经被打断:再推时钟不再变
+        for (let index = 0; index < 30; index += 1) clock.advance(50);
+        expect(readTransform(world)).toEqual(afterDrag);
+    });
+
+    it('reducedMotion / animated:false 直接瞬移,不排动画帧', () => {
+        const { world, viewport, clock } = mountAnimated();
+        viewport.contentChanged(box(0, 0, 400, 200));
+        const target = focusPlaneView(
+            viewport.getView(),
+            { x: 500, y: 300 },
+            viewportBox(1000, 800),
+            { top: 40, bottom: 120 },
+            VISUAL_FOCUS_MIN_ZOOM,
+        );
+
+        viewport.animateTo(target, { animated: false });
+        expect(readTransform(world)).toEqual({
+            k: Math.round(target.k * 1000) / 1000,
+            x: Math.round(target.x * 1000) / 1000,
+            y: Math.round(target.y * 1000) / 1000,
+        });
+        expect(clock.pendingCount).toBe(0);
+
+        // setInsets 只影响下一次镜头;手动模式下不重新适应
+        viewport.setInsets({ top: 40, bottom: 0 });
+        expect(viewport.getInsets()).toEqual({ top: 40, bottom: 0 });
     });
 });

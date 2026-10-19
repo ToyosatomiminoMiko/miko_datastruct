@@ -462,6 +462,10 @@ describe('查看器:列表交互', () => {
         // 不会自动重算(happy-dom 的 ResizeObserver 不会像浏览器那样补一次).
         const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
         const heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+        // 定位走镜头缓动(rAF);这里把"减少动态效果"打开,让视口在挂载时就把镜头瞬移,
+        // 测试不必等待真实动画帧.缓动本身在 visual/viewport.test.ts 里单独验.
+        const mediaSpy = vi.spyOn(window, 'matchMedia')
+            .mockReturnValue({ matches: true } as MediaQueryList);
         try {
             const { tree } = mountPanel();
             const viewport = byId<HTMLElement>(VIEWER_DOM.viewportId);
@@ -502,6 +506,7 @@ describe('查看器:列表交互', () => {
         } finally {
             widthSpy.mockRestore();
             heightSpy.mockRestore();
+            mediaSpy.mockRestore();
             bbox.mockRestore();
         }
     });

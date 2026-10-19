@@ -71,11 +71,12 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(views.content('nope')).toEqual({});
     });
 
-    it('JSON 窗口标题栏:示例 / RUN 两个动作按钮,菜单面板在浮层槽位', () => {
+    it('JSON 窗口标题栏:示例 / RUN 两个动作按钮,示例菜单面板在浮层槽位', () => {
         const { views } = buildViews();
         const content = views.content(VIEWER_WINDOW_JSON);
 
-        // 两个按钮进 actions(顺序 = 配置表顺序),菜单面板进 overlays
+        // 两个按钮进 actions(顺序 = 配置表顺序),示例菜单面板进 overlays;
+        // 「演示」按钮与菜单在任务栏(见 viewer.ts / demo_mode.test.ts),不属于标题栏节点
         expect(content.slots?.actions).toEqual([
             views.chrome.exampleButton,
             views.chrome.runButton,

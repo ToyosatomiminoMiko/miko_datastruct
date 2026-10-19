@@ -1,8 +1,9 @@
-# 动画演示设计
+# 动画演示:设计与实现
 
-> 状态:**web 侧动画尚未实现;Python 侧的 BST 静态示例已落地(§15)**。本文是这套功能
-> 唯一的设计源:表现、数据契约、镜头数学、剧本、文件分工、测试与分期都在这里。业务
-> 背景与现有分层见根 `README.md`。
+> 状态:**web 侧 M0–M4 已落地(M5 自由操作 / 对照演出未做);Python 侧的 BST 静态示例
+> 已落地(§15)**。本文是这套功能的**设计与实现说明**:表现、数据契约、镜头数学、剧本、
+> 文件分工、测试与分期都在这里;实际文件与验收方式见 §19。业务背景与现有分层见根
+> `README.md`。
 
 目标:在现有的中性 JSON 画布上,按步骤演示 **二叉搜索树(BST)的原理**,再演示
 **红黑树(RBT)的插入 / 删除**。现有的「定位」与自动布局、性质检查都复用,镜头移动
@@ -17,9 +18,11 @@
 - **四层**:轨迹生成(纯逻辑)/ 场景形变 / 镜头 / 播放器与演示 UI;文件与职责见 §10。
 - **已确认**:旋转是 BST 的前置知识,排在第 9 章(§7.1);Python demo 已有 BST 静态示例
   (§15);叙事顺序 BST -> 旋转 -> 退化 -> RBT。
-- **待拍板**:§14 的四个问题(演示入口形态、RBT 删除是否本轮、JSON 是否跟随、沙盒)。
-- **下一步**:M0 镜头缓动(§12):不引入播放器,先验证取景 / 打断 / insets。
-- **现状**:web 动画 0 行代码;`python/examples/bst.py` 已落地且测试通过。
+- **已拍板**:§14 的四个问题按下述口径实现 —— 演示入口放**任务栏**「演示」动作、RBT 删除本轮
+  已做、JSON 编辑器默认不跟随(写回 JSON 未做)、自由操作沙盒留到 M5。
+- **现状**:M0–M4 已实现并有测试(全仓 282 项通过);演示可播放 / 暂停 / 单步 /
+  回退 / 拖进度条 / 变速 / 跟随镜头开关 / 键盘控制。
+- **下一步**:M5(自由操作沙盒、BST/RBT 对照、章节跳转打磨);可选「把当前帧写回 JSON」。
 
 ---
 
@@ -162,6 +165,12 @@ interface TraceStep {
     readonly motion?: TraceMotion;
     /** 覆盖默认停留时间(ms),快的机械步骤可以短一点 */
     readonly holdMs?: number;
+    /**
+     * 这一拍直接硬切,不做帧间插值:章节之间换成完全无关的一棵树时,从上一帧插值过去
+     * 会得到"所有节点乱飞"的中间态.播放器看到它就直接落定(docs/animation.md §7.1).
+     * 这是实现时对原契约的补充:轨迹仍然只是数据,不引入时间轴.
+     */
+    readonly cut?: boolean;
 }
 
 interface TraceMarks {
@@ -430,28 +439,44 @@ linkEndpoints(from: VisualPoint, to: VisualPoint, laneOffset: number): { start, 
 4. 给演示底部的浮条留出 `bottomInset`(现在只有顶部任务栏的 `topInset`)。
 
 ```ts
-// visual/viewport.ts
+// visual/viewport.ts —— 实际签名(取景数学都是纯函数,句柄方法负责动画)
+export interface PlaneInsets { readonly top: number; readonly bottom: number }
+
 export function focusPlaneView(
+    current: PlaneViewState,          // 缩放取 max(current.k, minZoom)
     point: VisualPoint,
     viewport: PlaneBox,
-    insets: { top: number; bottom: number },
+    insets: PlaneInsets,
     minZoom: number,
 ): PlaneViewState;
 
-/** 框住一组点(旋转要一次看全 p / x / y / α / β / γ),取它们的包围盒再适应 */
+/** 框住一组点(旋转要一次看全 p / x / y / α / β / γ),取包围盒 + 圆半径余量再适应 */
 export function framePlaneView(
+    current: PlaneViewState,
     points: readonly VisualPoint[],
     viewport: PlaneBox,
-    insets: { top: number; bottom: number },
+    insets: PlaneInsets,
     maxZoom: number,
 ): PlaneViewState;
 
-export function animateViewTo(
-    target: PlaneViewState,
-    options: { duration?: number; easing?: Easing; signal?: AbortSignal },
-): void;
+/** 中心线性 + 缩放对数插值;t 由 tween 缓动后传入 */
+export function interpolatePlaneView(
+    from: PlaneViewState, to: PlaneViewState,
+    viewport: PlaneBox, insets: PlaneInsets, t: number,
+): PlaneViewState;
 
-export function cancelViewAnimation(): void;
+/** 280 + 0.5×屏幕距离 + 260×|log2(k1/k0)|,夹在 280~900ms */
+export function viewAnimationDurationMs(...): number;
+
+// PlaneViewportHandle 上的方法(动画由视口自己用注入的时钟驱动)
+interface PlaneViewportHandle {
+    animateTo(target: PlaneViewState, options?: { animated?: boolean; duration?: number }): void;
+    cancelAnimation(): void;
+    getView(): PlaneViewState;
+    setInsets(insets: PlaneInsets): void;
+    focusPoint(x: number, y: number, options?: { animated?: boolean }): void; // 缺省立即到位
+    framePoints(points: readonly VisualPoint[], options?: { animated?: boolean }): void;
+}
 ```
 
 - 实体行 / FAIL 行的「定位」改为调用 `animateViewTo(focusPlaneView(...))`:
@@ -623,7 +648,7 @@ BST 有序。每点亮一条,画面上对应位置闪一下(根、一对红父�
 > 序列在实现时由轨迹测试保证:断言"至少各出现一次情形 1/2/3"与"最后一帧五条检查
 > 全 PASS"。改算法时测试会挡住"演示里再也看不到某个情形"这种退化。
 
-### 8.4 删除(第二阶段)
+### 8.4 删除(已实现)
 
 删除是红黑树最难讲的部分,放在插入之后单独一章,允许更长、更慢:
 
@@ -648,12 +673,13 @@ BST 有序。每点亮一条,画面上对应位置闪一下(根、一对红父�
 
 ### 9.1 入口
 
-- JSON 窗口标题栏新增「演示」按钮(与「示例 / RUN」并排),点开是分组菜单:
-  `二叉搜索树` / `红黑树`,每项一个剧本;选中即:
-  1. 停掉正在跑的静态流程;
-  2. 把剧本的 `checkIds` 写进「检查配置」窗口(与载入示例同一套做法);
+- 任务栏动作区新增「演示」动作(库的 `DockActionSpec`,排在「回正视图」左边),
+  点开是分组菜单:`二叉搜索树` / `红黑树`,每项一个剧本;选中即:
+  1. 停掉正在跑的静态流程(演示期间静态重绘不接管画布);
+  2. 把剧本的 `checkIds` 写进「检查配置」窗口(与载入示例同一套做法,退出时还原);
   3. 生成轨迹,进入演示模式。
-- 任务栏不放演示控制:任务栏是桌面级动作,演示是模式,退出/播放都在浮条上。
+- JSON 窗口标题栏仍然只放「示例 / RUN」:演示是**桌面级模式入口**,与「回正视图」同属
+  任务栏动作区;但**播放控制**不进任务栏,播放 / 单步 / 退出都在底部浮条上。
 
 ### 9.2 演示模式的窗口处理
 
@@ -672,8 +698,9 @@ BST 有序。每点亮一条,画面上对应位置闪一下(根、一对红父�
 进度条:按步骤等分,章与章之间留缺口,可点击跳转
 ```
 
-- 不挡画布中心:浮条贴在任务栏上方、水平居中,宽度 `min(960px, 70vw)`;
-  镜头可用区的 `bottomInset` 取浮条高度 + 间距。
+- 不挡画布中心:浮条贴在桌面底部,宽度取"检查窗口左边那条可见带"(而不是死板
+  `min(960px, 70vw)` 居中——在 1400px 窗口下那个宽度会伸进检查窗口 200 多像素,
+  把 FAIL 行 / 展开详情挡住);镜头可用区的 `bottomInset` 取浮条高度 + 间距。
 - 键盘(仅演示模式,且焦点不在输入框):`Space` 播放/暂停,`←/→` 上一步/下一步,
   `Home/End` 首尾,`Esc` 退出。
 - 自动播放时,最后一步播完停在完成态并暂停,不循环;再按播放从第一步重放。
@@ -689,7 +716,8 @@ BST 有序。每点亮一条,画面上对应位置闪一下(根、一对红父�
 | 「回正视图」 | 可用:中止镜头动画并整幅适应,下一步重新跟随 |
 
 JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混在一起会让人以为
-播放改了自己的输入。暂停时提供「把当前帧写回 JSON」,想继续实验的人一键接上。
+播放改了自己的输入。「把当前帧写回 JSON」是**可选项,本轮未做**:暂停时接一根
+「写回」按钮只需要把 `TraceStep.document` 序列化进编辑器,留到 M5 一起做。
 
 ---
 
@@ -697,21 +725,24 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 
 依赖方向保持 `ui -> datastruct`、`ui -> visual`,datastruct 与 visual 互不认识。
 
-| 层 | 新文件(建议) | 职责 |
+| 层 | 文件(已落地) | 职责 |
 | --- | --- | --- |
-| datastruct | `trace/trace.ts` | `TraceStep` / `SceneTrace` / 状态枚举(纯类型 + 小工具) |
-| datastruct | `bst/bst.ts` | BST 模型 + search/insert/delete/traverse/**rotateLeft/rotateRight**,产出轨迹 |
-| datastruct | `rbt/rbt_ops.ts` | 红黑树插入 / 删除模型 + fixup,产出轨迹(复用 `rbt_checks` 的索引口径与 BST 的旋转) |
-| visual | `tween.ts` | RAF 时钟、缓动函数、`tween(duration, easing, onUpdate, signal)`;测试可注入时钟 |
-| visual | `anchor.ts` | 帧间锚定:按 `anchor / anchorAt` 平移整帧布局(纯算术,可单测) |
-| visual | `motion.ts` | 两帧场景 -> 插值帧:节点位置、`laneOffset`、高亮状态、进入/离开;旋转的极坐标插值 |
-| visual | `painter.ts`(或扩展 `render.ts`) | 稳定 id 的增量落笔 + 一次性量 `getBBox` |
-| visual | `viewport.ts`(扩展) | `focusPlaneView` / `animateViewTo` / `cancelViewAnimation`;`insets` 加 bottom;端点公式提到 `layout.ts` 可复用函数 |
-| ui | `viewer/demo_scenarios.ts` | 剧本数据(初始结构 + 操作序列 + 检查 id + 章节标题),纯数据 |
-| ui | `viewer/demo_player.ts` | 播放器状态机:步骤 / 虚拟时钟 / 镜头目标 / 列表同步 |
-| ui | `viewer/demo_views.ts` | 底部浮条的标记(纯函数) + 键盘绑定 |
-| ui | `viewer/viewer.ts`(扩展) | 「演示」菜单接线、模式进出、RUN 冲突处理 |
-| 样式 | `visual/visual.css` + `tokens.css` | 状态类、染色过渡、进入/离开、reduced-motion |
+| datastruct | `trace/trace.ts` | `TraceStep` / `SceneTrace` / 状态枚举 / `TraceBuilder` / `TreeOp`(纯类型 + 小工具) |
+| datastruct | `bst/bst.ts` | `TreeModel`(稳定 key / 快照)+ search/insert/delete/traverse/**rotateLeft/rotateRight**,产出 `TraceFrame` |
+| datastruct | `rbt/rbt_ops.ts` | 红黑树插入 / 删除模型 + fixup,产出轨迹(复用 BST 的旋转与稳定 key) |
+| visual | `tween.ts` | 可注入时钟(`TweenClock`)+ 缓动 + `tween()`;单帧 delta 夹取 |
+| visual | `anchor.ts` | 帧间锚定:按 `anchor / anchorAt` 平移整帧布局(纯算术);另有 `autoAnchorLayout` 兜底 |
+| visual | `motion.ts` | 两帧场景 -> 插值帧:节点位置、分道偏移、高亮状态、进入/离开;旋转的极坐标插值 |
+| visual | `elements.ts` | 节点 / 连线的构造与就地写入 + `getBBox` 测量(静态与动画两条路径共用) |
+| visual | `painter.ts` | `ScenePainter`:稳定 id 的增量落笔,落定帧才移除退场元素 / 量包围盒 |
+| visual | `viewport.ts`(扩展) | `focusPlaneView` / `framePlaneView` / `interpolatePlaneView` / `animateTo` / `cancelAnimation`;`insets` 上下两条 |
+| visual | `layout.ts`(小改) | 抽出 `linkEndpoints()` / `assignLinkLanes()`,布局与动画共用端点公式 |
+| ui | `viewer/demo_scenarios.ts` | 7 个剧本(初始结构 + 操作序列 + 检查 id + 章节标题) |
+| ui | `viewer/demo_player.ts` | 播放器状态机:步骤 / 虚拟时钟 / 镜头请求 / 检查与列表同步 |
+| ui | `viewer/demo_views.ts` | 底部浮条标记 + 按章进度条 + 键盘绑定 |
+| ui | `viewer/viewer.ts`(扩展) | 「演示」菜单接线、模式进出、窗口状态恢复、RUN 冲突处理 |
+| ui | `viewer/viewer_chrome.ts` + `config.ts` | 标题栏节点表 / 任务栏「演示」动作 / 剧本菜单面板 / DOM 契约 |
+| 样式 | `visual/visual.css` + `tokens.css` | 状态类、染色过渡、reduced-motion |
 | 样式 | `ui/viewer/viewer.css` + `tokens.css` | 浮条、步骤文本、进度条 |
 
 `ui` 侧不 import 算法,只 import 轨迹类型与剧本生成入口:`demo_player` 拿到
@@ -727,11 +758,15 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 | 纯逻辑 | `bst_rotation.test.ts` | 左旋 / 右旋前后**中序序列完全相同**;连续两次反向旋转回到原结构;之字形单旋层数不变、双旋降 1;右重线形左旋降 1;根旋转后根 key 正确;旋转帧全部是合法 BST |
 | 纯逻辑 | `rbt_ops.test.ts` | 最后一帧五条检查全 PASS;情形 1/2/3 各至少一次;根最终为黑;黑高相等 |
 | 纯逻辑 | `trace.test.ts` | 轨迹确定性(同输入逐字节同输出);每步 `document` 节点 key 唯一、引用有效 |
-| 纯数学 | `viewport.test.ts` 扩展 | 中心 + 对数插值端点精确;`easeInOutCubic` 单调、`e(0)=0 / e(1)=1`;长距离三段路径分段连续 |
-| 纯数学 | `anchor.test.ts` | 锚点节点平移前后坐标完全相等;anchorAt 缺省取同名节点;锚点被删 / 新增时的回退规则 |
-| 纯数学 | `motion.test.ts` | 直线 / 极坐标插值;节点间连线端点始终在圆边;进入/离开匹配;旋转路径单调且不回摆 |
-| DOM(happy-dom) | `demo_player.test.ts` | 播放/暂停/单步/回退/速度;RAF 队列由测试驱动(happy-dom 的 `requestAnimationFrame` 可手动 flush);reduce-motion 下无过渡;RUN 退出演示 |
-| DOM | `viewer.test.ts` 扩展 | 「演示」按钮 / 菜单存在;进入后窗口最小化;退出恢复;实体 / 检查列表跟随当前帧 |
+| 纯数学 | `tween.test.ts` | e(0)=0 / e(1)=1 / 单调;手动时钟推进;单帧 delta 夹取;cancel / abort;duration=0 |
+| 纯数学 | `viewport.test.ts` 扩展 | 中心 + 对数插值端点精确;定位 / 框组取景;时长夹在 280~900;`animateTo` 在虚拟时钟上插值;用户拖动立即打断 |
+| 纯数学 | `anchor.test.ts` | 锚点节点平移前后坐标完全相等;anchorAt 缺省取同名节点;节点缺失时的回退规则;自动锚定取最小共同 key |
+| 纯数学 | `motion.test.ts` | 直线 / 极坐标 / 子树平移;连线端点始终在圆边;进入/离开透明度;旋转半径线性、路径不回摆 |
+| DOM(happy-dom) | `painter.test.ts` | 两次落笔复用同一批 DOM;状态类 / 变体类叠加与切换;settled 才移除退场元素并量包围盒 |
+| DOM(happy-dom) | `demo_player.test.ts` | 构造落第 0 拍;单步 / 回退 / seek;自动播放播完暂停;速度换算;reduce-motion / `cut` 硬切;镜头 hold / 跟随开关 |
+| DOM | `viewer.test.ts` 扩展 | 「定位」平滑镜头接线;窗口 / 回正 |
+| DOM | `demo_mode.test.ts` | 任务栏「演示」按钮与菜单;进入后窗口让位 / 浮条出现 / 第 0 拍落笔;单步与进度点;键盘 Esc / Space;退出恢复窗口与静态画面;RUN 先退出演示 |
+| 纯逻辑 | `demo_scenarios.test.ts` | 7 个剧本每帧可解析、章节连续、检查已登记;BST 每帧有序;RBT 末帧五条全 PASS;情形 1/2/3、双黑四情形、退化层数等教学路径覆盖 |
 
 约定:
 
@@ -744,16 +779,17 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 
 ## 12. 分期
 
-| 期 | 内容 | 产出 | 依赖 |
+| 期 | 内容 | 产出 | 状态 |
 | --- | --- | --- | --- |
-| **M0** | 镜头缓动:提 `focusPlaneView`、`animateViewTo`、打断、bottom inset;「定位」改平滑 | 现有功能立刻受益,不引入演示模式 | 无 |
-| **M1** | 动画地基:tween 时钟、`ScenePainter` 增量落笔、`motion` 插值、浮条 + 播放器;先用**硬编码**的 BST 查找剧本跑通 | 能播一段 3 步演示 | M0 |
-| **M2** | BST 引擎 + 全套剧本(查找/插入/删除三情形/遍历/**旋转**/退化),含锚定与旋转几何 | BST 原理完整演示 | M1 |
-| **M3** | RBT 插入:模型 + fixup + 情形 1/2/3(复用 M2 的旋转)+ 每帧检查 | RBT 插入演示 | M2 |
-| **M4** | RBT 删除:物理移植 + 双黑 + 四情形 | RBT 删除演示 | M3 |
-| **M5** | 打磨:自由操作(输入任意插入/删除并重算轨迹)、BST/RBT 对照、章节跳转、参数微调 | 可交互沙盒 + 对照 | M4 |
+| **M0** | 镜头缓动:提 `focusPlaneView` / `framePlaneView`、`animateTo`、打断、上下 insets;「定位」改平滑 | 现有功能立刻受益,不引入演示模式 | **已完成** |
+| **M1** | 动画地基:tween 时钟、`ScenePainter` 增量落笔、`motion` 插值、浮条 + 播放器 | 能播放 / 暂停 / 单步 / 回退 | **已完成** |
+| **M2** | BST 引擎 + 全套剧本(查找/插入/删除三情形/遍历/**旋转**/退化),含锚定与旋转几何 | BST 原理完整演示 | **已完成** |
+| **M3** | RBT 插入:模型 + fixup + 情形 1/2/3(复用 M2 的旋转)+ 每帧检查 | RBT 插入演示 | **已完成** |
+| **M4** | RBT 删除:物理移植 + 双黑 + 四情形 | RBT 删除演示 | **已完成** |
+| **M5** | 打磨:自由操作(输入任意插入/删除并重算轨迹)、BST/RBT 对照、章节跳转、参数微调、「写回 JSON」 | 可交互沙盒 + 对照 | 未做 |
 
-M0 独立价值最高、风险最低,建议先落地;之后每一期都能独立演示、独立测试。
+M0 独立价值最高、风险最低;之后每一期都能独立演示、独立测试。当前 M0–M4 全部落地,
+M5 是下一轮的可选项。
 
 ---
 
@@ -795,20 +831,20 @@ M0 独立价值最高、风险最低,建议先落地;之后每一期都能独立
 
 ---
 
-## 14. 需要拍板的问题
+## 14. 拍板结果(原问题与结论)
 
-1. 演示入口放 JSON 标题栏的「演示」按钮 + 底部浮条、进入时最小化部分窗口,这个形态
-   是否接受?还是希望保留六窗口、把控制塞进任务栏?
-2. RBT 删除是否这一轮必须做?它是工作量最大、叙述最长的一章,可以先交付插入。
-3. JSON 编辑器默认不跟随演示;要不要提供「把当前帧写回 JSON」?(建议要,实现很小)
-4. 是否需要自由操作沙盒(输入任意值插入 / 删除,实时重算轨迹)?这会把「看演示」变成
-   「玩结构」,建议放到 M5。
+| 问题 | 结论 |
+| --- | --- |
+| 演示入口放任务栏「演示」动作 + 底部浮条、进入时最小化部分窗口? | **采用(后调整)**。按钮在任务栏动作区(与「回正视图」并排),剧本菜单挂在任务栏按钮下;JSON 标题栏只留示例 / RUN |
+| RBT 删除是否这一轮做? | **做了**。物理移植后继 + 双黑四情形,剧本的删除序 `26,22,18,13,11` 覆盖四情形 |
+| JSON 编辑器要不要跟随 / 提供「写回」? | 不跟随(演示不改 JSON);「把当前帧写回 JSON」**本轮未做**,留到 M5 |
+| 自由操作沙盒? | 本轮不做,留到 M5。`TreeOp` 词表与 `framesFor` 形状已经为它留好 |
 
 ---
 
 ## 15. 已经落地的准备:Python 侧的 BST 示例
 
-动画的地基还没开工,但演示需要"起手就有一棵 BST"。Python demo 已经补上:
+演示需要"起手就有一棵 BST"。Python demo 已经补上(早于 web 动画落地):
 
 | 位置 | 内容 |
 | --- | --- |
@@ -830,26 +866,26 @@ M0 独立价值最高、风险最低,建议先落地;之后每一期都能独立
 
 ---
 
-## 16. 现状接缝:哪些直接复用,哪些要改
+## 16. 现状接缝:哪些直接复用,哪些改了
 
-实现前先认清"现有代码哪一块接哪里"。依赖方向不变:`ui -> datastruct`、`ui -> visual`。
+实现时**实际**接到哪一块、改了什么。依赖方向不变:`ui -> datastruct`、`ui -> visual`。
 
 | 现有 | 位置 | 动画怎么用 | 改动 |
 | --- | --- | --- | --- |
 | 文档解析 / 类型 | `src/scene/scene_document_parse.ts`、`scene_document.ts` | 每帧 `document` 都按它校验与持有 | 不改 |
 | 自动布局 | `src/visual/layout.ts` 的 `layoutScene` | 每帧从连接关系算坐标;连线端点公式抽成 `linkEndpoints()` 供逐帧复用 | 小改(抽纯函数,行为不变) |
 | 渲染 | `src/visual/render.ts` 的 `renderScene` / `clearScene` | 静态 RUN 路径保留;动画新增 `ScenePainter` 增量落笔 | 新增,不改旧行为 |
-| 视觉场景模型 | `src/visual/scene.ts` 的 `VisualScene` / `VisualNode` / `VisualLink` | painter 需要稳定身份(节点 key);连线按 `from->to#序号` 配 | 小改(节点加 `key`,或 painter 直接吃 `document`) |
-| 平面视口 | `src/visual/viewport.ts` 的 `mountPlaneViewport`、`fitPlaneView`、`focusPoint`、`manual` | 提 `focusPlaneView` / `framePlaneView`;新增 `animateViewTo` / `cancelViewAnimation` / `getView`;`insets` 加 bottom | 中等 |
+| 视觉场景模型 | `src/visual/scene.ts` 的 `VisualScene` / `VisualNode` / `VisualLink` | 静态路径不变;动画路径用 `visual/motion.ts` 的 `MotionScene`(带节点 key / 连线 id) | **不改** `scene.ts`,另开动画场景模型 |
+| 平面视口 | `src/visual/viewport.ts` 的 `mountPlaneViewport`、`fitPlaneView`、`focusPoint`、`manual` | 提 `focusPlaneView` / `framePlaneView` / `interpolatePlaneView` / `viewAnimationDurationMs`;句柄新增 `animateTo` / `cancelAnimation` / `getView` / `setInsets`;`insets` 加 bottom | 中等(`focusPoint` 保留旧的立即到位语义,加 `{animated:true}` 才走缓动) |
 | 性质检查 | `src/scene/scene_check.ts` 的 `runSceneChecks` | 每步跑一次,检查窗口实时 PASS / FAIL | 不改 |
-| 实体 / 检查列表 | `src/ui/viewer/viewer_items.ts` 的 `EntityItem` / `CheckItem`,库的 `RowList` | 每步 `sync`;行末「定位」改走平滑镜头 | 小改(定位回调) |
+| 实体 / 检查列表 | `src/ui/viewer/viewer_items.ts` 的 `EntityItem` / `CheckItem`,库的 `RowList` | 每步 `sync`;行末「定位」改走平滑镜头(演示中按**锚定后的布局**定位) | 小改(定位回调) |
 | 桌面窗口 | `mountDesktop(...).windows`(`WindowManager`) | 进演示用 `setMinimized` / `getState`,退出恢复;「全部还原」保留 | 不改库(API 已有) |
-| 菜单 | 库的 `createMenu` | 标题栏「演示」按钮的剧本菜单,与示例菜单同形 | 不改 |
-| 代码编辑器 | 库的 `createCodeEditor` | 演示不写 JSON / 检查配置编辑器 | 不改 |
+| 菜单 | 库的 `createMenu` | 任务栏「演示」按钮的剧本菜单:把库建的按钮包进 `.menu-anchor`,面板挂在同一锚点 | 接线(不改库) |
+| 代码编辑器 | 库的 `createCodeEditor` | 演示不写 JSON 编辑器;进入时把剧本的检查 id 写进「检查配置」编辑器 | 接线(不改库) |
 | 库的动画能力 | `miko_ui` | **没有 tween / 动画助手**;rAF 只在 `EditorHighlight` / `MenuItem` 里用于合并重绘 | 新增 `src/visual/tween.ts` |
 | 样式 | `src/visual/visual.css`、`tokens.css` | 新增状态类、染色 transition、reduced-motion;保留现有 220ms 入场动画 | 小改 |
 | 取景常数 | `src/visual/config.ts` | 复用 `VISUAL_FOCUS_MIN_ZOOM`(0.8)/ `VISUAL_FIT_MAX_ZOOM`(1)/ `VISUAL_MIN_ZOOM` / `VISUAL_MAX_ZOOM` | 不改 |
-| 测试环境 | `happy-dom` | rAF 队列可手动 flush;`getBBox()` 恒空 | 播放器注入时钟;量不到就不动镜头 |
+| 测试环境 | `happy-dom` | `getBBox()` 恒空;rAF 由测试 fake timer / 注入时钟驱动 | 播放器注入 `ManualClock`;视口镜头动画注入时钟;量不到就不动镜头 |
 | 值口径 | `src/scene/label_value.ts` | BST / RBT 剧本的 `label` 必须是十进制数,检查器按它读数 | 遵守 |
 
 两条已有的硬约束(实现时最容易踩,已写进 §5 / §13):
@@ -865,49 +901,58 @@ M0 独立价值最高、风险最低,建议先落地;之后每一期都能独立
 
 | 文件 | 状态 | 内容 |
 | --- | --- | --- |
-| `docs/animation.md` | 新增 | 本文:设计、轨迹契约、镜头数学、BST / RBT 剧本、文件分工、测试、分期、接缝 |
-| `README.md` | 修改 | 结构表里挂了 `docs/animation.md`(标注"尚未实现") |
-| `python/examples/bst.py` | 新增 | `BstNode` + `bst_registry` + `sample_tree()`(7 节点 BST) |
-| `python/demo.py` | 修改 | 第 3 段输出 BST;`--out` 写出 `bst.json`;段落重新编号 |
-| `python/examples/__init__.py` | 修改 | 四个示例的说明 |
-| `python/tests/test_examples.py` | 修改 | BST 的 Scene / JSON 断言(与 web 内置示例逐字段对照) |
-| `python/README.md` | 修改 | BST 的 JSON 片段与 L1 用法;目录 / 例子数更新 |
+| `docs/animation.md` | 修改 | 状态改为"已实现";补 `cut` 字段、实现现状、拍板结果、实际文件与测试 |
+| `README.md` | 修改 | 动画不再是"尚未实现";结构表补新文件;历史追加本轮 |
+| `src/datastruct/trace/trace.ts` | 新增 | 轨迹契约 + `TraceBuilder` + `TreeOp` |
+| `src/datastruct/bst/bst.ts` | 新增 | `TreeModel` + BST 操作 / 旋转,产出 `TraceFrame` |
+| `src/datastruct/rbt/rbt_ops.ts` | 新增 | RBT 插入 / 删除 / 五条性质讲解帧 |
+| `src/visual/tween.ts` | 新增 | 可注入时钟 + 缓动 + `tween()` |
+| `src/visual/anchor.ts` | 新增 | 帧间锚定(显式 + 自动兜底) |
+| `src/visual/motion.ts` | 新增 | 两帧场景插值(直线 / 极坐标 / 子树平移;连线端点重算) |
+| `src/visual/elements.ts` | 新增 | 图元构造 / 就地写入 / 包围盒测量(静态路径也改用它) |
+| `src/visual/painter.ts` | 新增 | `ScenePainter` 增量落笔 + 两个图层 |
+| `src/visual/layout.ts` | 修改 | 抽出 `linkEndpoints()` / `assignLinkLanes()`,行为不变 |
+| `src/visual/viewport.ts` | 修改 | 取景纯函数 + 镜头缓动 / 打断 / 上下 insets |
+| `src/visual/render.ts` | 修改 | 等价重构为调用 `elements.ts`,静态行为与 DOM 结构不变 |
+| `src/visual/visual.css` / `tokens.css` | 修改 | 状态类、染色过渡、reduced-motion |
+| `src/ui/viewer/demo_scenarios.ts` | 新增 | 7 个剧本(3 BST + 4 RBT) |
+| `src/ui/viewer/demo_player.ts` | 新增 | 播放器状态机 + 虚拟时钟 + 镜头请求 |
+| `src/ui/viewer/demo_views.ts` | 新增 | 浮条 / 章节进度 / 键盘 |
+| `src/ui/viewer/viewer.ts` | 修改 | 演示模式进出、窗口状态恢复、RUN 冲突 |
+| `src/ui/viewer/viewer_chrome.ts` / `config.ts` | 修改 | 任务栏「演示」动作 / 剧本菜单面板 / DOM 契约 |
+| `src/ui/viewer/viewer.css` / `tokens.css` | 修改 | 浮条样式 |
+| `src/test_support/manual_clock.ts` | 新增 | 测试用手动时钟 |
+| 测试 | 新增 / 扩展 | `tween` / `anchor` / `motion` / `painter` / `demo_player` / `demo_mode` / `demo_scenarios` / `bst` / `bst_rotation` / `rbt_ops` / `trace`;`viewport` / `render` / `viewer` / `viewer_views` 扩展 |
 
 ### 17.2 已经核对过的事实
 
-- Python:`python3 -m unittest discover -s tests -t .` 共 **57 个测试通过**;
-  `python3 demo.py --out /tmp/dataviz` 写出 `node / graph / bst / rbt` 四份 JSON,
-  `bst.json` 与 web「示例」菜单的「二叉搜索树」同形。
-- 红黑树插入序列 `7, 3, 18, 10, 22, 8, 11, 26, 2, 6, 13` 覆盖情形 1 / 2 / 3;
-  升序 `1..7`:BST 层数 7,RBT 层数 4(黑高一致)。
-- 旋转示例:右重线形 `10(5, 20(15, 30(40)))` 左旋后层数 4 -> 3;之字形
-  `30(10(_, 20))` 单旋只镜像(层数 3),双旋(左旋 10 -> 右旋 30)后层数 2。
-- `miko_ui` 没有动画 / 补间助手;窗口管理器已有 `setMinimized` / `getState` /
-  `restoreAll`,演示模式不需要改库。
-- 现有 `renderScene` 整批重建;`getBBox()` 在 happy-dom 恒空;入场动画只动形状 /
-  文字、不动节点组。
+- **web**:`npm test` = 282 项通过;`npm run typecheck` 通过;`npm run build` 通过。
+- **浏览器实测**(headful Chromium + Vite dev):进入「BST · 查找 / 插入 / 删除」浮条为 29 步、
+  第 0 拍整棵树;单步后标题 / 计数 / 检查行同步;RBT 综合插入 57 步,情形 2 / 3 帧上
+  检查窗口当场 FAIL / PASS;退出演示恢复 6 窗口与 5 节点静态红黑树;RUN 先退出演示。
+- **教学路径**:RBT 综合序列 `7,3,18,10,22,8,11,26,2,6,13` 情形 1/2/3 全出现;删除序
+  `26,22,18,13,11` 双黑四情形全出现;升序 `1..7` BST 层数 7、RBT 层数 4(黑高一致)。
+- **确定性**:同一剧本两次生成轨迹逐字节相同;删除双孩子用物理移植(节点 key 不变)。
+- **Python**:`python3 -m unittest discover -s tests -t .` 57 项通过;`bst.json` 与 web
+  「二叉搜索树」示例同形(本轮未改 Python)。
 
-### 17.3 开工顺序
+### 17.3 验收方式
 
-| 期 | 做什么 | 验收 |
-| --- | --- | --- |
-| **M0** | 镜头缓动:提 `focusPlaneView` / `framePlaneView`,新增 `animateViewTo`、打断、bottom inset;「定位」改平滑 | 点「定位」是飞过去;拖动立即接管;`npm test` / `npm run typecheck` 通过 |
-| M1 | tween 时钟、`ScenePainter`、`motion` 插值、演示浮条 + 播放器;硬编码 3 步 BST 查找 | 能播放 / 暂停 / 单步 / 回退 |
-| M2 | BST 引擎 + 全套剧本(查找 / 插入 / 删除三情形 / 遍历 / 旋转 / 退化) | 纯逻辑测试逐帧断言 |
-| M3 | RBT 插入:模型 + fixup + 情形 1/2/3(复用旋转)+ 实时检查 | 序列覆盖三情形且末帧全 PASS |
-| M4 | RBT 删除:物理移植 + 双黑 + 四情形 | 同上 |
-| M5 | 自由操作、BST/RBT 对照、章节跳转、参数打磨 | 可交互沙盒 |
-
-只做一件事就做 **M0**:它独立可用、风险最低,而且把"镜头怎么插值 / 怎么被打断 /
-insets 怎么留"验证掉,M1 的播放器才有地基。
+```bash
+npm test           # 282 项:纯逻辑 / 纯数学 / happy-dom 行为
+npm run typecheck  # tsc --noEmit(含 noUnusedLocals / noUnusedParameters)
+npm run build      # clean -> test -> typecheck -> vite build
+# 浏览器: npm run dev 后打开 http://localhost:5173/miko_datastruct/
+#   任务栏「演示」-> 选剧本 -> 浮条控制 / 空格 / ← → / Home End / Esc
+```
 
 ### 17.4 会话删除后怎么继续
 
-1. 读本文 §0(速览)-> §10(文件分工)-> §12(分期)-> §16(接缝);
+1. 读本文 §0(速览)-> §10(文件分工)-> §12(分期)-> §16(接缝)-> §19(实现现状);
 2. `git status` 看工作区;`git log --oneline -5` 看上次提交;
-3. Python 侧自检:`cd python && python3 -m unittest discover -s tests -t .`;
-4. web 侧自检:`npm test` / `npm run typecheck`;
-5. 从 M0 开始,先写 `focusPlaneView` 的纯函数测试,再接视口的 rAF。
+3. `npm test` / `npm run typecheck` 自检;
+4. 从 M5 开始:自由操作沙盒(`TreeOp` + `framesFor` 已就绪)、BST/RBT 对照、写回 JSON;
+5. 改算法后先跑 `demo_scenarios.test.ts`:它会挡住"教学情形消失"这类退化。
 
 ---
 
@@ -926,3 +971,23 @@ insets 怎么留"验证掉,M1 的播放器才有地基。
 | **演示模式** | 最小化部分窗口 + 底部浮条 + 键盘控制的整屏观看状态;退出后恢复 |
 | **剧本生成 / 播放器** | 生成 = 纯逻辑产出步骤;播放器 = 虚拟时钟 + 插值 + 镜头 + 列表同步 |
 
+---
+
+## 19. 实现现状(对照设计)
+
+| 设计点 | 落地情况 |
+| --- | --- |
+| 轨迹 = 每步完整 document + 叙述 + 提示 | `trace.ts`;`TraceBuilder` 在 yield 时取快照;额外加了 `cut`(章节硬切) |
+| 快照轨迹支持回退 / 拖进度条 / 暂停 / 变速 / 自动测试 | `demo_player.ts` + `ManualClock`;回退与 seek 是瞬移,不反向动画 |
+| 三套时间分开 | 结构过渡 420ms(常量 `DEMO_TRANSITION_MS`)、镜头 280〜900ms(按距离 / 缩放)、叙述 `700 + 24×字数` 夹 700〜1800 |
+| 稳定身份增量落笔 | `elements.ts` + `painter.ts`;节点按 key、连线按 `from->to#序号`;只有落定帧删除退场元素并量一次 `getBBox` |
+| 高亮与结构色分离 | `visual-state--*` 状态类叠在 `visual-node--<variant>` 上,只改描边 / 透明度 / 虚线 |
+| 连线跟着节点走 | 每帧用插值后的节点坐标 + 插值后的分道偏移,调 `linkEndpoints()` 重算端点 |
+| 先锚定再插值 | `anchor.ts`;算法显式给 `anchor / anchorAt`(插入 / 删除 / 旋转),机械步骤自动锚到最小共同 key |
+| 旋转绕轴、β 子树短弧 | `motion.ts` 极坐标插值;α / γ 直线跟随;旋转帧 `framing:'hold'` |
+| 镜头中心 + 对数缩放、非线性缓动、打断 | `interpolatePlaneView` + `easeInOutCubic` + tween;拖动 / 滚轮立即 `cancelAnimation` |
+| 演示模式:任务栏入口、浮条、窗口让位、退出恢复 | `viewer.ts` + `demo_views.ts`;检查窗口保留,浮条排在检查窗口左侧,底部算进镜头 inset |
+| 检查窗口就是"不变量面板" | 每帧 `runSceneChecks`;fixup 中间态 FAIL 是教学内容,不报错 |
+| reduced-motion | 结构与镜头瞬移,步骤仍可自动 / 手动前进 |
+| 7 个剧本 | `demo_scenarios.ts`:BST 原理 / 旋转 / 退化;RBT 入门 / 生根 / 综合插入 / 删除 |
+| **未做(M5)** | 自由操作沙盒、BST/RBT 对照演出、章节跳转按钮(进度条按章分组已可点)、「写回 JSON」 |

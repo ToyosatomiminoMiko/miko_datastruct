@@ -1,9 +1,12 @@
 /*
- * JSON 窗口标题栏上的应用节点:「示例」按钮、「RUN」按钮与示例菜单的面板.
+ * JSON 窗口标题栏上的应用节点:「示例」/「RUN」两个按钮与示例菜单面板.
  *
  * 为什么节点在这里建:库的 `mountDesktop` 只负责把节点搬进窗口槽位,不认"示例" /
- * "RUN" 这两个应用的词;标题栏的内容归消费者.建好后交给 `windowSlotsProvider`,
+ * "RUN" 这些应用的词;标题栏的内容归消费者.建好后交给 `windowSlotsProvider`,
  * 位置由 config.ts 的 `VIEWER_ADOPTED_NODES` 一张表说清,装配层不写 if 链.
+ *
+ * 「演示」不在这里:它是桌面级模式入口,按钮与剧本菜单都挂在任务栏动作区
+ * (库的 DockActionSpec + viewer.ts 的挂菜单逻辑).
  *
  * 这里只建节点、不接线:点击与菜单选中由 viewer.ts 的挂载流程负责.
  */
@@ -21,7 +24,7 @@ import {
 /** 标题栏节点句柄:形状由 ViewerChromeNodeId 锁死(配置表引用的每个名字都必须有) */
 export type ViewerChrome = Readonly<Record<ViewerChromeNodeId, HTMLElement>>;
 
-/** 建 JSON 窗口标题栏的三个节点;按钮走库的 createButton(带 `.ui-button` 基线) */
+/** 建 JSON 窗口标题栏的节点;按钮走库的 createButton(带 `.ui-button` 基线) */
 export function createViewerChrome(): ViewerChrome {
     const exampleButton = createButton({
         text: VIEWER_CHROME_LABELS.example,

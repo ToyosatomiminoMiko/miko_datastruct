@@ -25,6 +25,10 @@ export const VIEWER_DOM = {
     exampleButtonId: 'viewerExampleButton',
     /** JSON 窗口标题栏里的 RUN 按钮 */
     runButtonId: 'viewerRunButton',
+    /** 「演示」按钮的剧本菜单面板(挂在任务栏按钮下的浮层) */
+    demoMenuId: 'viewerDemoMenu',
+    /** 演示模式底部浮条(进入演示时挂到桌面根上) */
+    demoBarId: 'viewerDemoBar',
     /** 「示例」按钮的菜单面板(窗口标题栏 overlays 槽位) */
     exampleMenuId: 'viewerExampleMenu',
     /** JSON 编辑器宿主:库的 CodeEditor 外框长在它里面 */
@@ -192,14 +196,18 @@ export const VIEWER_DESKTOP_WINDOWS = [
 /** 标题栏节点的名字联合:配置表与节点表由它锁死,少建一个节点即编译不过 */
 export type ViewerChromeNodeId = 'exampleButton' | 'runButton' | 'exampleMenu';
 
-/** 标题栏按钮的可见文案 */
+/** 标题栏 / 任务栏按钮的可见文案 */
 export const VIEWER_CHROME_LABELS = {
     example: '示例',
+    demo: '演示',
     run: 'RUN',
 } as const;
 
 /** 「示例」按钮的悬停说明 */
 export const VIEWER_EXAMPLE_BUTTON_TITLE = '载入一份内置结构(同时换掉检查配置)';
+
+/** 任务栏「演示」动作的悬停说明 */
+export const VIEWER_DEMO_BUTTON_TITLE = '按步骤演示 BST / 红黑树的原理(带镜头跟随)';
 
 /** RUN 按钮的悬停说明 */
 export const VIEWER_RUN_BUTTON_TITLE = '解析 JSON 编辑器里的内容并重绘 (Ctrl/Cmd+Enter)';
@@ -210,11 +218,17 @@ export const VIEWER_RUN_BUTTON_LABEL = '运行 JSON';
 /** 示例菜单的无障碍名 */
 export const VIEWER_EXAMPLE_MENU_LABEL = '内置示例结构';
 
+/** 演示剧本菜单的无障碍名 */
+export const VIEWER_DEMO_MENU_LABEL = '演示剧本';
+
 /**
- * 采用关系:两个按钮进 JSON 窗口的 `.window-actions`,菜单面板进标题栏浮层.
+ * 采用关系:两个按钮进 JSON 窗口的 `.window-actions`,示例菜单面板进标题栏浮层.
+ *
+ * 「演示」按钮不在标题栏:它是**桌面级模式入口**,和「回正视图」一起放在任务栏动作区;
+ * 剧本菜单挂在任务栏按钮下的浮层里(见 viewer.ts 的 `mountDemoMenu`).
  *
  * 浮层必须是 header 的直接子节点(库的 `.window-header` 是它的定位锚点),
- * 所以走 overlays 槽位,而不是当作正文里的一层.
+ * 所以示例菜单走 overlays 槽位,而不是当作正文里的一层.
  */
 export const VIEWER_ADOPTED_NODES: readonly AdoptedNodeSpec<ViewerChromeNodeId>[] = [
     { node: 'exampleButton', window: VIEWER_WINDOW_JSON, slot: 'actions' },
@@ -222,7 +236,15 @@ export const VIEWER_ADOPTED_NODES: readonly AdoptedNodeSpec<ViewerChromeNodeId>[
     { node: 'exampleMenu', window: VIEWER_WINDOW_JSON, slot: 'overlays' },
 ];
 
+// 演示模式:浮条与镜头的避让
+
+/** 浮条与视口底边之间的间距(px):底部 inset = 浮条高度 + 这个值 */
+export const VIEWER_DEMO_BAR_GAP = 16;
+
 // 任务栏动作:回正视图
+
+/** 演示动作 id:库只把它写进 `data-dock-action`,点击时原样交回 */
+export const VIEWER_DEMO_ACTION_ID = 'demo';
 
 /** 回正按钮文案 */
 export const VIEWER_FIT_BUTTON_TEXT = '回正视图';
@@ -233,8 +255,13 @@ export const VIEWER_FIT_BUTTON_TITLE = '把整幅结构图装回视口并居中,
 /** 回正动作 id:库只把它写进 `data-dock-action`,点击时原样交回 */
 export const VIEWER_FIT_ACTION_ID = 'fit-viewport';
 
-/** 任务栏动作清单:库按它建按钮并排在「全部还原」左边 */
+/**
+ * 任务栏动作清单:库按它建按钮并排在「全部还原」左边.
+ *
+ * 「演示」是模式入口(点开剧本菜单),「回正视图」是镜头动作;顺序即显示顺序.
+ */
 export const VIEWER_DOCK_ACTIONS = [
+    { id: VIEWER_DEMO_ACTION_ID, text: VIEWER_CHROME_LABELS.demo, title: VIEWER_DEMO_BUTTON_TITLE },
     { id: VIEWER_FIT_ACTION_ID, text: VIEWER_FIT_BUTTON_TEXT, title: VIEWER_FIT_BUTTON_TITLE },
 ] as const satisfies readonly DockActionSpec[];
 
@@ -419,6 +446,16 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
             '检查配置是一段 JSON 数组,元素是检查函数名;默认示例预置了 rbt 的五个检查。',
             '可用函数名: rbt 的 checkColors / checkRootBlack / checkRedChildrenBlack / checkBlackHeight / checkBstOrder;graph 的 checkEulerCircuit;heap 的 checkHeapOrder;list 的 checkLinkedList / checkListSorted。',
             '函数名没注册:诊断窗口警告,已注册的检查照跑;配置 JSON 语法错:诊断窗口报错,检查窗口为空。',
+        ],
+    },
+    {
+        title: '动画演示',
+        lines: [
+            '任务栏动作区的「演示」按钮打开剧本菜单: 二叉搜索树(原理 / 旋转 / 退化)与红黑树(插入 / 删除)。',
+            '进入演示后 JSON / 实体 / 检查配置 / 诊断 / 帮助窗口最小化,只保留检查窗口;退出时恢复进入前的窗口状态与检查配置。',
+            '底部浮条: 上一步 / 播放暂停 / 下一步 / 进度条 / 0.5×–2× / 跟随镜头 / 退出。',
+            '键盘(焦点不在输入框): Space 播放暂停, ←/→ 单步, Home/End 首尾, Esc 退出。',
+            '演示不改 JSON 编辑器;要接着做实验,退出后在编辑器里用最后一次 RUN 的结构继续。',
         ],
     },
     {

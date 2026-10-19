@@ -155,3 +155,91 @@
         forced-color-adjust: none;
     }
 }
+
+/*
+ * 动画状态类:由 visual/painter.ts 挂在节点组 / 连线元素上,与结构变体
+ * (`visual-node--red` 等)叠加.这里只改**外圈描边 / 透明度 / 虚线**,不碰填充色:
+ * 红黑颜色是结构语义,高亮是动画词汇,两者不能互相覆盖(docs/animation.md §5.2).
+ *
+ * 同一个节点只该有一个状态类;painter 负责在状态切换时清旧类,所以这里的选择器
+ * 不需要互斥写法,只要每条规则足够具体.
+ */
+.visual-surface .visual-node__shape {
+    /* 红 <-> 黑只切 class,颜色过渡交给 CSS:不需要逐帧插值 fill */
+    transition: fill 200ms ease, stroke 150ms ease;
+}
+
+/* 当前处理节点:静态琥珀描边(不呼吸:呼吸会跟滚轮缩放抢眼睛) */
+.visual-surface .visual-node.visual-state--active .visual-node__shape {
+    stroke: var(--visual-state-active);
+    stroke-width: var(--visual-state-ring-width);
+}
+
+/* 查找 / 插入路径:天蓝描边 */
+.visual-surface .visual-node.visual-state--path .visual-node__shape {
+    stroke: var(--visual-state-path);
+    stroke-width: 2;
+}
+
+/* 已访问:紫色虚线外圈 */
+.visual-surface .visual-node.visual-state--visited .visual-node__shape {
+    stroke: var(--visual-state-visited);
+    stroke-width: 2;
+    stroke-dasharray: 4 3;
+}
+
+/* 命中 / 上位:绿色描边,比 path 更粗 */
+.visual-surface .visual-node.visual-state--found .visual-node__shape {
+    stroke: var(--visual-state-found);
+    stroke-width: var(--visual-state-ring-width);
+}
+
+/* 新插入:青色描边(进入动画由原有的 visual-node-enter 负责缩放) */
+.visual-surface .visual-node.visual-state--fresh .visual-node__shape {
+    stroke: var(--visual-state-fresh);
+    stroke-width: var(--visual-state-ring-width);
+}
+
+/* 幽灵(已断开 / 双黑挂点):整体半透明 + 虚线,读作"这个位置有问题" */
+.visual-surface .visual-node.visual-state--ghost {
+    opacity: 0.55;
+}
+
+.visual-surface .visual-node.visual-state--ghost .visual-node__shape {
+    stroke: var(--visual-state-ghost);
+    stroke-width: 2;
+    stroke-dasharray: 5 4;
+}
+
+/* 连线状态:路径高亮 / 幽灵线(断开 / 旧连接) */
+.visual-surface .visual-link.visual-state--path {
+    stroke: var(--visual-state-link-path, var(--visual-state-path));
+}
+
+.visual-surface .visual-link.visual-state--ghost {
+    stroke: var(--visual-state-ghost);
+    stroke-dasharray: 5 4;
+    opacity: 0.6;
+}
+
+.visual-surface .visual-pointer-arrow.visual-state--path {
+    fill: var(--visual-state-path);
+}
+
+.visual-surface .visual-pointer-arrow.visual-state--ghost {
+    fill: var(--visual-state-ghost);
+    opacity: 0.6;
+}
+
+/* 进出场期间的元素不该抢指针事件(淡出的旧节点还在画面上) */
+.visual-surface .visual-state--entering,
+.visual-surface .visual-state--leaving {
+    pointer-events: none;
+}
+
+/* 减少动态效果:染色过渡也去掉(fill 直接切换) */
+@media (prefers-reduced-motion: reduce) {
+    .visual-surface .visual-node__shape {
+        transition: none;
+    }
+}

@@ -55,3 +55,15 @@
     --viewer-node-red-fill: #ff0000;
     --viewer-node-black-fill: #000000;
 }
+
+/* 演示模式底部浮条:深色玻璃条 + 进度点状态 */
+:root {
+    --viewer-demo-bar-bg: rgba(15, 23, 42, 0.94);
+    --viewer-demo-bar-border: #334155;
+    --viewer-demo-bar-text: #e2e8f0;
+    --viewer-demo-bar-muted: #94a3b8;
+    --viewer-demo-bar-accent: #38bdf8;
+    --viewer-demo-bar-tick: #334155;
+    --viewer-demo-bar-tick-past: #475569;
+    --viewer-demo-bar-shadow: 0 12px 32px rgba(2, 6, 23, 0.55);
+}

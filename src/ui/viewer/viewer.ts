@@ -33,9 +33,13 @@ import '@/visual/visual.css';
 import '@/ui/viewer/viewer.css';
 
 import {
+    VIEWER_DEMO_ACTION_ID,
+    VIEWER_DEMO_BAR_GAP,
+    VIEWER_DEMO_MENU_LABEL,
     VIEWER_DESKTOP_INSET,
     VIEWER_DESKTOP_WINDOWS,
     VIEWER_DOCK_ACTIONS,
+    VIEWER_DOM,
     VIEWER_EMPTY_DOCUMENT_HINT_TEXT,
     VIEWER_EMPTY_HINT_TEXT,
     VIEWER_ERROR_UI_PREFIX,
@@ -43,6 +47,13 @@ import {
     VIEWER_EXAMPLE_JSON,
     VIEWER_EXAMPLE_MENU_LABEL,
     VIEWER_FIT_ACTION_ID,
+    VIEWER_WINDOW_CHECK,
+    VIEWER_WINDOW_CHECK_SETUP,
+    VIEWER_WINDOW_DIAGNOSTICS,
+    VIEWER_WINDOW_ENTITY,
+    VIEWER_WINDOW_HELP,
+    VIEWER_WINDOW_JSON,
+    type ViewerWindowId,
 } from '@/ui/viewer/config';
 import { parseSceneDocument } from '@/scene/scene_document_parse';
 import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
@@ -53,6 +64,16 @@ import type { VisualScene } from '@/visual/scene';
 import { clearScene, renderScene } from '@/visual/render';
 import { mountPlaneViewport, type PlaneViewportHandle } from '@/visual/viewport';
 import { dumpCheckConfig, parseCheckConfig } from '@/ui/viewer/check_config';
+import { ScenePainter } from '@/visual/painter';
+import {
+    createDemoPlayer,
+    type DemoCameraRequest,
+    type DemoPlayerHandle,
+    type DemoPlayerPorts,
+} from '@/ui/viewer/demo_player';
+import { findDemoScenario, demoScenarioMenuGroups } from '@/ui/viewer/demo_scenarios';
+import { bindDemoKeys, createDemoBar, type DemoBarHandle } from '@/ui/viewer/demo_views';
+import { createRafClock, prefersReducedMotion } from '@/visual/tween';
 import {
     DEFAULT_VIEWER_EXAMPLE,
     findViewerExample,
@@ -71,6 +92,7 @@ import {
     DEFAULT_DESKTOP_CONFIG,
     RowList,
     createMenu,
+    create_element,
     mountDesktop,
     seedTextareaSource,
     type CodeEditorHandle,
@@ -79,13 +101,14 @@ import {
     type MessageLevel,
 } from 'miko_ui';
 
-/** 已挂载的一次桌面(按宿主记):dispose 才会摘掉编辑器 / 视口 / 示例菜单挂上的监听 */
+/** 已挂载的一次桌面(按宿主记):dispose 才会摘掉编辑器 / 视口 / 菜单挂上的监听 */
 interface MountedViewer {
     readonly desktop: DesktopHandle;
     readonly editor: CodeEditorHandle;
     readonly checkEditor: CodeEditorHandle;
     readonly viewport: PlaneViewportHandle;
     readonly menu: MenuHandle<string>;
+    readonly demoMenu: MenuHandle<string>;
 }
 
 const mounted = new WeakMap<HTMLElement, MountedViewer>();
@@ -141,6 +164,7 @@ export function mountViewer(host: HTMLElement): void {
     previous?.checkEditor.dispose();
     previous?.viewport.dispose();
     previous?.menu.dispose();
+    previous?.demoMenu.dispose();
     mounted.delete(host);
 
     host.replaceChildren();
@@ -148,7 +172,7 @@ export function mountViewer(host: HTMLElement): void {
     const views = createViewerViews();
     // 平面视口绑在背景节点上:拖动 / 滚轮只改世界层的 transform
     const viewport = mountPlaneViewport(views.viewport, views.world, {
-        topInset: DEFAULT_DESKTOP_CONFIG.dockReserve,
+        insets: { top: DEFAULT_DESKTOP_CONFIG.dockReserve, bottom: 0 },
     });
 
     const desktop = mountDesktop(host, {
@@ -179,19 +203,69 @@ export function mountViewer(host: HTMLElement): void {
         panel: chrome.exampleMenu,
     });
     menu.bind(host);
-    mounted.set(host, { desktop, editor, checkEditor, viewport, menu });
+
+    /*
+      「演示」按钮在任务栏动作区(库按 VIEWER_DOCK_ACTIONS 建),剧本菜单挂在它下面.
+
+      库的动作按钮只给 `data-dock-action` 与点击上报,不提供"自定义触发元素"的入口;
+      这里做两件事把菜单接上:
+      1. 把按钮包进 `.menu-anchor`(库的浮层定位锚点:CSS 里 `.menu-popover` 相对它
+         `top:100%; left:0`);
+      2. 在同一锚点里放一份菜单面板,交给 createMenu 做开合 / 选中.
+      按钮本身仍是库建的 `createButton`,类名与点击语义不变;这只是把现成节点挪进
+      一个定位容器,不复制按钮.
+    */
+    const dockDemoButton = desktop.dock.querySelector<HTMLButtonElement>(
+        `[data-dock-action="${VIEWER_DEMO_ACTION_ID}"]`,
+    );
+    if (dockDemoButton === null) throw new Error('任务栏里缺少「演示」动作按钮');
+    dockDemoButton.setAttribute('aria-haspopup', 'true');
+    const demoMenuAnchor = create_element({ tag: 'div' }, { class: 'menu-anchor' });
+    dockDemoButton.parentElement?.insertBefore(demoMenuAnchor, dockDemoButton);
+    demoMenuAnchor.append(dockDemoButton);
+    const demoMenuPanel = create_element({ tag: 'div' }, { id: VIEWER_DOM.demoMenuId });
+    demoMenuAnchor.append(demoMenuPanel);
+    const demoMenu = createMenu<string>({
+        groups: demoScenarioMenuGroups(),
+        ariaLabel: VIEWER_DEMO_MENU_LABEL,
+        trigger: dockDemoButton,
+        panel: demoMenuPanel,
+    });
+    demoMenu.bind(host);
+    mounted.set(host, { desktop, editor, checkEditor, viewport, menu, demoMenu });
 
     /** 最后一次 RUN 解析通过的结构;没跑过 / 跑失败时为 null(检查配置不重算) */
     let currentDocument: SceneDocument | null = null;
+    /** 最后一次静态绘制的结构 / 检查:退出演示后要把它原样画回来 */
+    let lastStaticDocument: SceneDocument | null = null;
+    let lastStaticChecks: readonly SceneCheckResult[] = [];
+    /** 当前演示会话;null = 静态模式 */
+    let demoSession: DemoSession | null = null;
+
+    /**
+     * 一次演示会话:播放器 + 浮条 + 增量落笔器 + 进入前的窗口状态.
+     *
+     * 窗口状态在进入时快照,退出时按它恢复:演示只"临时让出画面",不改用户原来的
+     * 六窗口布局(docs/animation.md §9.2).
+     */
+    interface DemoSession {
+        readonly player: DemoPlayerHandle;
+        readonly bar: DemoBarHandle;
+        readonly painter: ScenePainter;
+        readonly savedWindows: ReadonlyMap<ViewerWindowId, 'normal' | 'maximized' | 'minimized'>;
+        /** 进入前的「检查配置」编辑器内容:演示改了它,退出要还原(否则静态检查配置与画面对不上) */
+        readonly savedCheckConfig: string;
+        readonly keys: AbortController;
+    }
 
     const entityList = new RowList<SceneDocumentNode, EntityItem>(views.entityList);
     const checkList = new RowList<CheckRowItem, CheckItem>(views.checkList);
 
-    /** 「定位」:把视口移到某个节点(没有布局位置时什么都不做,例如被清空之后) */
+    /** 「定位」:把视口平滑地移到某个节点(没有布局位置时什么都不做,例如被清空之后) */
     const locate = (key: number): void => {
         const point = positions.get(key);
         if (point === undefined) return;
-        viewport.focusPoint(point.x, point.y);
+        viewport.focusPoint(point.x, point.y, { animated: true });
     };
 
     /** 诊断窗口:一条消息(警告 / 错误两级由库的消息条目配色) */
@@ -207,6 +281,8 @@ export function mountViewer(host: HTMLElement): void {
     /** 清空画布与两个列表(空输入 / 解析失败 / 空文档三种情况共用) */
     const clearContent = (): void => {
         positions.clear();
+        lastStaticDocument = null;
+        lastStaticChecks = [];
         clearScene(worldEl);
         entityList.clear();
         checkList.clear();
@@ -256,12 +332,16 @@ export function mountViewer(host: HTMLElement): void {
 
     /** 画布 + 列表:吃一份已经解析好的文档与本轮检查结论(解析归 run) */
     const paint = (document: SceneDocument, checks: readonly SceneCheckResult[]): void => {
+        // 演示模式下画布归播放器;静态重绘(例如程序化改检查配置)不能把演示画面顶掉
+        if (demoSession !== null) return;
         /*
           布局 / 落笔 / 列表是"解析通过之后"的事.解析器已经保证了引用与 key,这一步
           理论上不该抛;真抛了(例如将来布局加上节点数上限)也只显示一行错误,不把
           异常丢进事件处理里炸掉整个页面.
         */
         try {
+            lastStaticDocument = document;
+            lastStaticChecks = checks;
             const layout = layoutScene(document);
             // 先更新定位表,再建行:行里的「定位」回调读的是当前这一轮的位置
             positions.clear();
@@ -288,6 +368,8 @@ export function mountViewer(host: HTMLElement): void {
      * 解析错误 / 空输入提示保持原样).
      */
     const applyCheckConfig = (): void => {
+        // 演示期间检查窗口归播放器(每帧按剧本检查集算);此处的重算等退出后再来
+        if (demoSession !== null) return;
         const document = currentDocument;
         if (document === null) return;
 
@@ -312,6 +394,8 @@ export function mountViewer(host: HTMLElement): void {
 
     /** RUN:解析 JSON 编辑器里的内容,成为"当前结构",再按检查配置跑检查并重绘 */
     const run = (): void => {
+        // RUN 是明确动作:先退出演示,再照原逻辑跑(不静默吞掉用户的运行请求)
+        if (demoSession !== null) exitDemo();
         const source = input.value.trim();
 
         if (source === '') {
@@ -361,6 +445,184 @@ export function mountViewer(host: HTMLElement): void {
         run();
     };
 
+    /**
+     * 进入演示:保存并最小化部分窗口 -> 写检查配置 -> 建浮条 / 落笔器 / 播放器.
+     *
+     * 顺序上先起浮条再建播放器:播放器构造时会立刻发第 0 拍的 `state`,浮条必须已经在.
+     * 进入演示**不改 JSON 编辑器**(演示是"看",编辑器是"改";docs/animation.md §9.4),
+     * 只把剧本的检查 id 写进检查配置窗口,让检查窗口按同一套口径算.
+     */
+    function enterDemo(id: string): void {
+        const scenario = findDemoScenario(id);
+        if (scenario === undefined) return;
+        if (demoSession !== null) exitDemo();
+
+        // ① 记下进入前的窗口状态,再让出画面:保留「检查」窗口(不变量是教学的一部分)
+        const savedWindows = new Map<ViewerWindowId, 'normal' | 'maximized' | 'minimized'>();
+        const windowIds: readonly ViewerWindowId[] = [
+            VIEWER_WINDOW_JSON,
+            VIEWER_WINDOW_ENTITY,
+            VIEWER_WINDOW_CHECK_SETUP,
+            VIEWER_WINDOW_CHECK,
+            VIEWER_WINDOW_DIAGNOSTICS,
+            VIEWER_WINDOW_HELP,
+        ];
+        for (const windowId of windowIds) savedWindows.set(windowId, desktop.windows.getState(windowId));
+        for (const windowId of windowIds) {
+            if (windowId !== VIEWER_WINDOW_CHECK) desktop.windows.setMinimized(windowId, true);
+        }
+
+        // ② 检查配置窗口换成剧本自带的检查集(与点「示例」同一条做法);原内容退出时还原
+        const savedCheckConfig = checkInput.value;
+        seedTextareaSource(checkInput, dumpCheckConfig(scenario.checkIds));
+        checkEditor.refresh();
+
+        // ③ 浮条 + 键盘.先建浮条,播放器构造时就能按快照刷新它.
+        const trace = scenario.build();
+        let playerRef: DemoPlayerHandle | null = null;
+        const bar = createDemoBar({
+            trace,
+            onAction: (action) => {
+                const player = playerRef;
+                if (player === null) return;
+                if (action === 'prev') player.prev();
+                else if (action === 'next') player.next();
+                else if (action === 'toggle') player.toggle();
+                else exitDemo();
+            },
+            onSeek: (stepIndex) => playerRef?.seek(stepIndex),
+            onSpeed: (speed) => playerRef?.setSpeed(speed),
+            onFollow: (follow) => playerRef?.setFollow(follow),
+        });
+        bar.element.id = VIEWER_DOM.demoBarId;
+        host.append(bar.element);
+        /*
+          浮条别压住「检查」窗口:检查窗口是演示里唯一保留的窗口(不变量现场),浮条
+          压在它下沿会把 FAIL 行 / 展开细节挡掉.所以浮条横跨"检查窗口左边的整条
+          可见带",而不是死板地按 70vw 居中(那个宽度在 1400px 窗口下会伸进检查窗口
+          200 多像素).窗口被用户拖走时按进入时的几何算一次;演示期间不再跟踪.
+        */
+        const checkGeometry = desktop.windows.getGeometry(VIEWER_WINDOW_CHECK);
+        const barAreaWidth = host.clientWidth > 0
+            ? host.clientWidth
+            : Math.max(checkGeometry.x + checkGeometry.w, 0);
+        bar.element.style.left = `${VIEWER_DEMO_BAR_GAP}px`;
+        bar.element.style.right = `${Math.max(
+            VIEWER_DEMO_BAR_GAP,
+            barAreaWidth - checkGeometry.x + VIEWER_DEMO_BAR_GAP,
+        )}px`;
+        bar.element.style.width = 'auto';
+        bar.element.style.transform = 'none';
+        const barHeight = bar.element.getBoundingClientRect().height;
+        // 浮条本身是镜头的避让区:底部 inset = 浮条高度 + 一条间距
+        viewport.setInsets({ top: DEFAULT_DESKTOP_CONFIG.dockReserve, bottom: barHeight > 0 ? barHeight + VIEWER_DEMO_BAR_GAP : 0 });
+
+        const keys = new AbortController();
+        const painter = new ScenePainter(worldEl);
+
+        /** 镜头请求:点 / 一组点 / 整幅适应,全部走视口的缓动(instant 时直接落位) */
+        const applyCamera = (request: DemoCameraRequest, options: { readonly instant: boolean }): void => {
+            const animated = !options.instant;
+            if (request.kind === 'point') {
+                viewport.focusPoint(request.point.x, request.point.y, { animated });
+            } else {
+                viewport.framePoints(request.points, { animated });
+            }
+        };
+
+        const ports: DemoPlayerPorts = {
+            paint(scene): void {
+                painter.apply(scene, { settled: false });
+            },
+            settle(scene): void {
+                // 演示期间视口必须一直是手动的:每拍镜头由播放器发.用户中途点「回正视图」
+                // 会把 manual 复位,这里再按当前视角"发一次目标"把它接管回来(不移动画面),
+                // 否则下一次 settle 的 contentChanged 会按完整内容自动 fit,把 framing:'hold'
+                // 的旋转步骤也拉走.
+                viewport.animateTo(viewport.getView(), { animated: false });
+                const bounds = painter.apply(scene, { settled: true });
+                // manual 下 contentChanged 只记包围盒,不会自动适应(退出演示后回正要它)
+                if (bounds !== null) viewport.contentChanged(bounds);
+            },
+            showStep(_index, step, checks, layout): void {
+                positions.clear();
+                for (const node of layout.nodes) positions.set(node.key, { x: node.x, y: node.y });
+                clearDiagnostics();
+                renderEntities(step.document);
+                renderChecks(checks);
+                updateListMeta(step.document, checks);
+                bar.setStepText(step.title, step.detail);
+            },
+            camera: applyCamera,
+            state(snapshot): void {
+                bar.update(snapshot);
+            },
+        };
+
+        // 进入演示先接管镜头所有权:即便第 0 拍是 framing:'hold',之后的内容重画也不该自动 fit
+        viewport.animateTo(viewport.getView(), { animated: false });
+        const player = createDemoPlayer({
+            trace,
+            clock: createRafClock(),
+            reducedMotion: prefersReducedMotion(),
+            variantOf: nodeVariant,
+            ports,
+        });
+        playerRef = player;
+        bar.update(player.snapshot);
+        demoMenu.setActive(id);
+
+        bindDemoKeys(document, {
+            toggle: () => playerRef?.toggle(),
+            prev: () => playerRef?.prev(),
+            next: () => playerRef?.next(),
+            first: () => playerRef?.seek(0),
+            last: () => playerRef?.seek((playerRef?.snapshot.total ?? 1) - 1),
+            exit: () => exitDemo(),
+        }, keys.signal);
+
+        demoSession = { player, bar, painter, savedWindows, savedCheckConfig, keys };
+    }
+
+    /**
+     * 退出演示:停播放器 / 拆浮条与落笔器 / 恢复窗口状态 / 把最后一次静态结构画回来.
+     *
+     * 恢复的是**进入前的窗口状态**(最小化 / 最大化都还原);JSON 编辑器内容从头到尾
+     * 没被演示改过,所以画回来的仍是用户输入的那份结构.
+     */
+    function exitDemo(): void {
+        const session = demoSession;
+        if (session === null) return;
+        demoSession = null;
+
+        session.keys.abort();
+        session.player.dispose();
+        session.bar.dispose();
+        session.painter.dispose();
+
+        for (const [windowId, state] of session.savedWindows) {
+            desktop.windows.setMinimized(windowId, state === 'minimized');
+            desktop.windows.setMaximized(windowId, state === 'maximized');
+        }
+        viewport.setInsets({ top: DEFAULT_DESKTOP_CONFIG.dockReserve, bottom: 0 });
+        // 检查配置编辑器也还原成进入前的内容(演示只是"借用"它跑剧本的检查集)
+        seedTextareaSource(checkInput, session.savedCheckConfig);
+        checkEditor.refresh();
+
+        // 演示期间世界层被落笔器接管过:清掉它的两个图层,再按最后一次 RUN 的结构重绘.
+        // 先把视口的 manual 复位(演示期间是手动的),静态重新落笔后 contentChanged 才会
+        // 按新内容自动适应;顺序不能反,否则 fitViewport() 会按演示最后一帧的包围盒取景.
+        clearScene(worldEl);
+        const document = lastStaticDocument;
+        if (document === null) {
+            clearContent();
+            viewport.fitViewport();
+            return;
+        }
+        viewport.fitViewport();
+        paint(document, lastStaticChecks);
+    }
+
     // RUN:解析 + 检查 + 重绘;JSON 编辑本身不触发任何重算
     chrome.runButton.addEventListener('click', run);
     // 与 graphcalc 同一条快捷键:编辑器里单独回车是换行,Ctrl/Cmd+Enter 才是运行
@@ -373,6 +635,7 @@ export function mountViewer(host: HTMLElement): void {
     // 检查配置窗口仍即时生效:只重算检查,结构沿用最后一次 RUN 的结果
     checkInput.addEventListener('input', applyCheckConfig);
     menu.onSelect(loadExample);
+    demoMenu.onSelect(enterDemo);
 
     /*
       打开页面时自动加载默认示例并跑一次.

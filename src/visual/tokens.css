@@ -22,3 +22,21 @@
     /* 节点进入动画时长:每轮整批重建,所以每个节点都会重新播一次 */
     --visual-node-enter-duration: 220ms;
 }
+
+/* 动画状态(visual/painter.ts 挂的 `visual-state--*` 类):外圈描边 / 透明度 / 虚线 */
+:root {
+    /* 当前处理节点:琥珀色描边 */
+    --visual-state-active: #fbbf24;
+    /* 查找 / 插入路径上的节点与连线:天蓝 */
+    --visual-state-path: #38bdf8;
+    /* 已访问(遍历) */
+    --visual-state-visited: #818cf8;
+    /* 命中 / 上位的新根 */
+    --visual-state-found: #4ade80;
+    /* 已断开 / 待移植的节点与连线 */
+    --visual-state-ghost: #94a3b8;
+    /* 新插入的节点 */
+    --visual-state-fresh: #22d3ee;
+    /* 当前节点描边的宽度(px):静态描边,不呼吸(docs/animation.md §5.2) */
+    --visual-state-ring-width: 3;
+}

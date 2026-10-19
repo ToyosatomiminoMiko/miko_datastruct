@@ -312,3 +312,156 @@
 #viewerTree .visual-node--black .visual-node__shape {
     fill: var(--viewer-node-black-fill);
 }
+
+/*
+ * 演示模式底部浮条(ui/viewer/demo_views.ts 建标记).
+ *
+ * 定位:贴在桌面底部、水平居中,宽度 min(960px, 70vw);绝对定位在桌面根里
+ * (窗口层之上,但不挡画布中心).镜头可用区的 bottom inset 由 viewer.ts 按它的
+ * 实测高度来扣,所以这里的高度不是写死的契约.
+ *
+ * 层级:库的窗口层与任务栏的 z 值在 DEFAULT_DESKTOP_CONFIG 里,这里取一个高于
+ * 全部窗口的常数;浮条是模式级控件,不该被窗口盖住(演示模式已把窗口最小化).
+ */
+.demo-bar {
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    z-index: 4000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: min(960px, 70vw);
+    padding: 10px 14px 12px;
+    border: 1px solid var(--viewer-demo-bar-border);
+    border-radius: 10px;
+    background: var(--viewer-demo-bar-bg);
+    box-shadow: var(--viewer-demo-bar-shadow);
+    color: var(--viewer-demo-bar-text);
+}
+
+.demo-bar__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.demo-bar__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--viewer-demo-bar-text);
+}
+
+.demo-bar__count {
+    font-family: var(--font-code);
+    font-size: 12px;
+    color: var(--viewer-demo-bar-muted);
+}
+
+.demo-bar__transport,
+.demo-bar__speed {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.demo-bar__transport {
+    margin-left: auto;
+}
+
+/* 速度档:一组小按钮,当前档由 aria-pressed 高亮(读屏与样式共用一份真相) */
+.demo-bar__speed-button[aria-pressed='true'] {
+    color: #0f172a;
+    background: var(--viewer-demo-bar-accent);
+    border-color: var(--viewer-demo-bar-accent);
+}
+
+.demo-bar__follow {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--viewer-demo-bar-muted);
+    white-space: nowrap;
+}
+
+.demo-bar__step-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--viewer-demo-bar-text);
+}
+
+/* 说明最多两行,过长省略;悬停由 title 给全文 */
+.demo-bar__step-detail {
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--viewer-demo-bar-muted);
+}
+
+/* 进度条:按章分组,章内按步骤等分;章与章之间由 gap 留缺口 */
+.demo-bar__progress {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+}
+
+.demo-bar__chapter {
+    display: flex;
+    flex: 1 1 0;
+    gap: 2px;
+    min-width: 0;
+}
+
+.demo-bar__tick {
+    flex: 1 1 0;
+    min-width: 4px;
+    height: 6px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: var(--viewer-demo-bar-tick);
+    cursor: pointer;
+}
+
+.demo-bar__tick.is-past {
+    background: var(--viewer-demo-bar-tick-past);
+}
+
+.demo-bar__tick.is-current {
+    background: var(--viewer-demo-bar-accent);
+}
+
+.demo-bar__tick:hover,
+.demo-bar__tick:focus-visible {
+    outline: 1px solid var(--viewer-demo-bar-accent);
+    outline-offset: 1px;
+}
+
+/* 浮条上的按钮沿用库的 .ui-button 基线,只把深色条上的对比度补回来 */
+.demo-bar .ui-button {
+    font-size: 12px;
+}
+
+.demo-bar__action {
+    font-size: 12px;
+}
+
+/*
+ * 任务栏里的浮层菜单(「演示」剧本菜单).
+ *
+ * 库的 `.menu-popover` 默认贴锚点左下(`top:100%; left:0`);任务栏动作区在桌面右沿,
+ * 按 left 展开会伸到视口外被裁掉.这里改成贴锚点右下展开,面板整体向左长.
+ */
+.dock .menu-popover {
+    left: auto;
+    right: 0;
+}
