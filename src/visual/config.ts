@@ -26,9 +26,10 @@ export const VISUAL_SURFACE_CLASS = 'visual-surface';
  */
 export const VISUAL_WORLD_CLASS = 'visual-world';
 
-// 场景里的图元:节点 / 指针
+// 场景里的图元:节点 / 连线
 //
-// 节点 = 一个组(位置在组的 transform 上)+ 形状 + 值文字;指针 = 一条线段.
+// 节点 = 一个组(位置在组的 transform 上)+ 形状 + 值文字;连线 = 一条线段,有向的
+// 指针再在终点加一个箭头.
 // 语义差异走**变体类**:节点组上再挂 `visual-node--<variant>`,由结构自己的样式
 // 决定这个变体长什么样(例如红黑树的 red / black).
 
@@ -41,8 +42,40 @@ export const VISUAL_NODE_SHAPE_CLASS = 'visual-node__shape';
 /** 节点值文字的类名(字体 / 字号 / 对齐 / 文字色) */
 export const VISUAL_NODE_LABEL_CLASS = 'visual-node__label';
 
-/** 一条指针(两点之间的线段)的类名 */
-export const VISUAL_POINTER_CLASS = 'visual-pointer';
+/**
+ * 节点半径(px).几何量,由 TS 持有:渲染层用它写 `<circle r>`,布局用它把连线端点
+ * 收进圆边界.颜色 / 填充 / 动画仍归 visual.css 与 tokens.css.
+ */
+export const VISUAL_NODE_RADIUS = 22;
+
+/** 一条连线(有向指针 / 无向边)的线段类名 */
+export const VISUAL_LINK_CLASS = 'visual-link';
+
+/** 连线变体类:有向指针(线段终点带箭头) */
+export const VISUAL_LINK_POINTER_CLASS = 'visual-link--pointer';
+
+/** 连线变体类:无向边(只有线段,没有箭头) */
+export const VISUAL_LINK_EDGE_CLASS = 'visual-link--edge';
+
+/** 有向指针终点的箭头三角形类名 */
+export const VISUAL_POINTER_ARROW_CLASS = 'visual-pointer-arrow';
+
+/** 连线端点与节点圆之间的空隙(px):箭头尖不贴着圆 */
+export const VISUAL_LINK_NODE_GAP = 4;
+
+/**
+ * 同一对节点之间有多条连线时的分道间距(px).
+ *
+ * 平行边(如柯尼斯堡七桥的 K-N ×2)与反向指针(a->b 且 b->a)都会落在同一条直线上:
+ * 按无向节点对分组后给每条连线一个横向偏移,左右对称排开,两条箭头不会叠在一起.
+ */
+export const VISUAL_LINK_LANE_GAP = 14;
+
+/** 有向指针箭头的长度(px,沿连线方向) */
+export const VISUAL_ARROW_LENGTH = 10;
+
+/** 有向指针箭头的半宽(px,垂直连线方向;底边总宽 = 2 倍) */
+export const VISUAL_ARROW_HALF_WIDTH = 5;
 
 /**
  * 节点的语义变体类名:`visualNodeVariantClass('red')` -> `visual-node--red`.
@@ -100,9 +133,9 @@ export const VISUAL_WHEEL_PAGE_PIXELS = 800;
 
 // 中性场景的自动布局(见 visual/layout.ts)
 //
-// 布局只回答"节点彼此别撞、内容别挤成一团",不知道圆有多大:节点半径归
-// visual.css 的 `--visual-node-radius`,内容实际多大由渲染后 `getBBox()` 量.
-// 这些数只影响首屏观感,用户可以自己缩放,不追求像素级最优.
+// 布局回答"节点彼此别撞、连线怎么从圆边出发":节点半径用 VISUAL_NODE_RADIUS,
+// 内容实际多大仍由渲染后 `getBBox()` 量.这些数只影响首屏观感,用户可以自己缩放,
+// 不追求像素级最优.
 
 /** 树形布局:相邻两层的垂直步长(px) */
 export const VISUAL_LAYOUT_TREE_LAYER_STEP = 70;
@@ -110,8 +143,8 @@ export const VISUAL_LAYOUT_TREE_LAYER_STEP = 70;
 /**
  * 树形布局:同层相邻节点的最小中心距(px).
  *
- * 必须大于圆的直径(视觉层 `--visual-node-radius` 的 2 倍):布局不知道半径,
- * 改视觉层令牌时要回来看一眼.与层距同值是"横竖留白一致"的默认观感.
+ * 必须大于圆的直径(`2 * VISUAL_NODE_RADIUS`):两个圆不能叠在一起.与层距同值是
+ * "横竖留白一致"的默认观感.
  */
 export const VISUAL_LAYOUT_TREE_MIN_GAP = 70;
 

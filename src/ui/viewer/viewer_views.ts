@@ -4,7 +4,7 @@
  * `mountViewer` 交给库的 `mountDesktop` 装配.
  *
  * 本模块是纯函数:不读页面,不改全局,不绑业务事件;列表行内容的装配在 viewer_items.ts,
- * 解析 / 布局 / 每轮重绘在 viewer.ts.
+ * RUN / 示例菜单的接线与每轮重绘在 viewer.ts,标题栏节点在 viewer_chrome.ts.
  *
  * 六扇窗口各装一件事:JSON 输入、实体列表、检查配置(编辑器)、检查列表、诊断消息、帮助.
  * 实体 / 检查配置 / 检查拆成独立窗口而不是一扇里几段:几件事的长度互不相干,拆开之后
@@ -15,12 +15,14 @@ import {
     create_element,
     createCodeEditor,
     createMessageArea,
+    windowSlotsProvider,
     type Child,
     type CodeEditorHandle,
     type MessageAreaHandle,
     type WindowContentSpec,
 } from 'miko_ui';
 import {
+    VIEWER_ADOPTED_NODES,
     VIEWER_CHECK_SETUP_EDITOR_LABEL,
     VIEWER_DOM,
     VIEWER_EDITOR_GUTTER_MIN_WIDTH,
@@ -42,12 +44,13 @@ import {
     type ViewerWindowId,
 } from '@/ui/viewer/config';
 import { highlightJson } from '@/ui/viewer/viewer_highlight';
+import { createViewerChrome, type ViewerChrome } from '@/ui/viewer/viewer_chrome';
 import { createVisualSurface } from '@/visual/surface';
 
 /** 结构图那块绘制面的读屏标签(它不是纯装饰:画的是这一份 JSON 的结构) */
 const VIEWER_TREE_LABEL = '结构图';
 
-/** JSON 查看器的桌面视图:桌面背景 + 六扇窗口正文 + 行为代码要用的引用 */
+/** JSON 查看器的桌面视图:桌面背景 + 六扇窗口正文 / 标题栏槽位 + 行为代码要用的引用 */
 export interface ViewerViews {
     /** 平面视口(交给库当桌面背景,挂 `.desktop-background`) */
     readonly viewport: HTMLElement;
@@ -55,6 +58,8 @@ export interface ViewerViews {
     readonly tree: SVGSVGElement;
     /** 世界层 `<g>`:场景里的一切都挂在这里,视口只改它的 transform */
     readonly world: SVGGElement;
+    /** JSON 窗口标题栏上的三个节点(示例按钮 / RUN 按钮 / 示例菜单面板) */
+    readonly chrome: ViewerChrome;
     /** 逐窗口内容:库的 `mountDesktop` 按窗口 id 现取一次 */
     readonly content: (id: string) => WindowContentSpec;
     /** JSON 编辑器句柄(值的唯一真相源 + refresh) */
@@ -108,6 +113,10 @@ function createListPanel(
  * 操作节点,不查 DOM.
  */
 export function createViewerViews(): ViewerViews {
+    // JSON 窗口标题栏:示例 / RUN 是两个按钮,菜单面板进标题栏浮层槽位
+    const chrome = createViewerChrome();
+    const slots = windowSlotsProvider(VIEWER_ADOPTED_NODES, chrome);
+
     // JSON 编辑器:库的外框 + 行号 + 高亮层;分词(JSON)与槽宽下限由这里给
     const editor = createCodeEditor({
         spellcheck: false,
@@ -228,7 +237,8 @@ export function createViewerViews(): ViewerViews {
         viewport,
         tree,
         world,
-        content: (id) => (isViewerWindowId(id) ? { body: bodies[id] } : {}),
+        chrome,
+        content: (id) => (isViewerWindowId(id) ? { slots: slots(id), body: bodies[id] } : {}),
         editor,
         diagnostics,
         entityList: entity.list,

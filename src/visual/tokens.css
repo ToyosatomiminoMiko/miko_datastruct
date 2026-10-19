@@ -6,17 +6,15 @@
  * 将来的"当前节点""已删除")不属于这一层 -- 它们由结构自己的令牌与变体规则给,见
  * src/ui/<结构>/tokens.css.
  *
- * 跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):`--visual-node-radius`
- * 只在 CSS 这一侧定义,TS 不读它(内容占多大由渲染层向浏览器要 `getBBox()`);自动布局的
- * 同层最小中心距必须大于 2 × 这个半径,否则两个圆会叠在一起(这一条是 src/visual/config.ts
- * 的 `VISUAL_LAYOUT_TREE_MIN_GAP`).进入动画的时长也只有 CSS 一处(纯 CSS 动画,TS 不参与).
+ * 节点半径是**几何量**,不在本文件:渲染要写 `<circle r>`、布局要收进圆边界,所以它住在
+ * src/visual/config.ts 的 `VISUAL_NODE_RADIUS`(TS 一处).这里只放颜色 / 线宽 / 字号 /
+ * 动画时长这些 CSS 侧的观感.进入动画的时长只有 CSS 一处(纯 CSS 动画,TS 不参与).
  */
 :root {
-    /* 节点:半径 / 默认填充(没有语义变体时用)/ 值文字颜色与字号 */
-    --visual-node-radius: 22px;
+    /* 节点:默认填充(没有语义变体时用)/ 值文字颜色与字号 */
     --visual-node-fill: #334155;
     --visual-node-text: #ffffff;
-    /* 值字号:半径 22px × 0.75 向下取整 = 16 */
+    /* 值字号:半径 22(见 src/visual/config.ts 的 VISUAL_NODE_RADIUS)× 0.75 向下取整 = 16 */
     --visual-node-font-size: 16px;
     /* 指针:颜色(浅灰蓝)与线宽(无描边单位,直接进 SVG stroke-width) */
     --visual-pointer-color: #94a3b8;

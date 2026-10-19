@@ -1,8 +1,9 @@
 /**
  * 视觉层落笔(visual/render.ts)的契约(进程内,跑在 happy-dom 里).
  *
- * 只验视觉层自己的事:场景里的节点 / 指针被落成什么类名的 SVG、文档顺序(先指针后节点)、
- * 语义变体挂成修饰类,以及包围盒从 `getBBox()` 量得、量不到就交 null(不猜).
+ * 只验视觉层自己的事:场景里的节点 / 连线被落成什么类名的 SVG、有向指针带箭头而
+ * 无向边不带、文档顺序(先连线后节点)、语义变体挂成修饰类,以及包围盒从 `getBBox()`
+ * 量得、量不到就交 null(不猜).
  *
  * 用**手写的场景**而不是任何一种数据结构:layout -> 场景的翻译各归各的结构,这里不 import
  * datastruct(依赖方向只有 ui -> visual).
@@ -13,10 +14,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { create_svg_element } from 'miko_ui';
 
 import {
+    VISUAL_LINK_CLASS,
+    VISUAL_LINK_EDGE_CLASS,
+    VISUAL_LINK_POINTER_CLASS,
     VISUAL_NODE_CLASS,
     VISUAL_NODE_LABEL_CLASS,
+    VISUAL_NODE_RADIUS,
     VISUAL_NODE_SHAPE_CLASS,
-    VISUAL_POINTER_CLASS,
+    VISUAL_POINTER_ARROW_CLASS,
     VISUAL_WORLD_CLASS,
     visualNodeVariantClass,
 } from '@/visual/config';
@@ -28,14 +33,14 @@ function createWorld(): SVGGElement {
     return create_svg_element({ tag: 'g' }, { class: VISUAL_WORLD_CLASS });
 }
 
-/** 两个节点 + 一条指针的最小场景:值 / 变体 / 坐标都不同,便于断言 */
+/** 两个节点 + 一条有向指针的最小场景:值 / 变体 / 坐标都不同,便于断言 */
 function smallScene(): VisualScene {
     return {
         nodes: [
             { at: { x: 0, y: 0 }, label: '10', variant: 'black' },
             { at: { x: 70, y: 70 }, label: '5', variant: 'red' },
         ],
-        pointers: [{ from: { x: 0, y: 0 }, to: { x: 70, y: 70 } }],
+        links: [{ from: { x: 0, y: 0 }, to: { x: 70, y: 70 }, directed: true }],
     };
 }
 
@@ -49,7 +54,7 @@ describe('视觉层:场景落笔与内容测量', () => {
         document.body.innerHTML = '';
     });
 
-    it('落笔:节点组带位置 / 变体 / 形状 / 值文字,指针带两端坐标', () => {
+    it('落笔:节点组带位置 / 变体 / 形状 / 值文字,连线带两端坐标', () => {
         const world = createWorld();
         stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
 
@@ -68,27 +73,65 @@ describe('视觉层:场景落笔与内容测量', () => {
         expect([...world.querySelectorAll(`.${VISUAL_NODE_LABEL_CLASS}`)].map((label) => label.textContent))
             .toEqual(['10', '5']);
 
-        const pointer = world.querySelector(`.${VISUAL_POINTER_CLASS}`);
-        expect(pointer?.tagName.toLowerCase()).toBe('line');
-        expect(['x1', 'y1', 'x2', 'y2'].map((name) => pointer?.getAttribute(name)))
+        const link = world.querySelector(`.${VISUAL_LINK_CLASS}`);
+        expect(link?.tagName.toLowerCase()).toBe('line');
+        expect(link?.classList.contains(VISUAL_LINK_POINTER_CLASS)).toBe(true);
+        expect(link?.classList.contains(VISUAL_LINK_EDGE_CLASS)).toBe(false);
+        expect(['x1', 'y1', 'x2', 'y2'].map((name) => link?.getAttribute(name)))
             .toEqual(['0', '0', '70', '70']);
+
+        // 形状半径由 TS 常量写进 r 属性(不是 CSS)
+        expect(world.querySelector(`.${VISUAL_NODE_SHAPE_CLASS}`)?.getAttribute('r'))
+            .toBe(String(VISUAL_NODE_RADIUS));
     });
 
-    it('文档顺序:先指针后节点(节点盖在线上)', () => {
+    it('有向指针:线段后面跟一枚箭头,尖端落在终点', () => {
+        const world = createWorld();
+        stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
+
+        renderScene(world, smallScene());
+
+        const arrow = world.querySelector(`.${VISUAL_POINTER_ARROW_CLASS}`);
+        expect(arrow?.tagName.toLowerCase()).toBe('path');
+        expect(arrow?.getAttribute('d')).toContain('M 70 70');
+        // 有向指针 = 1 条线 + 1 枚箭头
+        expect(world.querySelectorAll(`.${VISUAL_LINK_CLASS}`)).toHaveLength(1);
+        expect(world.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(1);
+    });
+
+    it('无向边:只有线段,不画箭头', () => {
+        const world = createWorld();
+        stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
+
+        renderScene(world, {
+            nodes: [
+                { at: { x: 0, y: 0 }, label: 'A' },
+                { at: { x: 70, y: 0 }, label: 'B' },
+            ],
+            links: [{ from: { x: 26, y: 0 }, to: { x: 44, y: 0 }, directed: false }],
+        });
+
+        const link = world.querySelector(`.${VISUAL_LINK_CLASS}`);
+        expect(link?.classList.contains(VISUAL_LINK_EDGE_CLASS)).toBe(true);
+        expect(link?.classList.contains(VISUAL_LINK_POINTER_CLASS)).toBe(false);
+        expect(world.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(0);
+    });
+
+    it('文档顺序:先连线后节点(节点盖在线上)', () => {
         const world = createWorld();
         stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
 
         renderScene(world, smallScene());
 
         expect([...world.children].map((child) => child.tagName.toLowerCase()))
-            .toEqual(['line', 'g', 'g']);
+            .toEqual(['line', 'path', 'g', 'g']);
     });
 
     it('没有变体的节点只挂基础类(变体是可选语义,不是必填)', () => {
         const world = createWorld();
         stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
 
-        renderScene(world, { nodes: [{ at: { x: 1, y: 2 }, label: 'x' }], pointers: [] });
+        renderScene(world, { nodes: [{ at: { x: 1, y: 2 }, label: 'x' }], links: [] });
 
         const node = world.querySelector(`.${VISUAL_NODE_CLASS}`);
         expect(node?.getAttribute('class')).toBe(VISUAL_NODE_CLASS);
@@ -109,7 +152,8 @@ describe('视觉层:场景落笔与内容测量', () => {
         renderScene(world, smallScene());
 
         expect(world.querySelectorAll(`.${VISUAL_NODE_CLASS}`)).toHaveLength(2);
-        expect(world.querySelectorAll(`.${VISUAL_POINTER_CLASS}`)).toHaveLength(1);
+        expect(world.querySelectorAll(`.${VISUAL_LINK_CLASS}`)).toHaveLength(1);
+        expect(world.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(1);
     });
 
     it('量不出尺寸(happy-dom 的空矩形)就交 null:调用方据此不动视角,不猜一个包围盒', () => {

@@ -16,6 +16,9 @@ import {
     VISUAL_LAYOUT_GRAPH_MIN_RADIUS,
     VISUAL_LAYOUT_TREE_LAYER_STEP,
     VISUAL_LAYOUT_TREE_MIN_GAP,
+    VISUAL_LINK_LANE_GAP,
+    VISUAL_LINK_NODE_GAP,
+    VISUAL_NODE_RADIUS,
 } from '@/visual/config';
 
 /** 按 key 取布局出来的坐标(取不到直接抛错,而不是让断言读 undefined) */
@@ -103,8 +106,83 @@ describe('布局:树形', () => {
             { from: 2, to: 0 },
             { from: 2, to: 1 },
         ]));
-        expect(layout.links).toEqual([{ from: 2, to: 0 }, { from: 2, to: 1 }]);
+        expect(layout.links.map((link) => ({ from: link.from, to: link.to, directed: link.directed })))
+            .toEqual([
+                { from: 2, to: 0, directed: true },
+                { from: 2, to: 1, directed: true },
+            ]);
         expect(layout.nodes.map((node) => node.key)).toEqual([2, 0, 1]);
+    });
+});
+
+describe('布局:连线端点(圆边 + 平行 / 反向分道)', () => {
+    /** 一条连线的中点(端点的平均) */
+    function midpoint(link: { start: { x: number; y: number }; end: { x: number; y: number } }): { x: number; y: number } {
+        return { x: (link.start.x + link.end.x) / 2, y: (link.start.y + link.end.y) / 2 };
+    }
+
+    it('树指针:端点收进节点圆边界,方向标记为有向', () => {
+        const layout = layoutScene(treeInput([0, 1], [{ from: 0, to: 1 }]));
+        const root = point(layout, 0);
+        const child = point(layout, 1);
+        const link = layout.links[0];
+        if (!link) throw new Error('布局没有给出连线');
+
+        expect(link.directed).toBe(true);
+        expect(Math.hypot(link.start.x - root.x, link.start.y - root.y))
+            .toBeCloseTo(VISUAL_NODE_RADIUS + VISUAL_LINK_NODE_GAP, 6);
+        expect(Math.hypot(link.end.x - child.x, link.end.y - child.y))
+            .toBeCloseTo(VISUAL_NODE_RADIUS + VISUAL_LINK_NODE_GAP, 6);
+    });
+
+    it('平行无向边(柯尼斯堡 K-N ×2):两条线横向分道,不再重叠', () => {
+        const layout = layoutScene({
+            nodes: [{ key: 0 }, { key: 1 }],
+            pointers: [],
+            edges: [{ a: 0, b: 1 }, { a: 0, b: 1 }],
+        });
+        const [first, second] = layout.links;
+        if (!first || !second) throw new Error('布局没有给出两条连线');
+
+        expect(first.directed).toBe(false);
+        expect(second.directed).toBe(false);
+        expect(Math.hypot(first.start.x - second.start.x, first.start.y - second.start.y))
+            .toBeCloseTo(VISUAL_LINK_LANE_GAP, 6);
+        expect(Math.hypot(
+            midpoint(first).x - midpoint(second).x,
+            midpoint(first).y - midpoint(second).y,
+        )).toBeCloseTo(VISUAL_LINK_LANE_GAP, 6);
+    });
+
+    it('反向指针 a->b 与 b->a:两条线分到法向两侧,各有自己的方向', () => {
+        const layout = layoutScene({
+            nodes: [{ key: 0 }, { key: 1 }],
+            pointers: [{ from: 0, to: 1 }, { from: 1, to: 0 }],
+            edges: [],
+        });
+        const [forward, backward] = layout.links;
+        if (!forward || !backward) throw new Error('布局没有给出两条连线');
+
+        expect(forward.from).toBe(0);
+        expect(backward.from).toBe(1);
+        expect(forward.directed).toBe(true);
+        expect(backward.directed).toBe(true);
+        // 两条线的起点分别在两个节点上,直接比起点会掺进方向差;比中点只知道横向分道
+        expect(Math.hypot(
+            midpoint(forward).x - midpoint(backward).x,
+            midpoint(forward).y - midpoint(backward).y,
+        )).toBeCloseTo(VISUAL_LINK_LANE_GAP, 6);
+    });
+
+    it('只有一对一条线时不偏移', () => {
+        const layout = layoutScene(treeInput([0, 1], [{ from: 0, to: 1 }]));
+        const root = point(layout, 0);
+        const child = point(layout, 1);
+        const link = layout.links[0];
+        if (!link) throw new Error('布局没有给出连线');
+        // 中点应落在两节点圆心的连线上
+        expect(midpoint(link).x).toBeCloseTo((root.x + child.x) / 2, 6);
+        expect(midpoint(link).y).toBeCloseTo((root.y + child.y) / 2, 6);
     });
 });
 
@@ -144,7 +222,10 @@ describe('布局:图(环形)', () => {
         expect(point(cycle, 0).y).not.toBe(point(cycle, 1).y - VISUAL_LAYOUT_TREE_LAYER_STEP);
 
         const selfLoop = layoutScene(treeInput([0], [{ from: 0, to: 0 }]));
-        expect(selfLoop.links).toEqual([{ from: 0, to: 0 }]);
+        expect(selfLoop.links.map((link) => ({ from: link.from, to: link.to, directed: link.directed })))
+            .toEqual([{ from: 0, to: 0, directed: true }]);
+        // 自环没有可收的方向:端点就是节点本身(渲染层画不出可见线段)
+        expect(selfLoop.links[0]?.start).toEqual(selfLoop.links[0]?.end);
         expect(selfLoop.nodes).toHaveLength(1);
     });
 
@@ -154,10 +235,11 @@ describe('布局:图(环形)', () => {
             pointers: [{ from: 0, to: 1 }],
             edges: [{ a: 1, b: 2 }],
         });
-        expect(layout.links).toEqual([
-            { from: 0, to: 1 },
-            { from: 1, to: 2 },
-        ]);
+        expect(layout.links.map((link) => ({ from: link.from, to: link.to, directed: link.directed })))
+            .toEqual([
+                { from: 0, to: 1, directed: true },
+                { from: 1, to: 2, directed: false },
+            ]);
         // 环形布局的 y 是圆上的,不会像树那样把根固定在 y = 0
         expect(layout.nodes.some((node) => node.y > VISUAL_LAYOUT_TREE_MIN_GAP)).toBe(true);
     });

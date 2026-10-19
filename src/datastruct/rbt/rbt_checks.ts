@@ -18,6 +18,7 @@
 
 import type { SceneDocument, SceneDocumentNode } from '@/datastruct/scene/scene_document';
 import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/datastruct/scene/scene_check';
+import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/datastruct/scene/label_value';
 
 type NodeColor = 'red' | 'black';
 
@@ -229,19 +230,6 @@ const checkBlackHeight: SceneCheckFunction = (document) => {
 
 // 5. 二叉搜索树有序
 
-/** 比较容差,只兜浮点写法的误差;相等值仍然算违规 */
-const COMPARISON_TOLERANCE = 1e-9;
-
-/**
- * 取标签参与比较时用的数;认不出来返回 null.
- *
- * 不用 `Number()`:它会把 `''` 当 0、`0x10` 当 16,这些"看着是数字其实不是"的写法
- * 在这里只会让人对不上号.
- */
-function toComparable(label: string): number | null {
-    return /^[+-]?\d+(\.\d+)?$/.test(label) ? Number(label) : null;
-}
-
 type BstViolationReason = 'range' | 'shape' | 'cycle' | 'unreachable';
 
 interface BstViolation {
@@ -278,10 +266,10 @@ const checkBstOrder: SceneCheckFunction = (document) => {
         reached.add(key);
 
         const node = index.nodeByKey.get(key) as SceneDocumentNode;
-        const value = toComparable(node.label);
+        const value = toComparableLabel(node.label);
         if (value !== null) {
-            if (low !== null && value <= low + COMPARISON_TOLERANCE) return { node: key, reason: 'range' };
-            if (high !== null && value >= high - COMPARISON_TOLERANCE) return { node: key, reason: 'range' };
+            if (low !== null && value <= low + LABEL_COMPARE_TOLERANCE) return { node: key, reason: 'range' };
+            if (high !== null && value >= high - LABEL_COMPARE_TOLERANCE) return { node: key, reason: 'range' };
         }
 
         const children = index.childrenOf.get(key) ?? [];

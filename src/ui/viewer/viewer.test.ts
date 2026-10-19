@@ -1,12 +1,13 @@
 /**
  * JSON 查看器行为层(ui/viewer/viewer.ts 的 mountViewer)的契约(happy-dom,进程内).
  *
- * 钉四件事:
+ * 钉五件事:
  * 1. 首屏默认示例真的走完"解析 -> 布局 -> 画布 -> 两段列表";
- * 2. 输入换一份 JSON 后,画布与列表跟着换;非法 JSON 只显示一行错误,上一轮内容清干净;
+ * 2. 改 JSON 不自动重绘,点 RUN / Ctrl+Enter 才重绘;非法 JSON 只显示一行错误;
  * 3. 实体列表 / 检查列表的行数与状态、FAIL 定位按钮;
  * 4. 「检查配置」编辑器改内容后检查重算、错配置的报错;
- * 5. 「定位」与「回正视图」分别落到视口的 focusPoint / fitViewport.
+ * 5. 「示例」菜单选中后 JSON / 检查配置 / 画布 / 检查行一起换;
+ * 6. 「定位」与「回正视图」分别落到视口的 focusPoint / fitViewport.
  *
  * @vitest-environment happy-dom
  */
@@ -21,12 +22,17 @@ import {
     VIEWER_EXAMPLE_JSON,
     VIEWER_FIT_BUTTON_TEXT,
 } from '@/ui/viewer/config';
+import { dumpCheckConfig } from '@/ui/viewer/check_config';
+import { VIEWER_EXAMPLES } from '@/ui/viewer/examples';
 import { mountViewer } from '@/ui/viewer/viewer';
 import { formatUnknownChecks } from '@/ui/viewer/viewer_format';
 import {
+    VISUAL_LINK_CLASS,
+    VISUAL_LINK_EDGE_CLASS,
+    VISUAL_LINK_POINTER_CLASS,
     VISUAL_NODE_CLASS,
     VISUAL_NODE_LABEL_CLASS,
-    VISUAL_POINTER_CLASS,
+    VISUAL_POINTER_ARROW_CLASS,
     VISUAL_WORLD_CLASS,
 } from '@/visual/config';
 import { DEFAULT_DESKTOP_CONFIG } from 'miko_ui';
@@ -46,10 +52,21 @@ function editorTextarea(): HTMLTextAreaElement {
     return textarea;
 }
 
-/** 往编辑器喂一段源码并派发 input(与用户敲键盘走同一条链路) */
+/** 往编辑器喂一段源码并派发 input(与用户敲键盘走同一条链路;不再自动运行) */
 function setSource(input: HTMLTextAreaElement, source: string): void {
     input.value = source;
     input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** 点 JSON 窗口标题栏的 RUN(与用户点按钮走同一条链路) */
+function clickRun(): void {
+    byId<HTMLButtonElement>(VIEWER_DOM.runButtonId).click();
+}
+
+/** 喂源码 + 点 RUN:大多数"换一份 JSON"的用例要的两步 */
+function setSourceAndRun(input: HTMLTextAreaElement, source: string): void {
+    setSource(input, source);
+    clickRun();
 }
 
 /** 「检查配置」编辑器的真 textarea(它和 JSON 窗口一样是库的 CodeEditor) */
@@ -92,8 +109,8 @@ function treeNodes(tree: SVGSVGElement): Element[] {
     return [...tree.querySelectorAll(`.${VISUAL_NODE_CLASS}`)];
 }
 
-function treePointers(tree: SVGSVGElement): Element[] {
-    return [...tree.querySelectorAll(`.${VISUAL_POINTER_CLASS}`)];
+function treeLinks(tree: SVGSVGElement): Element[] {
+    return [...tree.querySelectorAll(`.${VISUAL_LINK_CLASS}`)];
 }
 
 /** 节点值(按文档顺序) */
@@ -126,7 +143,10 @@ describe('查看器:首屏默认示例', () => {
         expect(diagnosticMessages('warning')).toEqual([]);
         expect(diagnosticMessages('error')).toEqual([]);
         expect(treeNodes(tree)).toHaveLength(5);
-        expect(treePointers(tree)).toHaveLength(4);
+        expect(treeLinks(tree)).toHaveLength(4);
+        // 树里的 pointers 是有向的:每条线都配一枚箭头
+        expect(tree.querySelectorAll(`.${VISUAL_LINK_POINTER_CLASS}`)).toHaveLength(4);
+        expect(tree.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(4);
         expect(treeLabels(tree).sort()).toEqual(['1', '10', '15', '5', '8']);
 
         // 实体与检查在两个窗口里:实体列表与检查列表各挂在各自的面板下
@@ -180,10 +200,76 @@ describe('查看器:首屏默认示例', () => {
     });
 });
 
+describe('查看器:RUN 按钮', () => {
+    it('编辑 JSON 不自动重绘;点 RUN 才把新结构画出来', () => {
+        const { input, tree } = mountPanel();
+        expect(treeNodes(tree)).toHaveLength(5);
+
+        setSource(input, JSON.stringify({ nodes: [{ key: 0, label: 'only' }] }));
+        // 输入只是编辑器里的文本:画布与列表仍是上一次 RUN 的结果
+        expect(treeNodes(tree)).toHaveLength(5);
+        expect(document.querySelectorAll('.entity-row')).toHaveLength(5);
+
+        clickRun();
+        expect(treeNodes(tree)).toHaveLength(1);
+        expect(treeLabels(tree)).toEqual(['only']);
+        expect(document.querySelectorAll('.entity-row')).toHaveLength(1);
+    });
+
+    it('Ctrl/Cmd+Enter 等同点 RUN', () => {
+        const { input, tree } = mountPanel();
+        setSource(input, JSON.stringify({
+            nodes: [{ key: 0, label: 'A' }, { key: 1, label: 'B' }],
+            pointers: [{ from: 0, to: 1 }],
+        }));
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+        expect(treeNodes(tree)).toHaveLength(2);
+    });
+});
+
+describe('查看器:示例菜单', () => {
+    /** 打开「示例」菜单并点某一项(按标题前缀找,菜单项文案 = 标题 + 结构 id) */
+    function pickExample(title: string): void {
+        byId<HTMLButtonElement>(VIEWER_DOM.exampleButtonId).click();
+        const item = [...document.querySelectorAll<HTMLElement>(`#${VIEWER_DOM.exampleMenuId} .menu-item`)]
+            .find((candidate) => (candidate.textContent ?? '').startsWith(title));
+        if (item === undefined) throw new Error(`示例菜单里找不到「${title}」`);
+        item.click();
+    }
+
+    it('首屏把默认示例标成当前项', () => {
+        mountPanel();
+        const active = [...document.querySelectorAll(`#${VIEWER_DOM.exampleMenuId} .menu-item.is-active`)];
+        expect(active).toHaveLength(1);
+        expect(active[0]?.textContent ?? '').toContain(VIEWER_EXAMPLES[0]?.title ?? '');
+    });
+
+    it('选中示例:JSON / 检查配置 / 画布 / 检查行一起换', () => {
+        const { input, tree } = mountPanel();
+
+        for (const example of VIEWER_EXAMPLES) {
+            pickExample(example.title);
+
+            expect(input.value).toBe(example.json);
+            expect(checkConfigTextarea().value).toBe(dumpCheckConfig(example.checkIds));
+
+            const parsed = JSON.parse(example.json) as {
+                nodes: unknown[];
+                pointers?: unknown[];
+                edges?: unknown[];
+            };
+            expect(treeNodes(tree)).toHaveLength(parsed.nodes.length);
+            expect(treeLinks(tree))
+                .toHaveLength((parsed.pointers?.length ?? 0) + (parsed.edges?.length ?? 0));
+            expect(document.querySelectorAll('.check-row')).toHaveLength(example.checkIds.length);
+        }
+    });
+});
+
 describe('查看器:输入变化', () => {
     it('换成图 JSON:4 个节点排在圆周上,7 条边画成 7 条线段', () => {
         const { input, tree } = mountPanel();
-        setSource(input, JSON.stringify({
+        setSourceAndRun(input, JSON.stringify({
             nodes: [
                 { key: 0, label: 'K' },
                 { key: 1, label: 'N' },
@@ -198,7 +284,10 @@ describe('查看器:输入变化', () => {
         }));
 
         expect(treeLabels(tree).sort()).toEqual(['E', 'K', 'N', 'S']);
-        expect(treePointers(tree)).toHaveLength(7);
+        expect(treeLinks(tree)).toHaveLength(7);
+        // 无向边:没有箭头;两条平行边 K-N / K-S 各画成两条分道的线
+        expect(tree.querySelectorAll(`.${VISUAL_LINK_EDGE_CLASS}`)).toHaveLength(7);
+        expect(tree.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(0);
         // 图分量是一个圆:节点 y 不全相同(不是树那样按层排)
         const transforms = treeNodes(tree).map((node) => parseTransform(node.getAttribute('transform') ?? ''));
         expect(new Set(transforms.map((position) => position.y)).size).toBeGreaterThan(1);
@@ -209,9 +298,31 @@ describe('查看器:输入变化', () => {
         expect(byId<HTMLElement>(VIEWER_DOM.checkSummaryId).textContent).toBe('0 条中 0 条 FAIL');
     });
 
+    it('反向指针 a->b / b->a:两条线分道,两枚箭头都画出来', () => {
+        const { input, tree } = mountPanel();
+        setSourceAndRun(input, JSON.stringify({
+            nodes: [{ key: 0, label: 'A' }, { key: 1, label: 'B' }],
+            pointers: [{ from: 0, to: 1 }, { from: 1, to: 0 }],
+        }));
+
+        const links = tree.querySelectorAll(`.${VISUAL_LINK_POINTER_CLASS}`);
+        expect(links).toHaveLength(2);
+        const first = links[0];
+        const second = links[1];
+        // 两条线不是同一条:分道之后线段坐标必须不同
+        expect([
+            first?.getAttribute('x1'), first?.getAttribute('y1'),
+            first?.getAttribute('x2'), first?.getAttribute('y2'),
+        ]).not.toEqual([
+            second?.getAttribute('x1'), second?.getAttribute('y1'),
+            second?.getAttribute('x2'), second?.getAttribute('y2'),
+        ]);
+        expect(tree.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(2);
+    });
+
     it('空输入:只留一行提示,画布与两段列表都清空', () => {
         const { input, tree } = mountPanel();
-        setSource(input, '   ');
+        setSourceAndRun(input, '   ');
 
         expect(diagnosticMessages('warning')).toEqual([`[warning] ${VIEWER_EMPTY_HINT_TEXT}`]);
         expect(diagnosticMessages('error')).toEqual([]);
@@ -222,7 +333,7 @@ describe('查看器:输入变化', () => {
 
     it('非法 JSON / 悬空引用:只显示一行错误,上一轮内容清干净', () => {
         const { input, tree } = mountPanel();
-        setSource(input, '{"nodes":[{"key":0,"label":"A"}],"pointers":[{"from":0,"to":9}]}');
+        setSourceAndRun(input, '{"nodes":[{"key":0,"label":"A"}],"pointers":[{"from":0,"to":9}]}');
 
         expect(diagnosticMessages('error')).toEqual([
             `[error] ${VIEWER_ERROR_UI_PREFIX}pointers[0].to: 引用了不存在的节点 key: 9`,
@@ -235,7 +346,7 @@ describe('查看器:输入变化', () => {
 
     it('没有节点也没有检查的空文档:提示"没有东西可画"', () => {
         const { input } = mountPanel();
-        setSource(input, '{}');
+        setSourceAndRun(input, '{}');
         expect(diagnosticMessages('warning')).toEqual([`[warning] ${VIEWER_EMPTY_DOCUMENT_HINT_TEXT}`]);
         expect(diagnosticMessages('error')).toEqual([]);
     });
@@ -243,7 +354,7 @@ describe('查看器:输入变化', () => {
     it('只有节点、没有检查配置:图照画,检查窗口为空', () => {
         const { input, tree } = mountPanel();
         setCheckConfig('[]');
-        setSource(input, JSON.stringify({ nodes: [{ key: 0, label: 'A' }] }));
+        setSourceAndRun(input, JSON.stringify({ nodes: [{ key: 0, label: 'A' }] }));
 
         expect(treeNodes(tree)).toHaveLength(1);
         expect(document.querySelectorAll('.check-row')).toHaveLength(0);
@@ -267,6 +378,7 @@ describe('查看器:输入变化', () => {
                 { a: 0, b: 3 }, { a: 1, b: 3 }, { a: 2, b: 3 },
             ],
         }));
+        clickRun();
         setCheckConfig('["checkEulerCircuit"]');
 
         expect(document.querySelectorAll('.check-row')).toHaveLength(1);
@@ -337,7 +449,7 @@ describe('查看器:列表交互', () => {
         // (内容键变化 -> 行重建),但"用户展开了"该跟着走
         const changed: { nodes: { attrs: Record<string, string> }[] } = JSON.parse(VIEWER_EXAMPLE_JSON);
         changed.nodes[3]!.attrs.color = 'red';
-        setSource(input, JSON.stringify(changed, null, 2));
+        setSourceAndRun(input, JSON.stringify(changed, null, 2));
         expect(details()).not.toBeNull();
         expect(details()?.open).toBe(true);
         expect(document.querySelectorAll('.check-row .is-fail')).toHaveLength(2);

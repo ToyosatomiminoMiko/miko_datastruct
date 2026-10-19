@@ -14,11 +14,15 @@
 
 import { registerSceneChecks } from '@/datastruct/scene/scene_check';
 import { GRAPH_CHECKS } from '@/datastruct/graph/graph_checks';
+import { HEAP_CHECKS } from '@/datastruct/heap/heap_checks';
+import { LIST_CHECKS } from '@/datastruct/list/list_checks';
 import { RBT_CHECKS } from '@/datastruct/rbt/rbt_checks';
 
 // 登记顺序 = 帮助窗口里的函数名顺序(检查本身按配置数组顺序运行)
 registerSceneChecks(RBT_CHECKS);
 registerSceneChecks(GRAPH_CHECKS);
+registerSceneChecks(HEAP_CHECKS);
+registerSceneChecks(LIST_CHECKS);
 
 export {
     registerSceneChecks,

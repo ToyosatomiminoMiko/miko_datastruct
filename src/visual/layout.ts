@@ -17,8 +17,9 @@
  * "把结构画出来给人看"的工具,确定性比"更漂亮"重要.环形布局对小型图足够可读,
  * 真正的图布局(分层 / 正交)等有第一个难看的例子再加.
  *
- * 坐标是**世界坐标**(单位 = 屏幕像素 @ 缩放 1),与视口多大无关;节点半径不在这里,
- * 内容实际占多大由渲染层量 `getBBox()` 后交给视口适应.
+ * 坐标是**世界坐标**(单位 = 屏幕像素 @ 缩放 1),与视口多大无关.连线端点也在这里
+ * 算好(收进节点圆边界 + 平行 / 反向分道),渲染层不再知道节点形状;内容实际占多大由
+ * 渲染层量 `getBBox()` 后交给视口适应.
  */
 
 import {
@@ -27,6 +28,9 @@ import {
     VISUAL_LAYOUT_GRAPH_MIN_RADIUS,
     VISUAL_LAYOUT_TREE_LAYER_STEP,
     VISUAL_LAYOUT_TREE_MIN_GAP,
+    VISUAL_LINK_LANE_GAP,
+    VISUAL_LINK_NODE_GAP,
+    VISUAL_NODE_RADIUS,
 } from '@/visual/config';
 
 // 输入 / 输出
@@ -50,10 +54,29 @@ export interface SceneLayoutNode {
     readonly y: number;
 }
 
-/** 一条要画的连线:两端都是节点 key(有向指针与无向边在视觉上都是线段) */
+/** 平面上的一个点(世界坐标) */
+export interface SceneLayoutPoint {
+    readonly x: number;
+    readonly y: number;
+}
+
+/**
+ * 一条要画的连线:两端节点 key + **已经算好的端点**.
+ *
+ * 端点在这里算而不在渲染层算,是因为它们依赖节点半径与"同一对节点有几条线":
+ * - 线要从节点圆边出发,箭头才不会被圆盖住;
+ * - 平行边 / 反向指针要横向分道,否则 `a->b` 与 `b->a` 会画成同一条线.
+ *
+ * `directed` 只描述方向语义(视觉层据此决定画不画箭头),不改变端点.
+ */
 export interface SceneLayoutLink {
     readonly from: number;
     readonly to: number;
+    readonly directed: boolean;
+    /** 起点(世界坐标,已收进节点圆边界并做过分道偏移) */
+    readonly start: SceneLayoutPoint;
+    /** 终点(世界坐标,同上) */
+    readonly end: SceneLayoutPoint;
 }
 
 /** 一次布局的结果:节点坐标 + 连线(顺序与输入一致) */
@@ -322,6 +345,80 @@ function layoutGraphComponent(component: Component, keyOfIndex: readonly number[
     return { nodes, ...boundsOf(nodes) };
 }
 
+// 连线端点
+
+/** 同一对无向节点之间的连线分组键(方向不重要:反向指针也落在同一对里) */
+function linkPairKey(a: number, b: number): string {
+    return a <= b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+/**
+ * 给每条连线算端点:收进节点圆边界 + 同对连线横向分道.
+ *
+ * 分道规则:同一无向节点对之间有 n 条线时,按输入顺序取
+ * `(位置 - (n-1)/2) * VISUAL_LINK_LANE_GAP` 的横向偏移,整组以连线为中心左右对称.
+ * 两个效果:
+ * - 平行边(柯尼斯堡的 K-N ×2 / K-S ×2)不再重叠成一条;
+ * - 反向指针 `a->b` + `b->a` 分到两侧,两枚箭头都看得见.
+ *
+ * 法向取"无向对"的固定方向(按 key 大小定正负),而不是每条线自己的方向:否则反向
+ * 指针的局部法向会翻回来,两条线又叠到一起.
+ */
+function buildLinks(
+    rawLinks: readonly { readonly from: number; readonly to: number; readonly directed: boolean }[],
+    pointOf: (key: number) => SceneLayoutPoint,
+): SceneLayoutLink[] {
+    const laneOffsets = new Array<number>(rawLinks.length).fill(0);
+    const groups = new Map<string, number[]>();
+    rawLinks.forEach((link, index) => {
+        const key = linkPairKey(link.from, link.to);
+        const indexes = groups.get(key);
+        if (indexes === undefined) groups.set(key, [index]);
+        else indexes.push(index);
+    });
+    for (const indexes of groups.values()) {
+        if (indexes.length < 2) continue;
+        const center = (indexes.length - 1) / 2;
+        indexes.forEach((linkIndex, position) => {
+            laneOffsets[linkIndex] = (position - center) * VISUAL_LINK_LANE_GAP;
+        });
+    }
+
+    return rawLinks.map((link, index) => {
+        const from = pointOf(link.from);
+        const to = pointOf(link.to);
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const length = Math.hypot(dx, dy);
+        const laneOffset = laneOffsets[index] ?? 0;
+        if (length < 1e-9) {
+            // 自环:没有"从圆心指向圆心"的方向可收,交给渲染层时是零长度线段
+            return { ...link, start: from, end: to };
+        }
+
+        const ux = dx / length;
+        const uy = dy / length;
+        // 固定法向:见上面的说明,反向指针不能再翻一次
+        const canonical = link.from <= link.to ? 1 : -1;
+        const offsetX = -uy * canonical * laneOffset;
+        const offsetY = ux * canonical * laneOffset;
+        // 收进半径 + 空隙;线太短时最多收到一半,避免端点交叉
+        const shorten = Math.max(0, Math.min(VISUAL_NODE_RADIUS + VISUAL_LINK_NODE_GAP, length / 2 - 0.5));
+
+        return {
+            ...link,
+            start: {
+                x: from.x + ux * shorten + offsetX,
+                y: from.y + uy * shorten + offsetY,
+            },
+            end: {
+                x: to.x - ux * shorten + offsetX,
+                y: to.y - uy * shorten + offsetY,
+            },
+        };
+    });
+}
+
 // 出口
 
 /**
@@ -374,9 +471,14 @@ export function layoutScene(input: SceneLayoutInput): SceneLayout {
         if (node === undefined) throw new Error(`布局没有给节点 ${key} 算坐标`);
         return node;
     });
-    const links: SceneLayoutLink[] = [
-        ...input.pointers.map((pointer) => ({ from: pointer.from, to: pointer.to })),
-        ...input.edges.map((edge) => ({ from: edge.a, to: edge.b })),
+    const pointOf = (key: number): SceneLayoutPoint => {
+        const node = placed.get(key);
+        if (node === undefined) throw new Error(`布局没有给节点 ${key} 算坐标`);
+        return node;
+    };
+    const rawLinks = [
+        ...input.pointers.map((pointer) => ({ from: pointer.from, to: pointer.to, directed: true })),
+        ...input.edges.map((edge) => ({ from: edge.a, to: edge.b, directed: false })),
     ];
-    return { nodes, links };
+    return { nodes, links: buildLinks(rawLinks, pointOf) };
 }

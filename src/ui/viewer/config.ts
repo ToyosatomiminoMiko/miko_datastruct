@@ -5,10 +5,10 @@
 // 红黑树只作为"一个示例结构"出现(默认 JSON + 节点 red / black 变体 + 注册在 web 侧的
 // rbt 检查集),查看器的通用部分不认识红黑树.
 
-import type { DockActionSpec, WindowConfigEntry } from 'miko_ui';
+import type { AdoptedNodeSpec, DockActionSpec, WindowConfigEntry } from 'miko_ui';
 
-import { RBT_CHECKS } from '@/datastruct/rbt/rbt_checks';
 import { dumpCheckConfig } from '@/ui/viewer/check_config';
+import { DEFAULT_VIEWER_EXAMPLE } from '@/ui/viewer/examples';
 
 // DOM 契约(id 由 src/ui/viewer/viewer.css 命中)
 
@@ -21,6 +21,12 @@ export const VIEWER_DOM = {
     viewportId: 'viewerViewport',
     /** 绘制面 `<svg>`:世界坐标的 1:1 像素面,没有 viewBox */
     treeId: 'viewerTree',
+    /** JSON 窗口标题栏里的「示例」按钮 */
+    exampleButtonId: 'viewerExampleButton',
+    /** JSON 窗口标题栏里的 RUN 按钮 */
+    runButtonId: 'viewerRunButton',
+    /** 「示例」按钮的菜单面板(窗口标题栏 overlays 槽位) */
+    exampleMenuId: 'viewerExampleMenu',
     /** JSON 编辑器宿主:库的 CodeEditor 外框长在它里面 */
     editorId: 'viewerEditor',
     /** JSON 编辑器窗口的正文根(滚动归它;这一扇里只有编辑器) */
@@ -177,6 +183,45 @@ export const VIEWER_DESKTOP_WINDOWS = [
     },
 ] as const satisfies readonly WindowConfigEntry[];
 
+// JSON 窗口标题栏:示例菜单 + RUN
+//
+// 与 graphcalc 的「源码」窗口同一条做法:标题栏上的应用节点由查看器建好,再按
+// `VIEWER_ADOPTED_NODES` 交给库的 `windowSlotsProvider` 搬进对应槽位.库不认识
+// "示例" / "RUN" 的语义,只负责把它们放进 `.window-actions` / 标题栏浮层.
+
+/** 标题栏节点的名字联合:配置表与节点表由它锁死,少建一个节点即编译不过 */
+export type ViewerChromeNodeId = 'exampleButton' | 'runButton' | 'exampleMenu';
+
+/** 标题栏按钮的可见文案 */
+export const VIEWER_CHROME_LABELS = {
+    example: '示例',
+    run: 'RUN',
+} as const;
+
+/** 「示例」按钮的悬停说明 */
+export const VIEWER_EXAMPLE_BUTTON_TITLE = '载入一份内置结构(同时换掉检查配置)';
+
+/** RUN 按钮的悬停说明 */
+export const VIEWER_RUN_BUTTON_TITLE = '解析 JSON 编辑器里的内容并重绘 (Ctrl/Cmd+Enter)';
+
+/** RUN 按钮的读屏名(文案只有 3 个字母,读屏读出来不知道是什么) */
+export const VIEWER_RUN_BUTTON_LABEL = '运行 JSON';
+
+/** 示例菜单的无障碍名 */
+export const VIEWER_EXAMPLE_MENU_LABEL = '内置示例结构';
+
+/**
+ * 采用关系:两个按钮进 JSON 窗口的 `.window-actions`,菜单面板进标题栏浮层.
+ *
+ * 浮层必须是 header 的直接子节点(库的 `.window-header` 是它的定位锚点),
+ * 所以走 overlays 槽位,而不是当作正文里的一层.
+ */
+export const VIEWER_ADOPTED_NODES: readonly AdoptedNodeSpec<ViewerChromeNodeId>[] = [
+    { node: 'exampleButton', window: VIEWER_WINDOW_JSON, slot: 'actions' },
+    { node: 'runButton', window: VIEWER_WINDOW_JSON, slot: 'actions' },
+    { node: 'exampleMenu', window: VIEWER_WINDOW_JSON, slot: 'overlays' },
+];
+
 // 任务栏动作:回正视图
 
 /** 回正按钮文案 */
@@ -240,14 +285,6 @@ export const VIEWER_CHECK_CONFIG_ERROR_PREFIX = '检查配置: ';
 
 /** 检查配置编辑器的读屏标签 */
 export const VIEWER_CHECK_SETUP_EDITOR_LABEL = '检查函数名(JSON 数组)';
-
-/**
- * 默认示例 JSON 是红黑树,所以检查配置也预置 rbt 的五个检查.
- *
- * 换 JSON 时由用户把这份数组改成新结构要跑的检查;这里不按结构名自动切换 --
- * checks 是显式配置,不是从数据里猜出来的.可用函数名见帮助窗口.
- */
-export const VIEWER_EXAMPLE_CHECK_CONFIG = dumpCheckConfig(RBT_CHECKS.map((check) => check.id));
 
 /** 行末「定位」按钮的文案与可访问名前缀 */
 export const VIEWER_LOCATE_BUTTON_TEXT = '定位';
@@ -319,36 +356,17 @@ export const VIEWER_TOKEN_NUMBER_CLASS = 'viewer-token--number';
 export const VIEWER_TOKEN_LITERAL_CLASS = 'viewer-token--literal';
 export const VIEWER_TOKEN_PUNCT_CLASS = 'viewer-token--punct';
 
-// 默认 JSON:一棵故意写错的 5 节点红黑树
+// 默认示例:清单第一条(红黑树)
 //
-// 选一棵**有一处 FAIL** 的树而不是全 PASS:检查列表要同时展示 PASS / FAIL 两种行,
-// FAIL 行还要展示折叠详情与「定位」.这棵树的错在黑高:10B 的左子树比右子树多一层黑.
-// 树本身仍然画得出来.
+// 示例数据本体在 ui/viewer/examples.ts:每份示例 = JSON + 这套结构建议的检查 id.
+// 首屏默认选红黑树,并且故意留一处 FAIL(黑高),让检查窗口同时出现 PASS / FAIL、
+// 折叠详情与「定位」两种行;换 JSON 不再自动运行,点 RUN(或选中示例)才重绘.
 //
-// 检查不写在 JSON 里:默认的检查配置(VIEWER_EXAMPLE_CHECK_CONFIG)预置了 rbt 的
-// 五条性质检查;字段口径与 python/README.md 的 Scene 输出一致(nodes / pointers / edges).
+// 字段口径与 python/README.md 的 Scene 输出一致(nodes / pointers / edges).
 
-export const VIEWER_EXAMPLE_JSON = `{
-  "nodes": [
-    { "key": 0, "label": "10",
-      "attrs": { "color": "black" } },
-    { "key": 1, "label": "5",
-      "attrs": { "color": "red" } },
-    { "key": 2, "label": "1",
-      "attrs": { "color": "black" } },
-    { "key": 3, "label": "8",
-      "attrs": { "color": "black" } },
-    { "key": 4, "label": "15",
-      "attrs": { "color": "red" } }
-  ],
-  "pointers": [
-    { "from": 0, "to": 1 },
-    { "from": 1, "to": 2 },
-    { "from": 1, "to": 3 },
-    { "from": 0, "to": 4 }
-  ],
-  "edges": []
-}`;
+export const VIEWER_EXAMPLE_JSON = DEFAULT_VIEWER_EXAMPLE.json;
+
+export const VIEWER_EXAMPLE_CHECK_CONFIG = dumpCheckConfig(DEFAULT_VIEWER_EXAMPLE.checkIds);
 
 // 帮助窗口:静态说明
 //
@@ -378,11 +396,28 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
         ],
     },
     {
+        title: '怎么运行',
+        lines: [
+            '编辑 JSON 不会自动重绘:点窗口标题栏的 RUN,或在 JSON 编辑器里按 Ctrl/Cmd+Enter。',
+            '标题栏的「示例」按钮载入一份内置结构(JSON + 配套检查配置);选中即运行。',
+            '检查配置窗口仍即时生效:改完函数名数组,检查窗口按最后一次 RUN 的结构立刻重算。',
+        ],
+    },
+    {
+        title: '内置示例',
+        lines: [
+            '树: 红黑树(含一处错误) / 二叉搜索树 / 最小堆。',
+            '线性结构: 单链表(升序)。',
+            '图: 柯尼斯堡七桥(4 块陆地 + 7 座无向桥,不存在欧拉回路)。',
+            '示例会覆盖 JSON 与检查配置两个编辑器的内容,以最后一次选择为准。',
+        ],
+    },
+    {
         title: '性质检查',
         lines: [
             '检查器按函数名登记在查看器里,不写进 JSON;「检查配置」窗口决定这次跑哪些。',
             '检查配置是一段 JSON 数组,元素是检查函数名;默认示例预置了 rbt 的五个检查。',
-            '可用函数名: rbt 的 checkColors / checkRootBlack / checkRedChildrenBlack / checkBlackHeight / checkBstOrder;graph 的 checkEulerCircuit。',
+            '可用函数名: rbt 的 checkColors / checkRootBlack / checkRedChildrenBlack / checkBlackHeight / checkBstOrder;graph 的 checkEulerCircuit;heap 的 checkHeapOrder;list 的 checkLinkedList / checkListSorted。',
             '函数名没注册:诊断窗口警告,已注册的检查照跑;配置 JSON 语法错:诊断窗口报错,检查窗口为空。',
         ],
     },

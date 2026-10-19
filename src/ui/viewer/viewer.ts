@@ -6,16 +6,20 @@
  * ui/viewer/viewer_items,窗口标记在 ui/viewer/viewer_views.装配顺序:先建内容,再
  * mountDesktop 建桌面三层与窗口外壳.
  *
- * 每轮输入(或首屏示例)的流程:
+ * 输入与运行是分开的两步(与 graphcalc 的「源码 / RUN」同一条口径):
  *
  * ```text
- * textarea.value
- *   -> parseSceneDocument  (语法 / 结构校验,失败则只显示一行错误)
- *   -> runSceneChecks      (按「检查配置」窗口里的检查函数名列表运行)
- *   -> layoutScene         (树形 / 环形,分量并排)
- *   -> 文档 + 布局 -> VisualScene (节点变体来自 attrs)
- *   -> renderScene         (整批重建世界层,量包围盒给视口)
- *   -> RowList.sync        (实体行 + 检查行,按内容键增量复用)
+ * 打字 / 粘贴 JSON            -> 不重绘(只改编辑器里的文本)
+ * 点 RUN 或 Ctrl/Cmd+Enter    -> run()
+ *                                   -> parseSceneDocument  (语法 / 结构校验,失败则只显示一行错误)
+ *                                   -> currentDocument 记住这一轮结构
+ *                                   -> applyCheckConfig  (按「检查配置」窗口里的函数名列表跑检查)
+ *                                        -> layoutScene         (树形 / 环形,分量并排)
+ *                                        -> 文档 + 布局 -> VisualScene (节点变体来自 attrs)
+ *                                        -> renderScene         (整批重建世界层,量包围盒给视口)
+ *                                        -> RowList.sync        (实体行 + 检查行,按内容键增量复用)
+ * 改「检查配置」               -> applyCheckConfig  (只重算检查,结构仍是最后一次 RUN 的那份)
+ * 选中「示例」菜单里的一项     -> 同时写两个编辑器,再 run()
  * ```
  *
  * 检查结论**不是输入**:JSON 只描述结构,要跑哪些检查由「检查配置」窗口单独给;
@@ -37,6 +41,7 @@ import {
     VIEWER_ERROR_UI_PREFIX,
     VIEWER_EXAMPLE_CHECK_CONFIG,
     VIEWER_EXAMPLE_JSON,
+    VIEWER_EXAMPLE_MENU_LABEL,
     VIEWER_FIT_ACTION_ID,
 } from '@/ui/viewer/config';
 import { parseSceneDocument } from '@/datastruct/scene/scene_document_parse';
@@ -47,7 +52,12 @@ import { layoutScene, type SceneLayout } from '@/visual/layout';
 import type { VisualScene } from '@/visual/scene';
 import { clearScene, renderScene } from '@/visual/render';
 import { mountPlaneViewport, type PlaneViewportHandle } from '@/visual/viewport';
-import { parseCheckConfig } from '@/ui/viewer/check_config';
+import { dumpCheckConfig, parseCheckConfig } from '@/ui/viewer/check_config';
+import {
+    DEFAULT_VIEWER_EXAMPLE,
+    findViewerExample,
+    viewerExampleMenuGroups,
+} from '@/ui/viewer/examples';
 import {
     formatCheckConfigError,
     formatCheckSummary,
@@ -60,19 +70,22 @@ import { createViewerViews } from '@/ui/viewer/viewer_views';
 import {
     DEFAULT_DESKTOP_CONFIG,
     RowList,
+    createMenu,
     mountDesktop,
     seedTextareaSource,
     type CodeEditorHandle,
     type DesktopHandle,
+    type MenuHandle,
     type MessageLevel,
 } from 'miko_ui';
 
-/** 已挂载的一次桌面(按宿主记):dispose 才会摘掉编辑器与视口挂在 window / 元素上的监听 */
+/** 已挂载的一次桌面(按宿主记):dispose 才会摘掉编辑器 / 视口 / 示例菜单挂上的监听 */
 interface MountedViewer {
     readonly desktop: DesktopHandle;
     readonly editor: CodeEditorHandle;
     readonly checkEditor: CodeEditorHandle;
     readonly viewport: PlaneViewportHandle;
+    readonly menu: MenuHandle<string>;
 }
 
 const mounted = new WeakMap<HTMLElement, MountedViewer>();
@@ -105,10 +118,11 @@ function buildVisualScene(document: SceneDocument, layout: SceneLayout): VisualS
                 ? { at, label: node.label }
                 : { at, label: node.label, variant };
         }),
-        // 有向指针与无向边在视觉层都是"两点之间的线段"(箭头 / 边的区分以后再加)
-        pointers: layout.links.map((link) => ({
-            from: pointOf(link.from),
-            to: pointOf(link.to),
+        // 端点由布局算好(收进圆边界 + 同对连线分道);这里只把 key 换成坐标并保留方向语义
+        links: layout.links.map((link) => ({
+            from: link.start,
+            to: link.end,
+            directed: link.directed,
         })),
     };
 }
@@ -117,7 +131,8 @@ function buildVisualScene(document: SceneDocument, layout: SceneLayout): VisualS
  * 把 JSON 查看器挂到宿主(页面那唯一一颗手写宿主 `#app`)上.
  *
  * 重复挂载同一块宿主时先拆上一份:节点可以靠 replaceChildren 换掉,但编辑器的
- * ResizeObserver / input 监听与视口的 window 监听不会随节点离场消失.
+ * ResizeObserver / input 监听、视口的 window 监听与示例菜单的 Popover 监听不会随节点
+ * 离场消失.
  */
 export function mountViewer(host: HTMLElement): void {
     const previous = mounted.get(host);
@@ -125,6 +140,7 @@ export function mountViewer(host: HTMLElement): void {
     previous?.editor.dispose();
     previous?.checkEditor.dispose();
     previous?.viewport.dispose();
+    previous?.menu.dispose();
     mounted.delete(host);
 
     host.replaceChildren();
@@ -147,6 +163,7 @@ export function mountViewer(host: HTMLElement): void {
         content: views.content,
     });
 
+    const chrome = views.chrome;
     const editor = views.editor;
     const input = editor.textarea;
     const checkEditor = views.checkSetupEditor;
@@ -154,7 +171,18 @@ export function mountViewer(host: HTMLElement): void {
     const worldEl = views.world;
     // 最近一次布局里"节点 key -> 平面坐标":「定位」按它移视口
     const positions = new Map<number, { x: number; y: number }>();
-    mounted.set(host, { desktop, editor, checkEditor, viewport });
+    // 「示例」按钮的浮层菜单:数据是 examples.ts 的分组,选中回调在下面接
+    const menu = createMenu<string>({
+        groups: viewerExampleMenuGroups(),
+        ariaLabel: VIEWER_EXAMPLE_MENU_LABEL,
+        trigger: chrome.exampleButton,
+        panel: chrome.exampleMenu,
+    });
+    menu.bind(host);
+    mounted.set(host, { desktop, editor, checkEditor, viewport, menu });
+
+    /** 最后一次 RUN 解析通过的结构;没跑过 / 跑失败时为 null(检查配置不重算) */
+    let currentDocument: SceneDocument | null = null;
 
     const entityList = new RowList<SceneDocumentNode, EntityItem>(views.entityList);
     const checkList = new RowList<CheckRowItem, CheckItem>(views.checkList);
@@ -226,36 +254,43 @@ export function mountViewer(host: HTMLElement): void {
         });
     };
 
-    /** 一轮完整重绘:解析 -> 布局 -> 画布 -> 列表 */
-    const render = (): void => {
-        const source = input.value.trim();
-
-        if (source === '') {
-            clearContent();
-            showDiagnostics('warning', VIEWER_EMPTY_HINT_TEXT);
-            return;
-        }
-
-        let document: SceneDocument;
+    /** 画布 + 列表:吃一份已经解析好的文档与本轮检查结论(解析归 run) */
+    const paint = (document: SceneDocument, checks: readonly SceneCheckResult[]): void => {
+        /*
+          布局 / 落笔 / 列表是"解析通过之后"的事.解析器已经保证了引用与 key,这一步
+          理论上不该抛;真抛了(例如将来布局加上节点数上限)也只显示一行错误,不把
+          异常丢进事件处理里炸掉整个页面.
+        */
         try {
-            document = parseSceneDocument(source);
+            const layout = layoutScene(document);
+            // 先更新定位表,再建行:行里的「定位」回调读的是当前这一轮的位置
+            positions.clear();
+            for (const node of layout.nodes) positions.set(node.key, { x: node.x, y: node.y });
+
+            // 落笔后把量到的实际包围盒报给视口;量不到(测试环境)就不动视角
+            const bounds = renderScene(worldEl, buildVisualScene(document, layout));
+            if (bounds !== null) viewport.contentChanged(bounds);
+
+            renderEntities(document);
+            renderChecks(checks);
+            updateListMeta(document, checks);
         } catch (error) {
             clearContent();
-            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}${formatDocumentError(error)}`);
-            return;
+            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}渲染失败: ${formatDocumentError(error)}`);
         }
+    };
 
-        // 没有节点:画布与检查都没有对象可看,提示一句就结束(不跑检查,避免空的 PASS 行)
-        if (document.nodes.length === 0) {
-            clearContent();
-            showDiagnostics('warning', VIEWER_EMPTY_DOCUMENT_HINT_TEXT);
-            return;
-        }
+    /**
+     * 按「检查配置」窗口对最后一次 RUN 的结构重算检查并重绘.
+     *
+     * 配置本身错 / 有未注册的名字都不影响画图:配置错 -> 这次不跑检查并报错;
+     * 名字错 -> 已注册的照跑并警告.当前没有可检查的结构时什么都不做(诊断里那行
+     * 解析错误 / 空输入提示保持原样).
+     */
+    const applyCheckConfig = (): void => {
+        const document = currentDocument;
+        if (document === null) return;
 
-        /*
-          检查配置是独立的一段 JSON 数组(元素 = 检查函数名).配置本身错 / 有未注册的
-          名字都不影响画图:配置错 -> 这次不跑检查并报错;名字错 -> 已注册的照跑并警告.
-        */
         let checkIds: readonly string[] = [];
         let checkConfigError: unknown = null;
         try {
@@ -272,46 +307,86 @@ export function mountViewer(host: HTMLElement): void {
             showDiagnostics('warning', formatUnknownChecks(checkRun.unknownIds));
         }
 
-        /*
-          布局 / 落笔 / 列表是"解析通过之后"的事.解析器已经保证了引用与 key,这一步
-          理论上不该抛;真抛了(例如将来布局加上节点数上限)也只显示一行错误,不把
-          异常丢进 input 事件里炸掉整个页面.
-        */
-        try {
-            const layout = layoutScene(document);
-            // 先更新定位表,再建行:行里的「定位」回调读的是当前这一轮的位置
-            positions.clear();
-            for (const node of layout.nodes) positions.set(node.key, { x: node.x, y: node.y });
-
-            // 落笔后把量到的实际包围盒报给视口;量不到(测试环境)就不动视角
-            const bounds = renderScene(worldEl, buildVisualScene(document, layout));
-            if (bounds !== null) viewport.contentChanged(bounds);
-
-            renderEntities(document);
-            renderChecks(checkRun.checks);
-            updateListMeta(document, checkRun.checks);
-        } catch (error) {
-            clearContent();
-            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}渲染失败: ${formatDocumentError(error)}`);
-        }
+        paint(document, checkRun.checks);
     };
 
-    input.addEventListener('input', render);
-    // 检查配置窗口与 JSON 窗口一样:输入即重算,不需要"应用"按钮
-    checkInput.addEventListener('input', render);
+    /** RUN:解析 JSON 编辑器里的内容,成为"当前结构",再按检查配置跑检查并重绘 */
+    const run = (): void => {
+        const source = input.value.trim();
+
+        if (source === '') {
+            currentDocument = null;
+            clearContent();
+            showDiagnostics('warning', VIEWER_EMPTY_HINT_TEXT);
+            return;
+        }
+
+        let document: SceneDocument;
+        try {
+            document = parseSceneDocument(source);
+        } catch (error) {
+            currentDocument = null;
+            clearContent();
+            showDiagnostics('error', `${VIEWER_ERROR_UI_PREFIX}${formatDocumentError(error)}`);
+            return;
+        }
+
+        // 没有节点:画布与检查都没有对象可看,提示一句就结束(不跑检查,避免空的 PASS 行)
+        if (document.nodes.length === 0) {
+            currentDocument = null;
+            clearContent();
+            showDiagnostics('warning', VIEWER_EMPTY_DOCUMENT_HINT_TEXT);
+            return;
+        }
+
+        currentDocument = document;
+        applyCheckConfig();
+    };
+
+    /**
+     * 载入一份内置示例:JSON 与检查配置一起换,然后运行.
+     *
+     * 选中示例是**明确的操作**,所以直接跑;这与"改 JSON 不自动跑"不冲突 -- 后者防的是
+     * 打字过程中每敲一个字符就重解析重布局.
+     */
+    const loadExample = (id: string): void => {
+        const example = findViewerExample(id);
+        if (example === undefined) return;
+
+        seedTextareaSource(input, example.json);
+        editor.refresh();
+        seedTextareaSource(checkInput, dumpCheckConfig(example.checkIds));
+        checkEditor.refresh();
+        menu.setActive(id);
+        run();
+    };
+
+    // RUN:解析 + 检查 + 重绘;JSON 编辑本身不触发任何重算
+    chrome.runButton.addEventListener('click', run);
+    // 与 graphcalc 同一条快捷键:编辑器里单独回车是换行,Ctrl/Cmd+Enter 才是运行
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            run();
+        }
+    });
+    // 检查配置窗口仍即时生效:只重算检查,结构沿用最后一次 RUN 的结果
+    checkInput.addEventListener('input', applyCheckConfig);
+    menu.onSelect(loadExample);
 
     /*
-      打开页面时自动加载默认示例.
+      打开页面时自动加载默认示例并跑一次.
 
       走库的 `seedTextareaSource`(不抢焦点,也没有撤销历史要保);它不派发 input
-      事件,所以装饰层与画布都得自己叫一次:先 refresh(重算行号 + 重绘高亮),
-      再 render.
+      事件,所以装饰层与画布都得自己叫一次:先 refresh(重算行号 + 重绘高亮),再 run.
 
-      检查配置也预置一份与默认 JSON 匹配的 rbt 检查;换 JSON 时用户自己改这份数组.
+      检查配置也预置一份与默认 JSON 匹配的 rbt 检查;换 JSON 时用户自己改这份数组,
+      或者用「示例」菜单整组换.
     */
     seedTextareaSource(input, VIEWER_EXAMPLE_JSON);
     editor.refresh();
     seedTextareaSource(checkInput, VIEWER_EXAMPLE_CHECK_CONFIG);
     checkEditor.refresh();
-    render();
+    menu.setActive(DEFAULT_VIEWER_EXAMPLE.id);
+    run();
 }

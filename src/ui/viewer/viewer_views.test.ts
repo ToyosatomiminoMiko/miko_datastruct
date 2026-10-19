@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     VIEWER_CHECK_SETUP_EDITOR_LABEL,
+    VIEWER_CHROME_LABELS,
     VIEWER_DESKTOP_WINDOWS,
     VIEWER_DOM,
     VIEWER_EDITOR_PLACEHOLDER,
@@ -68,6 +69,35 @@ describe('JSON 查看器:视图标记(挂载之前)', () => {
         expect(diagnosticsPanel.id).toBe(VIEWER_DOM.diagnosticsPanelId);
         expect(helpPanel.id).toBe(VIEWER_DOM.helpPanelId);
         expect(views.content('nope')).toEqual({});
+    });
+
+    it('JSON 窗口标题栏:示例 / RUN 两个动作按钮,菜单面板在浮层槽位', () => {
+        const { views } = buildViews();
+        const content = views.content(VIEWER_WINDOW_JSON);
+
+        // 两个按钮进 actions(顺序 = 配置表顺序),菜单面板进 overlays
+        expect(content.slots?.actions).toEqual([
+            views.chrome.exampleButton,
+            views.chrome.runButton,
+        ]);
+        expect(content.slots?.overlays).toEqual([views.chrome.exampleMenu]);
+        expect(views.chrome.exampleButton.id).toBe(VIEWER_DOM.exampleButtonId);
+        expect(views.chrome.exampleButton.textContent).toBe(VIEWER_CHROME_LABELS.example);
+        expect(views.chrome.exampleButton.getAttribute('aria-haspopup')).toBe('true');
+        expect(views.chrome.runButton.id).toBe(VIEWER_DOM.runButtonId);
+        expect(views.chrome.runButton.textContent).toBe(VIEWER_CHROME_LABELS.run);
+        expect(views.chrome.runButton.getAttribute('type')).toBe('button');
+        expect(views.chrome.exampleMenu.id).toBe(VIEWER_DOM.exampleMenuId);
+        // 其余窗口没有标题栏节点
+        for (const id of [
+            VIEWER_WINDOW_ENTITY,
+            VIEWER_WINDOW_CHECK_SETUP,
+            VIEWER_WINDOW_CHECK,
+            VIEWER_WINDOW_DIAGNOSTICS,
+            VIEWER_WINDOW_HELP,
+        ]) {
+            expect(views.content(id).slots).toEqual({});
+        }
     });
 
     it('JSON 编辑器是库的 CodeEditor:宿主里是外框 + textarea + 行号 + 高亮层', () => {

@@ -1,7 +1,7 @@
 @import '@/visual/tokens.css';
 
 /*
- * 视觉层的观感:平面视口(裁切 / 光标 / 手势)、1:1 绘制面、场景里的节点与指针.
+ * 视觉层的观感:平面视口(裁切 / 光标 / 手势)、1:1 绘制面、场景里的节点与连线.
  *
  * 这一层的选择器只命中 `visual-*` 类名,不认识任何一种数据结构:
  * - 节点的基础形状 / 值文字 / 进入动画在这里;
@@ -51,15 +51,23 @@
  * src/visual/viewport.ts 写在属性上,场景里各元素的观感各归各的类.
  */
 
-/* 指针:描边色与线宽(当前画法是无箭头线段) */
-.visual-surface .visual-pointer {
+/*
+ * 连线:描边色与线宽.有向 / 无向两种变体共用这一份,方向差异由"有没有箭头"表达,
+ * 不给它们不同的线宽或虚线 -- 那会让"边的种类"看起来像"状态".
+ */
+.visual-surface .visual-link {
     stroke: var(--visual-pointer-color);
     stroke-width: var(--visual-pointer-width);
 }
 
-/* 节点形状:只有半径与填充,没有描边(深色平面上那一圈同色描边只是视觉噪声) */
+/* 有向指针的箭头:与线同色;用填充三角形,不描边(描边会让细箭头糊成一团) */
+.visual-surface .visual-pointer-arrow {
+    fill: var(--visual-pointer-color);
+    stroke: none;
+}
+
+/* 节点形状:只有填充,没有描边(深色平面上那一圈同色描边只是视觉噪声);半径由渲染层写 r 属性 */
 .visual-surface .visual-node__shape {
-    r: var(--visual-node-radius);
     fill: var(--visual-node-fill);
 }
 
