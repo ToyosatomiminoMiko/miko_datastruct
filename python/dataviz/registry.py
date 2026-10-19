@@ -67,8 +67,7 @@ class Registry:
         *,
         name: str | None = None,
         as_: str = "node",
-        label: Callable[[Any], str] | None = None,
-        variant: Callable[[Any], str] | None = None,
+        label: Callable[[Any], str] | str | None = None,
         term: Callable[[Any, list[str]], str] | None = None,
         checks: Iterable[Callable[[Any], Any]] = (),
         subclasses: bool = False,
@@ -86,7 +85,6 @@ class Registry:
                 name=name,
                 as_=as_,
                 label=label,
-                variant=variant,
                 term_hook=term,
                 checks=checks,
                 subclasses=subclasses,
@@ -104,8 +102,7 @@ class Registry:
         *,
         name: str | None,
         as_: str,
-        label: Callable[[Any], str] | None,
-        variant: Callable[[Any], str] | None,
+        label: Callable[[Any], str] | str | None,
         term_hook: Callable[[Any, list[str]], str] | None,
         checks: Iterable[Callable[[Any], Any]],
         subclasses: bool,
@@ -144,7 +141,6 @@ class Registry:
             name=term_name,
             as_=as_,
             label=label,
-            variant=variant,
             term_hook=term_hook,
             checks=check_tuple,
             subclasses=subclasses,
@@ -217,6 +213,8 @@ class Registry:
         lines = [f"Registry {self.name!r}:{len(self._order)} 种结构"]
         for spec in self._order:
             extras = []
+            if isinstance(spec.label, str):
+                extras.append(f"label={spec.label}")
             if spec.subclasses:
                 extras.append("subclasses=True")
             suffix = ("  " + " ".join(extras)) if extras else ""
@@ -322,6 +320,8 @@ class Registry:
             else:
                 role = self._role_from_default(spec, field_name, default)
             fields.append(FieldSpec(name=field_name, role=role, default=default, annotation=annotation))
+
+        _validate_label_field(spec, fields)
 
         pointers = [spec_field for spec_field in fields if isinstance(spec_field.role, Pointer)]
         if spec.as_ == "edge":
@@ -505,6 +505,26 @@ def _validate_atom(text: str, kind: str) -> None:
         raise RegistrationError("bad-name", f"{kind} {text!r} 不合法:不能含空白 / 括号 / 逗号 / 引号")
     if text == "nil":
         raise RegistrationError("bad-name", f"{kind} 不能叫 nil(Term 里的保留字)")
+
+
+def _validate_label_field(spec: StructureSpec, fields: list[FieldSpec]) -> None:
+    """`label` 写成字段名时,该字段必须存在且是属性.
+
+    label 是展示文字,不能指向指针(指针是关系,不是值);写成可调用对象则不做字段校验.
+    """
+    if not isinstance(spec.label, str):
+        return
+    target = next((spec_field for spec_field in fields if spec_field.name == spec.label), None)
+    if target is None:
+        raise RegistrationError(
+            "bad-label",
+            f"{spec.fqn}.label = {spec.label!r},但没有这个字段",
+        )
+    if not isinstance(target.role, Attr):
+        raise RegistrationError(
+            "bad-label",
+            f"{spec.fqn}.label = {spec.label!r} 指向的是 {type(target.role).__name__},label 只能是属性字段",
+        )
 
 
 def _fingerprint(fields: Iterable[FieldSpec]) -> str:

@@ -4,9 +4,9 @@
 
 - 不继承基类、不用元类,`@registry.structure` 原样返回类;
 - 字段顺序 = 类体里的定义顺序 = Term 参数顺序;
-- `key` / `value` 都是标量,自动推成**属性**;`key` 会优先被 Scene 拿来当节点标签.
+- `key` / `value` 都是标量,自动推成**属性**;`key` 优先当节点标签,`value` 进 attrs.
 
-Term: `node(A, 5)`;Scene: 一个圆,标签 `A`.
+Term: `node(A, 5)`;Scene: 一个圆,label `A`,attrs `{"value": 5}`.
 """
 
 from __future__ import annotations

@@ -2,18 +2,22 @@
 
 三种图元,方向语义严格区分:
 
-- **node**:一个圆节点(整数 key / 标签 / 可选变体);
+- **node**:一个圆节点(整数 key / 展示 label / 结构特有 attrs);
 - **pointer**:一条**有向**指针,`from -> to`,两端都是节点 key;
-- **edge**:一条**无向**边,来自 `as_="edge"` 的结构(恰好两个端点,可选标签).
+- **edge**:一条**无向**边,来自 `as_="edge"` 的结构(两端节点 key / 可选 label / attrs).
 
 没有 block / 数组:数组类结构以后作为单独种类再加.
 
-JSON 形状(值为 None 的键省略):
+JSON 形状(值为 None 的键省略,空 attrs 也省略):
 
     {
-      "nodes":    [{"key": 0, "label": "K"}],
+      "nodes": [
+        {"key": 0, "label": "13", "attrs": {"color": "black"}}
+      ],
       "pointers": [{"from": 0, "to": 1}],
-      "edges":    [{"a": 0, "b": 1}]
+      "edges": [
+        {"a": 0, "b": 1, "label": "name=桥1", "attrs": {"name": "桥1"}}
+      ]
     }
 
 key 规则(稳定、可快照):
@@ -29,28 +33,33 @@ key 规则(稳定、可快照):
 - 没有前缀之后,`key` 也不必再叫 `id`:它只是本场景内的局部编号,与数据对象自己的
   `key` / `id` 属性不是一回事.
 
+**attrs 是数据结构差异化的唯一入口**:通用槽(节点的 key / label、指针的 from / to、
+边的 a / b / label)之外的所有 `Attr` 字段都进 attrs,键就是字段名,值用原生 JSON 标量
+(Enum 取 `.value`).没有 `variant`:渲染端要区分红 / 黑,就自己读 `attrs.color` 并按
+各结构的样式表处理.
+
+- 节点:`attrs` = 除 label 来源字段之外的其余属性.`label` 来源由 `label="字段名"`
+  指定;没指定时按 `key` -> `id` -> `value` 找;再找不到就用属性拼 `名字=值`.
+- 边:`attrs` = 除两个端点指针之外的其余属性.边 label 是展示文字,不占用 attrs.
+- `None` 不当成值,不进 attrs(JSON 里省略);空字符串是值,照常进 attrs.
+
 场景**不标 shape**:树 / 图 / 链是内容本身的性质,由渲染端的布局器从 nodes / pointers /
 edges 推出来(度数、是否有环、有没有无向边),不靠一个自报的标签.`as_` 只决定一个对象
 被写成哪种图元.
-
-默认观感(没有 `label` / `variant` 钩子时):
-
-- 节点标签:有 `key` / `id` 属性就用它;否则把属性拼成 `名字=值`;
-- 边标签:把属性拼成 `名字=值`;没有属性就不写标签;
-- 变体:只有 `variant` 钩子能给,颜色这类语义不靠角色表达.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Any, Callable
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any, Callable, Mapping
 
 from .errors import RenderError
-from .formatting import format_scalar
+from .formatting import JsonScalar, format_scalar, scalar_json
 from .roles import Attr
 from .spec import StructureSpec
-from .traversal import FieldValue, Graph
+from .traversal import FieldValue, Graph, NodeRecord
 
 __all__ = [
     "SceneNode",
@@ -61,13 +70,18 @@ __all__ = [
 ]
 
 
+def _empty_attrs() -> Mapping[str, JsonScalar]:
+    """空 attrs 的只读默认值:多个节点共用一个空映射,不各自建 dict."""
+    return MappingProxyType({})
+
+
 @dataclass(frozen=True)
 class SceneNode:
-    """一个圆节点:没有坐标,只有 key / 标签 / 语义变体."""
+    """一个圆节点:没有坐标,只有 key / 展示 label / 结构特有 attrs."""
 
     key: int
     label: str
-    variant: str | None = None
+    attrs: Mapping[str, JsonScalar] = field(default_factory=_empty_attrs)
 
 
 @dataclass(frozen=True)
@@ -84,7 +98,7 @@ class ScenePointer:
 
 @dataclass(frozen=True)
 class SceneEdge:
-    """一条**无向**边:两端是节点 key,label 是可选边标签.
+    """一条**无向**边:两端是节点 key,label 是可选展示文字,attrs 是其余属性.
 
     不带 key:现在没有别的图元引用边,这个字段没有消费者.
     """
@@ -92,6 +106,7 @@ class SceneEdge:
     a: int
     b: int
     label: str | None = None
+    attrs: Mapping[str, JsonScalar] = field(default_factory=_empty_attrs)
 
 
 @dataclass(frozen=True)
@@ -106,7 +121,11 @@ class Scene:
         """转成可以 json.dumps 的 dict(键按 nodes / pointers / edges 的固定顺序)."""
         return {
             "nodes": [
-                _compact({"key": node.key, "label": node.label, "variant": node.variant})
+                _compact({
+                    "key": node.key,
+                    "label": node.label,
+                    "attrs": _attrs_dict(node.attrs),
+                })
                 for node in self.nodes
             ],
             "pointers": [
@@ -114,7 +133,12 @@ class Scene:
                 for pointer in self.pointers
             ],
             "edges": [
-                _compact({"a": edge.a, "b": edge.b, "label": edge.label})
+                _compact({
+                    "a": edge.a,
+                    "b": edge.b,
+                    "label": edge.label,
+                    "attrs": _attrs_dict(edge.attrs),
+                })
                 for edge in self.edges
             ],
         }
@@ -125,8 +149,13 @@ class Scene:
 
 
 def _compact(pairs: dict[str, Any]) -> dict[str, Any]:
-    """去掉值为 None 的键:没变体 / 没标签就不写空字段."""
+    """去掉值为 None 的键:没 label / 没 attrs 就不写空字段."""
     return {key: value for key, value in pairs.items() if value is not None}
+
+
+def _attrs_dict(attrs: Mapping[str, JsonScalar]) -> dict[str, JsonScalar] | None:
+    """空 attrs 不写进 JSON(与 "可选字段省略" 同一口径)."""
+    return dict(attrs) if attrs else None
 
 
 class SceneWriter:
@@ -159,13 +188,15 @@ class SceneWriter:
         nodes: list[SceneNode] = []
         for record in self.graph.order:
             if record.opaque:
-                nodes.append(SceneNode(self._node_keys[id(record.obj)], _opaque_label(record.obj), "opaque"))
+                nodes.append(SceneNode(self._node_keys[id(record.obj)], _opaque_label(record.obj)))
                 continue
             if record.spec is None or record.spec.as_ != "node":
                 continue
-            label = _hook_text(record.spec.label, record.obj, _default_node_label(record.spec, record.values), record.path, "label")
-            variant = _hook_text(record.spec.variant, record.obj, None, record.path, "variant")
-            nodes.append(SceneNode(self._node_keys[id(record.obj)], label, variant or None))
+            nodes.append(SceneNode(
+                self._node_keys[id(record.obj)],
+                _node_label(record),
+                _node_attrs(record),
+            ))
         return nodes
 
     # 边
@@ -200,8 +231,12 @@ class SceneWriter:
                         path=f"{record.path}.{endpoint.name}",
                     )
                 node_keys.append(self._node_keys[id(endpoint_value)])
-            label = _hook_text(record.spec.label, record.obj, _default_edge_label(record.values), record.path, "label")
-            edges.append(SceneEdge(node_keys[0], node_keys[1], label or None))
+            edges.append(SceneEdge(
+                node_keys[0],
+                node_keys[1],
+                _edge_label(record),
+                _edge_attrs(record),
+            ))
         return edges
 
     # 指针
@@ -229,6 +264,90 @@ class SceneWriter:
         return pointers
 
 
+# 标签
+
+
+def _node_label(record: NodeRecord) -> str:
+    """节点展示文字:label 字段 / label 钩子 / 默认 key-id-value / 拼属性."""
+    spec = record.spec
+    assert spec is not None
+    source = _label_source(spec, record.values)
+    default = _default_node_label(spec, record.values, source)
+    if spec.label is None:
+        return default
+    if isinstance(spec.label, str):
+        return default
+    result = _hook_text(spec.label, record.obj, default, record.path, "label")
+    return default if result is None else result
+
+
+def _default_node_label(
+    spec: StructureSpec,
+    values: tuple[FieldValue, ...],
+    source: str | None,
+) -> str:
+    if source is not None:
+        return format_scalar(_field_value(values, source))
+    pairs = _attr_pairs(values)
+    return ", ".join(pairs) if pairs else spec.name
+
+
+def _label_source(spec: StructureSpec, values: tuple[FieldValue, ...]) -> str | None:
+    """哪个属性字段是节点的通用展示槽(它不进 attrs)."""
+    if isinstance(spec.label, str):
+        return spec.label
+    if spec.label is not None:
+        # 可调用钩子可能组合任意字段,不知道它消费了谁:不排除任何 attrs
+        return None
+    for candidate in ("key", "id", "value"):
+        if any(
+            field_value.field.name == candidate and isinstance(field_value.field.role, Attr)
+            for field_value in values
+        ):
+            return candidate
+    return None
+
+
+def _edge_label(record: NodeRecord) -> str | None:
+    spec = record.spec
+    assert spec is not None
+    default = _default_edge_label(record.values)
+    if spec.label is None:
+        return default
+    if isinstance(spec.label, str):
+        value = _field_value(record.values, spec.label)
+        return None if value is None else format_scalar(value)
+    return _hook_text(spec.label, record.obj, default, record.path, "label")
+
+
+# attrs
+
+
+def _node_attrs(record: NodeRecord) -> Mapping[str, JsonScalar]:
+    spec = record.spec
+    assert spec is not None
+    source = _label_source(spec, record.values)
+    return _attrs(record.values, exclude=source)
+
+
+def _edge_attrs(record: NodeRecord) -> Mapping[str, JsonScalar]:
+    return _attrs(record.values)
+
+
+def _attrs(values: tuple[FieldValue, ...], exclude: str | None = None) -> Mapping[str, JsonScalar]:
+    """所有 `Attr` 字段 -> JSON 标量;`None` 不写,label 来源字段可排除."""
+    attrs: dict[str, JsonScalar] = {}
+    for field_value in values:
+        if not isinstance(field_value.field.role, Attr):
+            continue
+        if field_value.value is None:
+            continue
+        if field_value.field.name == exclude:
+            continue
+        attrs[field_value.field.name] = scalar_json(field_value.value)
+    return MappingProxyType(attrs)
+
+
 # 默认观感
 
 
@@ -248,30 +367,32 @@ def _hook_text(
     return default if result is None else str(result)
 
 
-def _default_node_label(spec: StructureSpec, values: tuple[FieldValue, ...]) -> str:
+def _field_value(values: tuple[FieldValue, ...], name: str) -> Any:
     for field_value in values:
-        if isinstance(field_value.field.role, Attr) and field_value.field.name in ("key", "id"):
-            return format_scalar(field_value.value)
-    pairs = _attr_pairs(values)
-    return ", ".join(pairs) if pairs else spec.name
-
-
-def _default_edge_label(values: tuple[FieldValue, ...]) -> str | None:
-    pairs = _attr_pairs(values)
-    return ", ".join(pairs) if pairs else None
+        if field_value.field.name == name:
+            return field_value.value
+    # 注册期已经校验过 label 字段存在,走到这里说明字段表在遍历后被改过
+    raise RenderError("bad-label", f"label 指向的字段 {name!r} 不在字段表里")
 
 
 def _attr_pairs(values: tuple[FieldValue, ...]) -> list[str]:
-    """把属性拼成 `名字=值`;空字符串的值不参与拼接(避免 `name=` 这种噪声)."""
+    """把属性拼成 `名字=值`;None 与空字符串不参与拼接(避免 `name=` 这种噪声)."""
     pairs: list[str] = []
     for field_value in values:
         if not isinstance(field_value.field.role, Attr):
+            continue
+        if field_value.value is None:
             continue
         text = format_scalar(field_value.value)
         if text == "":
             continue
         pairs.append(f"{field_value.field.name}={text}")
     return pairs
+
+
+def _default_edge_label(values: tuple[FieldValue, ...]) -> str | None:
+    pairs = _attr_pairs(values)
+    return ", ".join(pairs) if pairs else None
 
 
 def _opaque_label(obj: Any) -> str:

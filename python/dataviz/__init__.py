@@ -2,7 +2,7 @@
 
 一个字段只有两种角色:
 
-- **属性 `Attr`**:标量(含 `key` / `id` 这种标识),进标签;
+- **属性 `Attr`**:标量 / Enum,进节点的 `label`,其余进 `attrs`(结构特有属性);
 - **指针 `Pointer`**:有向地指向另一个已注册对象,由类型标注定死:
   `T | None` / `T` 是 0..1 条,`list[T]` / `Sequence[T]` 是 0..n 条.
 
@@ -12,7 +12,7 @@
 
 - `Registry.to_term()` / `Diagram.term`:通用项字面量文本(Term),给"读结构"的一端;
 - `Registry.to_scene()` / `Diagram.scene`:节点 / 有向指针 / 无向边的中性场景(没有像素
-  坐标),给渲染后端.
+  坐标;结构特有的属性在 `attrs`),给渲染后端.
 
 典型用法:
 

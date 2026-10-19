@@ -58,6 +58,9 @@ class StructureSpec:
 
     注册信息里**没有布局提示**(树 / 图):那是场景内容自己的性质,由渲染端从
     nodes / pointers / edges 推,不由结构自报.
+
+    `label` 可以是可调用对象(自定义展示文字),也可以是字段名(字符串):后者从该字段
+    取值当标签,并把它从 `attrs` 里排除 —— `attrs` 是除通用槽之外的其余属性.
     """
 
     def __init__(
@@ -67,8 +70,7 @@ class StructureSpec:
         cls: type,
         name: str,
         as_: str,
-        label: Callable[[Any], str] | None,
-        variant: Callable[[Any], str] | None,
+        label: Callable[[Any], str] | str | None,
         term_hook: Callable[[Any, list[str]], str] | None,
         checks: tuple[Callable[[Any], Any], ...],
         subclasses: bool,
@@ -79,7 +81,6 @@ class StructureSpec:
         self.name = name
         self.as_ = as_
         self.label = label
-        self.variant = variant
         self.term_hook = term_hook
         self.checks = checks
         self.subclasses = subclasses

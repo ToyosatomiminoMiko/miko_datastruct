@@ -14,6 +14,12 @@ class DataNode:
     value: int = 1
 
 
+@dataclass
+class LinkedNode:
+    key: int = 0
+    left: "LinkedNode | None" = None
+
+
 class PlainNode:
     key = 0
     value = 1
@@ -34,7 +40,7 @@ class RegistryTest(unittest.TestCase):
     def test_decorator_with_options(self):
         reg = Registry()
 
-        @reg.structure(name="rbt")
+        @reg.structure(name="rbt", label="key")
         @dataclass
         class RbtNode:
             key: int = 0
@@ -42,6 +48,7 @@ class RegistryTest(unittest.TestCase):
         spec = reg.get(RbtNode)
         self.assertEqual(spec.name, "rbt")
         self.assertEqual(spec.as_, "node")
+        self.assertEqual(spec.label, "key")
 
     def test_get_accepts_instance(self):
         reg = Registry()
@@ -154,6 +161,25 @@ class RegistryTest(unittest.TestCase):
         reg = Registry()
         with self.assertRaises(TypeError):
             reg.structure(PlainNode, shape="tree")  # type: ignore[call-arg]
+
+    def test_variant_is_not_a_registration_option(self):
+        reg = Registry()
+        with self.assertRaises(TypeError):
+            reg.structure(PlainNode, variant="color")  # type: ignore[call-arg]
+
+    def test_label_field_must_exist(self):
+        reg = Registry()
+        reg.structure(PlainNode, label="missing")
+        with self.assertRaises(RegistrationError) as caught:
+            reg.finalize()
+        self.assertEqual(caught.exception.code, "bad-label")
+
+    def test_label_must_point_to_attr(self):
+        reg = Registry()
+        reg.structure(LinkedNode, label="left")
+        with self.assertRaises(RegistrationError) as caught:
+            reg.finalize()
+        self.assertEqual(caught.exception.code, "bad-label")
 
     def test_bad_check_rejected(self):
         reg = Registry()

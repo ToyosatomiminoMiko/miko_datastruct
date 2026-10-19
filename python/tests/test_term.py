@@ -141,7 +141,7 @@ class TermTest(unittest.TestCase):
         shorthand = rbt_example.rbt_registry.to_term(root)
         generic = rbt_example.rbt_registry.to_term(root, options=TermOptions(shorthand=False))
         self.assertEqual(shorthand, "13B(8R(1B,11R),17R(15B,25B))")
-        self.assertTrue(generic.startswith("rbt(13, B, rbt(8, R,"))
+        self.assertTrue(generic.startswith("rbt(13, black, rbt(8, red,"))
         self.assertNotEqual(shorthand, generic)
 
     def test_subclass_lookup_when_enabled(self):

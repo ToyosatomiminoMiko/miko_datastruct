@@ -64,8 +64,8 @@ class RbtExampleTest(unittest.TestCase):
         root = rbt_example.sample_tree()
         self.assertEqual(
             rbt_example.rbt_registry.to_term(root, options=TermOptions(shorthand=False)),
-            "rbt(13, B, rbt(8, R, rbt(1, B, nil, nil), rbt(11, R, nil, nil)), "
-            "rbt(17, R, rbt(15, B, nil, nil), rbt(25, B, nil, nil)))",
+            "rbt(13, black, rbt(8, red, rbt(1, black, nil, nil), rbt(11, red, nil, nil)), "
+            "rbt(17, red, rbt(15, black, nil, nil), rbt(25, black, nil, nil)))",
         )
 
     def test_scene_nodes_and_pointers(self):
@@ -75,9 +75,18 @@ class RbtExampleTest(unittest.TestCase):
         self.assertEqual(len(scene.pointers), 6)
         self.assertEqual(scene.edges, ())
         self.assertEqual([node.label for node in scene.nodes], ["13", "8", "1", "11", "17", "15", "25"])
+        # 颜色是 Enum 的 value,进 attrs;label 用的 key 不再重复进 attrs
         self.assertEqual(
-            [node.variant for node in scene.nodes],
-            ["black", "red", "black", "red", "red", "black", "black"],
+            [node.attrs for node in scene.nodes],
+            [
+                {"color": "black"},
+                {"color": "red"},
+                {"color": "black"},
+                {"color": "red"},
+                {"color": "red"},
+                {"color": "black"},
+                {"color": "black"},
+            ],
         )
         self.assertEqual([node.key for node in scene.nodes], [0, 1, 2, 3, 4, 5, 6])
         self.assertEqual(

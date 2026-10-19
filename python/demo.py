@@ -110,11 +110,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     _section("2. 柯尼斯堡七桥:4 块陆地 + 7 座无向桥")
     _print_diagram(graph_diagram)
 
-    # 3. 红黑树:有向指针 + 三个钩子
+    # 3. 红黑树:有向指针 + Enum + label / term 钩子
     rbt_root = rbt_example.sample_tree()
     rbt_diagram = rbt_example.rbt_registry.diagram(rbt_root)
     rbt_generic = rbt_example.rbt_registry.to_term(rbt_root, options=TermOptions(shorthand=False))
-    _section("3. 红黑树:标注即指针 + label / variant / term")
+    _section("3. 红黑树:标注即指针 + label / attrs / term")
     print("term(结构专属简写,可以直接粘进 web 的表达式输入):")
     print(f"  {rbt_diagram.term}")
     print("term(通用写法):")

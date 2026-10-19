@@ -53,8 +53,8 @@ checks:
 
 ```text
 term(简写): 13B(8R(1B,11R),17R(15B,25B))
-term(通用): rbt(13, B, rbt(8, R, rbt(1, B, nil, nil), ...))
-scene:      {"nodes":[{"key":0,"label":"13","variant":"black"},...],"pointers":[{"from":0,"to":1},...],"edges":[]}
+term(通用): rbt(13, black, rbt(8, red, rbt(1, black, nil, nil), ...))
+scene:      {"nodes":[{"key":0,"label":"13","attrs":{"color":"black"}},...],"pointers":[{"from":0,"to":1},...],"edges":[]}
 ```
 
 `13B(8R(1B,11R),17R(15B,25B))` **就是 web 现有红黑树表达式输入的子集**:这一份输出现在
@@ -66,7 +66,7 @@ scene:      {"nodes":[{"key":0,"label":"13","variant":"black"},...],"pointers":[
 
 | 角色 | 写法(类型标注) | 基数 | Term | Scene |
 | --- | --- | --- | --- | --- |
-| **属性** `Attr` | `key: str` / `value: int = 0` | 标量 | 一个 atom | 进标签 |
+| **属性** `Attr` | `key: str` / `value: int = 0` | 标量 | 一个 atom | 进 label / `attrs` |
 | **指针** `Pointer` | `left: "Node \| None"` / `T` | 0..1 | 子项 / `nil` | 一条有向指针 |
 | **指针** `Pointer` | `children: list[T]` / `Sequence[T]` | 0..n | `children(...)` | 多条有向指针 |
 
@@ -137,9 +137,12 @@ atom   := 1+ 个非 '( ) , " 空白' 的字符 | 双引号字符串
 
 ```json
 {
-  "nodes":    [{"key": 0, "label": "K"}, {"key": 1, "label": "N"}],
-  "pointers": [{"from": 0, "to": 1}],
-  "edges":    [{"a": 0, "b": 1, "label": "name=桥1"}]
+  "nodes": [
+    { "key": 0, "label": "13", "attrs": { "color": "black" } },
+    { "key": 1, "label": "8",  "attrs": { "color": "red" } }
+  ],
+  "pointers": [{ "from": 0, "to": 1 }],
+  "edges": [{ "a": 0, "b": 1, "label": "name=桥1", "attrs": { "name": "桥1" } }]
 }
 ```
 
@@ -148,22 +151,27 @@ atom   := 1+ 个非 '( ) , " 空白' 的字符 | 双引号字符串
 - `pointers[].from` / `to`、`edges[].a` / `b` 都引用节点 key;
 - pointer / edge **自己不带 key**:现在没有别的图元引用它们,`n0` / `e0` 这种前缀也因此
   是多余的(角色已经由数组区分);将来需要选中边 / 给边挂东西时再加;
-- `pointers` 的方向就是 `from -> to`,**没有 `variant`**:`left` / `right` 这类字段名是
+- `pointers` 的方向就是 `from -> to`:**没有 `variant`**,`left` / `right` 这类字段名是
   数据结构语义,不属于中性场景;树布局需要左右顺序时按 pointers 数组顺序即可;
 - **没有 `shape`**:树 / 图 / 链是内容本身的性质,由渲染端从 nodes / pointers / edges 推
   (度数、是否有环、有没有无向边),不靠一个自报的标签;
-- 默认标签:节点有 `key` / `id` 属性就用它,否则拼 `名字=值`;边把属性拼 `名字=值`;
-- 节点 `variant` 只能由 `variant=` 钩子给(颜色是普通属性,不是角色)。
+- **`attrs` 是差异化入口**:节点 / 边的通用槽(`key` / `label`、`a` / `b`)之外的所有
+  `Attr` 字段都进 `attrs`,键就是字段名;值用原生 JSON 标量,Enum 取 `.value`;
+- `label` 来源:节点的 `label="字段名"`,没写就按 `key` -> `id` -> `value` 找;这个字段
+  只进 `label`,不再重复进 `attrs`;
+- 边 `label` 是展示文字;`attrs` 里放它的其余属性;
+- `None` 不当成值,不进 `attrs`(JSON 里省略);空 attrs 也省略。
 
 ### 和 web 侧的一一对应
 
 | Python 侧 | web 侧 |
 | --- | --- |
 | `spec.name` + `fields` 顺序 | Term 构造子 + 参数顺序(codec 契约) |
-| `Attr` | 节点标签 |
+| `Attr` | 节点 label / `attrs` |
 | `Pointer` | 有向连接(web 侧要补箭头图元) |
 | `as_="edge"` | 无向边(web 视觉层还没有这个图元) |
-| `label` / `variant` / `term` 钩子 | `ui/<结构>/` 的翻译与文案 |
+| `attrs` | 各结构自己的渲染 / 样式映射(不再有 `variant` 字段) |
+| `label` / `term` 钩子 | `ui/<结构>/` 的翻译与文案 |
 
 **关键差异**:web 的 `VisualScene` 带世界坐标,Python 的 Scene **不带**。所以 web 要直接
 消费 Scene JSON,还需要一个"Scene -> 布局 -> VisualScene"的通用布局器:布局器按内容推
@@ -187,25 +195,36 @@ class Node:
     value: int = 0
 
 reg.to_term(Node(key="A", value=5))    # node(A, 5)
-reg.to_scene(Node(key="A"))            # 一个圆,标签 A
+reg.to_scene(Node(key="A"))            # 一个圆,label A,attrs {"value": 0}
 ```
 
-### L1:红黑树(标注即指针 + 三个钩子)
+### L1:红黑树(标注即指针 + Enum + 两个钩子)
 
 ```python
+from enum import Enum
+
+class Color(Enum):
+    RED = "red"
+    BLACK = "black"
+
 @reg.structure(
     name="rbt",
-    label=lambda n: str(n.key),
-    variant=lambda n: "red" if n.color == "R" else "black",
-    term=lambda n, parts: f"{parts[0]}{parts[1]}({parts[2]},{parts[3]})",
+    label="key",
+    term=_rbt_term,
 )
 @dataclass
 class RbtNode:
     key: int
-    color: str = "B"
+    color: Color = Color.BLACK
     left: "RbtNode | None" = None
     right: "RbtNode | None" = None
 ```
+
+- `color` 是普通 `Attr`(Enum),Scene 里就是 `attrs.color = "red" / "black"`;没有
+  `variant` 字段,渲染端按 `attrs` 决定观感;
+- `label="key"`: `key` 是节点的通用展示槽,进 `label`,并从 `attrs` 排除;
+- `term=_rbt_term`:把 Enum 值 `red` / `black` 换回简写 `R` / `B`,产出
+  `13B(8R(1B,11R),17R(15B,25B))`。
 
 `checks=(callable,)` 可选:可调用对象吃根对象,返回 `None` / `True`(PASS)、
 `False`(FAIL)、`str`(FAIL + 细节)或 `CheckResult`。
@@ -265,7 +284,7 @@ python/
 - 遍历:身份 / 共享 / 环 / 路径 / 深度与节点数上限 / 指针运行时类型检查 / `on_unknown="opaque"`;
 - Term 写端:内联、`id` / `ref`、`children(...)`、atom 转义、`term=` 简写、
   `TermOptions(always_ids, shorthand)`;
-- Scene 写端:节点标签 / `variant` 钩子 / 有向指针(`from -> to`)/ 无向边 / 整数 key / JSON;
+- Scene 写端:节点 key / label / `attrs` / 有向指针(`from -> to`)/ 无向边 / JSON;
 - `checks`、`describe()`、`snapshot()`、`finalize()`、`subclasses=True`;
 - 三个端到端例子 + unittest。
 
@@ -289,5 +308,5 @@ python3 -m unittest discover -s tests -t .
 
 测试按层分布:`test_registry.py`(注册 / 查询 / 覆盖 / 快照 / 参数校验)、
 `test_fields.py`(字段发现 / 角色推断 / edge 与 container 校验 / 报错码)、
-`test_term.py`(写法 / 共享 / 环 / 简写 / 图)、`test_scene.py`(标签 / 变体 / 有向指针 /
+`test_term.py`(写法 / 共享 / 环 / 简写 / 图)、`test_scene.py`(标签 / attrs / 有向指针 /
 无向边 / 错误)、`test_examples.py`(三个例子的端到端结果)。
