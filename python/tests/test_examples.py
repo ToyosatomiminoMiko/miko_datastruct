@@ -1,36 +1,34 @@
-"""三个例子的端到端结果:Term 文本、Scene 结构、checks 结论."""
+"""三个例子的端到端结果:Scene 结构、checks 结论,以及 web 读的 JSON."""
 
 from __future__ import annotations
 
+import json
 import unittest
 
-from dataviz import TermOptions
 from examples import graph as graph_example
 from examples import node as node_example
 from examples import rbt as rbt_example
 
 
 class NodeExampleTest(unittest.TestCase):
-    def test_term_and_scene(self):
+    def test_scene(self):
         diagram = node_example.registry.diagram(node_example.make())
-        self.assertEqual(diagram.term, "node(A, 5)")
         self.assertEqual([node.label for node in diagram.scene.nodes], ["A"])
         self.assertEqual(diagram.scene.pointers, ())
         self.assertEqual(diagram.scene.edges, ())
+
+    def test_json_is_the_web_document(self):
+        diagram = node_example.registry.diagram(node_example.make())
+        data = json.loads(diagram.dumps())
+        self.assertEqual(data["nodes"], [{"key": 0, "label": "A", "attrs": {"value": 5}}])
+        self.assertEqual(data["pointers"], [])
+        self.assertEqual(data["edges"], [])
+        self.assertNotIn("checks", data)
 
 
 class GraphExampleTest(unittest.TestCase):
     def setUp(self) -> None:
         self.diagram = graph_example.graph_registry.diagram(graph_example.sample_graph())
-
-    def test_term(self):
-        self.assertEqual(
-            self.diagram.term,
-            "graph(children(place(id(1), K), place(id(2), N), place(id(3), S), place(id(4), E)), "
-            "children(bridge(ref(1), ref(2)), bridge(ref(1), ref(2)), bridge(ref(1), ref(3)), "
-            "bridge(ref(1), ref(3)), bridge(ref(1), ref(4)), bridge(ref(2), ref(4)), "
-            "bridge(ref(3), ref(4))))",
-        )
 
     def test_scene_nodes(self):
         scene = self.diagram.scene
@@ -54,20 +52,16 @@ class GraphExampleTest(unittest.TestCase):
         self.assertIn("奇数度节点", check.detail)
         self.assertIn("K(度5)", check.detail)
 
+    def test_json_carries_checks(self):
+        data = json.loads(self.diagram.dumps())
+        self.assertEqual(data["nodes"][0], {"key": 0, "label": "K"})
+        self.assertEqual(len(data["edges"]), 7)
+        self.assertEqual(len(data["checks"]), 1)
+        self.assertFalse(data["checks"][0]["passed"])
+        self.assertIn("奇数度节点", data["checks"][0]["detail"])
+
 
 class RbtExampleTest(unittest.TestCase):
-    def test_shorthand_term_matches_web_expression(self):
-        root = rbt_example.sample_tree()
-        self.assertEqual(rbt_example.rbt_registry.to_term(root), "13B(8R(1B,11R),17R(15B,25B))")
-
-    def test_generic_term(self):
-        root = rbt_example.sample_tree()
-        self.assertEqual(
-            rbt_example.rbt_registry.to_term(root, options=TermOptions(shorthand=False)),
-            "rbt(13, black, rbt(8, red, rbt(1, black, nil, nil), rbt(11, red, nil, nil)), "
-            "rbt(17, red, rbt(15, black, nil, nil), rbt(25, black, nil, nil)))",
-        )
-
     def test_scene_nodes_and_pointers(self):
         root = rbt_example.sample_tree()
         scene = rbt_example.rbt_registry.to_scene(root)

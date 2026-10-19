@@ -4,7 +4,7 @@
 
 1. **身份是 `id(obj)`**.共享节点、环都靠它:同一个对象第二次遇到只记一条边,不再展开.
    不用 `__eq__`:图里两个值相等的节点就是两个节点(柯尼斯堡的多重边也是同一个道理).
-2. **字段顺序 = Term 参数顺序**.遍历按 `spec.fields` 的顺序走,所以 Term / Scene 的输出
+2. **字段顺序 = 定义顺序**.遍历按 `spec.fields` 的顺序走,所以 Scene / JSON 的输出
    天然稳定,可以直接快照.
 
 遇到指针字段就递归,并记一条"谁指向谁"的有向边;指针的目标类型在注解里已经定死,这里
@@ -61,7 +61,7 @@ class RefEdge:
 
 @dataclass
 class Graph:
-    """一次遍历的完整结果,TermWriter / SceneWriter 都只读它."""
+    """一次遍历的完整结果,SceneWriter 只读它."""
 
     root_oid: int
     root: Any

@@ -186,7 +186,7 @@ class FieldsTest(unittest.TestCase):
         root = DcNode()
         root.left = "not a node"  # type: ignore[assignment]
         with self.assertRaises(TraversalError) as caught:
-            reg.to_term(root)
+            reg.to_scene(root)
         self.assertEqual(caught.exception.code, "bad-pointer")
         self.assertIn("root.left", caught.exception.path)
 

@@ -39,7 +39,7 @@
 
     /*
      * JSON 词法着色:key(青)/ 字符串(绿)/ 数字(琥珀)/ 字面量(紫)/ 标点(弱化).
-     * 与旧表达式的着色同一套思路:结构符号弱化,值给颜色.
+     * 结构与值分色:标点弱化,值给颜色.
      */
     --viewer-token-key-color: #7dd3fc;
     --viewer-token-string-color: #86efac;

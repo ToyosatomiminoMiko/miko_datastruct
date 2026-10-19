@@ -1,6 +1,6 @@
 """StructureSpec / FieldSpec:注册表里的"一种结构"与它的字段表.
 
-字段表的**顺序就是 Term 参数顺序**,不是字母序、也不按字段名猜.顺序在字段解析时定下,
+字段表的**顺序就是定义顺序**,不是字母序、也不按字段名猜.顺序在字段解析时定下,
 解析本身延迟到第一次访问 `spec.fields`(或 `Registry.finalize()`):
 
 - 注册时只做能做的校验(重名、`as_` 取值、显式结构名);
@@ -71,7 +71,6 @@ class StructureSpec:
         name: str,
         as_: str,
         label: Callable[[Any], str] | str | None,
-        term_hook: Callable[[Any, list[str]], str] | None,
         checks: tuple[Callable[[Any], Any], ...],
         subclasses: bool,
         doc: str,
@@ -81,7 +80,6 @@ class StructureSpec:
         self.name = name
         self.as_ = as_
         self.label = label
-        self.term_hook = term_hook
         self.checks = checks
         self.subclasses = subclasses
         self.doc = doc
@@ -90,7 +88,7 @@ class StructureSpec:
 
     @property
     def fields(self) -> tuple[FieldSpec, ...]:
-        """解析好的字段表(顺序 = Term 参数顺序);首次访问时解析,失败不会缓存."""
+        """解析好的字段表(按定义顺序);首次访问时解析,失败不会缓存."""
         if self._fields is None:
             self._fields = self.registry._fields_for(self)
         return self._fields

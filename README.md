@@ -2,7 +2,7 @@
 
 数据结构工具.仓库按"一份中性的 **JSON 表示** + 一块**可拖动缩放的平面** + 一块**列表式的检查面板**"
 组织:web 侧读 JSON 把结构画出来,并把节点属性与检查结论列成可展开的行;python 侧用普通
-Python 类描述结构,生成同一套中性表示.两侧**不是前后端**:没有 HTTP、没有进程在跑,只有
+Python 类描述结构,生成同一份 JSON.两侧**不是前后端**:没有 HTTP、没有进程在跑,只有
 一份共享的 JSON 契约.
 
 ```text
@@ -21,8 +21,9 @@ web 这一半现在只认 JSON:
   多个连通分量并排;
 - 右侧**实体**与**检查**两扇窗口按 graphcalc 的**实体列表 / 求值列表**样式渲染:每个节点
   一行属性,每条检查一行结论;FAIL 行可展开详情,并可「定位」到背景平面上的对应节点;
-- 原来的简写表达式(`13B(8R(...))`)与自定义 Term 表示**不再作为 web 输入**:它不通用,
-  中性 JSON 才是两侧的契约.红黑树只作为默认示例 JSON 出现在首屏.
+- 简写表达式(`13B(8R(...))`)与自定义 Term 表示已经**整套删除**:web 侧不再有表达式解析 /
+  表达式高亮(JSON 编辑器自己的词法高亮保留),Python 侧也不再生成 Term;中性 JSON 是两侧
+  唯一的契约.红黑树只作为默认示例 JSON 出现在首屏.
 
 ## 跑起来
 
@@ -93,9 +94,10 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
   `attrs.variant` 可以显式给一个视觉变体名(如 `current`),优先级高于 `color`.
   其它颜色值原样进实体列表的"色块 + 明文值",没有对应样式时节点用基础填充色.
 
-**和 Python 侧的对应**:`python/dataviz/scene.py` 现在输出 `nodes` / `pointers` /
-`edges`(没有坐标),`checks` 由 `Diagram` 单独带着;web 需要的是把两者放进同一份 JSON.
-Python 侧对齐这一点是下一步(见 `python/README.md`).
+**和 Python 侧的对应**:`python/dataviz/scene.py` 输出 `nodes` / `pointers` / `edges`
+(没有坐标),`checks` 由 `Diagram` 带着;`Diagram.dumps()` 把两者合并成**同一份 JSON**,
+与上面的输入契约逐字段一致.`python3 demo.py --out <目录>` 写出的 `<name>.json` 可以直接
+粘进 web(见 `python/README.md`).
 
 ## 界面:一个桌面,五扇窗口,一块平面
 
@@ -205,7 +207,6 @@ src/main.ts             入口:引库样式 + 应用样式,再 mountViewer(#app)
 css/app.css             应用层:页面基线 + 从主站继承的令牌(--font-code / 桌面底色)
 
 src/datastruct/scene/   中性场景文档:类型 + 解析 / 校验(纯逻辑)
-src/datastruct/rbt/     旧的表达式解析 / 性质检查核心(现在没有 UI 入口;保留为参考实现与测试)
 
 src/visual/             视觉层:所有结构共用(场景模型 / 落笔 / 绘制面 / 视口 / 自动布局)
 src/visual/scene.ts        场景模型:节点 / 指针的正式表示
@@ -230,7 +231,7 @@ src/ui/viewer/viewer.css        查看器观感(窗口正文 / 列表行 / 检�
 src/test_support/       标记契约测试的两个小助手(renderHost / expectNoDuplicateIds)
 scripts/dev_ui_link.py  本地联调:miko_ui 换成指向工作副本的软链(link / unlink / status)
 
-python/                 表示法生成(纯标准库;与 web 不是前后端关系,见 python/README.md)
+python/                 中性 JSON 生成(纯标准库;与 web 不是前后端关系,见 python/README.md)
 ```
 
 跨目录导入一律用源码根别名 `@/`(`@/datastruct/scene/scene_document_parse`,
@@ -253,7 +254,7 @@ python/                 表示法生成(纯标准库;与 web 不是前后端关�
 npm test        # vitest
 ```
 
-- 纯逻辑(node 环境):中性文档解析器 / 自动布局 / JSON 高亮 / 文案映射 / 旧的 RBT 核心;
+- 纯逻辑(node 环境):中性文档解析器 / 自动布局 / JSON 高亮 / 文案映射;
 - 标记契约与行为(happy-dom):桌面装配、窗口清单、编辑器、实体 / 检查两个列表窗口、
   诊断消息区、定位 / 回正接线.
 
@@ -267,4 +268,6 @@ SVG.之后依次做过:编辑器换成库的 `CodeEditor`、面板换成桌面�
 - 原来的"性质检查"窗口拆成 graphcalc 风格的**实体** / **检查**两扇窗口,支持折叠详情与
   节点定位;
 - 解析错误 / 空输入提示改用库的**消息区**(诊断窗口),JSON 窗口只剩下编辑器;
-- 原来的三行提示挪进独立的"帮助"窗口.
+- 原来的三行提示挪进独立的"帮助"窗口;
+- 之后删掉了旧的表达式解析 / 性质检查核心与 Python 侧的 Term 写端:两侧只剩 JSON 一种
+  表示,Python 的 `Diagram.dumps()` 直接产出 web 读的同一份文档.

@@ -2,7 +2,7 @@
 
 `node` 里一个字段只有两种身份:
 
-1. **属性 `Attr`**:一个标量,进节点标签 / Term 的 atom;
+1. **属性 `Attr`**:一个标量,进节点标签 / `attrs`;
 2. **指针 `Pointer`**:从本对象指向另一个已注册对象,是**有向**的.
 
 引用用**类型标注**定死,不再有手写 `roles=`:
@@ -29,7 +29,7 @@ class Role:
 
 @dataclass(frozen=True)
 class Attr(Role):
-    """属性:标量值(含 key / id 这类全局唯一的标识),进标签与 Term 参数."""
+    """属性:标量值(含 key / id 这类全局唯一的标识),进标签与 `attrs`."""
 
 
 @dataclass(frozen=True)

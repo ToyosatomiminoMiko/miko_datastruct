@@ -1,8 +1,8 @@
 /*
  * 应用层样式:页面基线(盒模型 / body 底色与字体)+ 应用级令牌.
  *
- * `--font-code` 在这里给定义(输出区与树上的节点值引用它):它指向库的 `--code-font-family`,
- * 字体文件与 `@font-face` 随 miko_ui 发布,本项目不自带字体.表达式编辑器那一格不用它 -- 库的
+ * `--font-code` 在这里给定义(列表行与树上的节点值引用它):它指向库的 `--code-font-family`,
+ * 字体文件与 `@font-face` 随 miko_ui 发布,本项目不自带字体.JSON 编辑器那一格不用它 -- 库的
  * 编辑器自己引 `--code-font-family`.
  */
 :root {
@@ -16,8 +16,8 @@
      *    (或同名的 `<meta name="color-scheme">`)声明了 dark,这段自动调整就**不发生**.
      *
      * 注意 `!important` 在这里**不管用**:自动反色与强制颜色改写都不是级联的胜负,而是 UA
-     * 在渲染 / used value 阶段改颜色;唯一的口子是 `forced-color-adjust`(见 rbt.css 里那棵树
-     * 那条).
+     * 在渲染 / used value 阶段改颜色;唯一的口子是 `forced-color-adjust`(见 `src/visual/visual.css`
+     * 里那棵树那条).
      */
     color-scheme: dark;
 
@@ -57,7 +57,7 @@ body {
     background: var(--color-bg-desktop);
     color: var(--app-text-page);
     /*
-     * 字体给到 body 是必要的:`rbt_views.ts` 建的提示区没有类名也没有字体规则,全靠继承;
+     * 字体给到 body 是必要的:查看器里没有专门字体规则的文本区全靠继承;
      * 不写这一条会掉进浏览器默认的衬线字体.库的 tokens.css 在 main.ts 里先于本文件引入,
      * 所以这个令牌一定解析得到.
      */
@@ -69,7 +69,7 @@ body {
  * 应用根 = **桌面**:铺满视口.窗口几何由库的 WindowManager 按 `clientWidth/clientHeight`
  * 算成行内像素,宿主要有确定的尺寸 -- 居中留边只会让窗口算法按错误的桌面尺寸摆窗口.
  *
- * 这一层只剩**尺寸**:`position: relative`(背景 `#rbtTree` 与窗口层都是 `absolute;
+ * 这一层只剩**尺寸**:`position: relative`(背景 `#viewerTree` 与窗口层都是 `absolute;
  * inset: 0`,少了定位参照就会以视口为参照)与 `overflow: hidden`(桌面不滚动,滑条会改变
  * 几何读到的 `clientWidth/Height`)由库的 `.desktop-root` 给(见 miko_ui 的
  * styles/desktop.css 的"桌面骨架").

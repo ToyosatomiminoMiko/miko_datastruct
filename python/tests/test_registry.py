@@ -139,17 +139,16 @@ class RegistryTest(unittest.TestCase):
         with self.assertRaises(RegistrationError):
             reg.new(PlainNode, key=1)
 
-    def test_bad_name_rejected(self):
+    def test_empty_name_rejected(self):
         reg = Registry()
         with self.assertRaises(RegistrationError) as caught:
-            reg.structure(PlainNode, name="a b")
+            reg.structure(PlainNode, name="")
         self.assertEqual(caught.exception.code, "bad-name")
 
-    def test_reserved_nil_name_rejected(self):
+    def test_name_is_only_an_identifier(self):
         reg = Registry()
-        with self.assertRaises(RegistrationError) as caught:
-            reg.structure(PlainNode, name="nil")
-        self.assertEqual(caught.exception.code, "bad-name")
+        reg.structure(PlainNode, name="a b")
+        self.assertEqual(reg.by_name("a b").name, "a b")
 
     def test_bad_as_rejected(self):
         reg = Registry()

@@ -1,4 +1,4 @@
-"""注册表:把普通 Python 类登记成"一种结构",并提供遍历 / Term / Scene 的出口.
+"""注册表:把普通 Python 类登记成"一种结构",并提供遍历 / Scene / JSON 的出口.
 
 一个结构只有两件事要说清:
 
@@ -8,7 +8,7 @@
    (聚合根,自己不出现在画面里).
 
 没有手写 `roles=`:能推断的从注解 / 标量默认值推断,推断不出来的**报错**,不静默兜底.
-字段顺序 = 定义顺序 = Term 参数顺序.
+字段顺序 = 定义顺序 = Scene 里节点 / 边数组的顺序.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from .errors import RegistrationError, RenderError
 from .roles import Attr, Pointer, Role
 from .scene import Scene, SceneWriter
 from .spec import MISSING, FieldSpec, StructureSpec
-from .term import TermOptions, TermWriter
 from .traversal import Graph, RenderContext
 
 __all__ = ["Registry", "default_registry", "structure"]
@@ -45,12 +44,9 @@ _SEQUENCE_ORIGINS = (
 )
 _MAPPING_ORIGINS = (dict, collections.abc.Mapping, collections.abc.MutableMapping)
 
-# Term 的 atom 语法:1+ 个非 `( ) , " 空白` 的字符
-_ATOM_PATTERN = re.compile(r'^[^\s(),"]+$')
-
 
 class Registry:
-    """一张结构注册表.主键是类对象,次键是 `spec.name`(Term 构造子名)."""
+    """一张结构注册表.主键是类对象,次键是 `spec.name`(结构名 / 快照里的键)."""
 
     def __init__(self, name: str = "default") -> None:
         self.name = name
@@ -68,7 +64,6 @@ class Registry:
         name: str | None = None,
         as_: str = "node",
         label: Callable[[Any], str] | str | None = None,
-        term: Callable[[Any, list[str]], str] | None = None,
         checks: Iterable[Callable[[Any], Any]] = (),
         subclasses: bool = False,
         override: bool = False,
@@ -85,7 +80,6 @@ class Registry:
                 name=name,
                 as_=as_,
                 label=label,
-                term_hook=term,
                 checks=checks,
                 subclasses=subclasses,
                 override=override,
@@ -103,7 +97,6 @@ class Registry:
         name: str | None,
         as_: str,
         label: Callable[[Any], str] | str | None,
-        term_hook: Callable[[Any, list[str]], str] | None,
         checks: Iterable[Callable[[Any], Any]],
         subclasses: bool,
         override: bool,
@@ -114,8 +107,9 @@ class Registry:
         if as_ not in _AS_VALUES:
             raise RegistrationError("bad-as", f"as_ 只能是 {_AS_VALUES},实际 {as_!r}")
 
-        term_name = name if name is not None else _snake_case(cls.__name__)
-        _validate_atom(term_name, "结构名")
+        structure_name = name if name is not None else _snake_case(cls.__name__)
+        if not structure_name:
+            raise RegistrationError("bad-name", "结构名不能为空")
 
         check_tuple = tuple(checks)
         for check in check_tuple:
@@ -123,14 +117,14 @@ class Registry:
                 raise RegistrationError("bad-check", f"checks 里只能是可调用对象,实际 {check!r}")
 
         conflicts: dict[int, StructureSpec] = {}
-        for candidate in (self._by_name.get(term_name), self._by_type.get(cls)):
+        for candidate in (self._by_name.get(structure_name), self._by_type.get(cls)):
             if candidate is not None:
                 conflicts[id(candidate)] = candidate
         if conflicts and not override:
             other = next(iter(conflicts.values()))
             raise RegistrationError(
                 "duplicate",
-                f"名字 {term_name!r} 或类 {_fqn(cls)} 已被 {other.fqn} 占用;需要覆盖时传 override=True",
+                f"名字 {structure_name!r} 或类 {_fqn(cls)} 已被 {other.fqn} 占用;需要覆盖时传 override=True",
             )
         for candidate in conflicts.values():
             self._remove(candidate)
@@ -138,16 +132,15 @@ class Registry:
         spec = StructureSpec(
             registry=self,
             cls=cls,
-            name=term_name,
+            name=structure_name,
             as_=as_,
             label=label,
-            term_hook=term_hook,
             checks=check_tuple,
             subclasses=subclasses,
             doc=doc or inspect.getdoc(cls) or "",
         )
         self._by_type[cls] = spec
-        self._by_name[term_name] = spec
+        self._by_name[structure_name] = spec
         self._order.append(spec)
         return cls
 
@@ -177,7 +170,7 @@ class Registry:
         return spec
 
     def by_name(self, name: str) -> StructureSpec:
-        """按 Term 构造子名查 spec."""
+        """按结构名查 spec."""
         spec = self._by_name.get(name)
         if spec is None:
             known = ", ".join(self._by_name) or "无"
@@ -256,20 +249,15 @@ class Registry:
 
     # 输出
 
-    def to_term(self, root: Any, *, options: TermOptions | None = None) -> str:
-        """生成通用项字面量文本(见 term.py 的三个写法约定)."""
-        return TermWriter(self._graph(root), options).write()
-
     def to_scene(self, root: Any) -> Scene:
         """生成中性场景(节点 / 有向指针 / 无向边,无坐标、不标树或图)."""
         return SceneWriter(self._graph(root)).write()
 
     def diagram(self, root: Any) -> Diagram:
-        """一次遍历,同时拿到 Term / Scene / checks 结论."""
+        """一次遍历,同时拿到 Scene 与 checks 结论;`Diagram.dumps()` 是 web 读的 JSON."""
         graph = self._graph(root)
         return Diagram(
             root=root,
-            term=TermWriter(graph).write(),
             scene=SceneWriter(graph).write(),
             checks=self._run_checks(graph),
         )
@@ -500,13 +488,6 @@ def _is_scalar_type(annotation: Any) -> bool:
 # 小工具
 
 
-def _validate_atom(text: str, kind: str) -> None:
-    if not text or not _ATOM_PATTERN.match(text):
-        raise RegistrationError("bad-name", f"{kind} {text!r} 不合法:不能含空白 / 括号 / 逗号 / 引号")
-    if text == "nil":
-        raise RegistrationError("bad-name", f"{kind} 不能叫 nil(Term 里的保留字)")
-
-
 def _validate_label_field(spec: StructureSpec, fields: list[FieldSpec]) -> None:
     """`label` 写成字段名时,该字段必须存在且是属性.
 
@@ -550,7 +531,7 @@ def _fqn(cls: type) -> str:
 
 
 def _snake_case(name: str) -> str:
-    """`RbtNode` -> `rbt_node`;只用于没显式给 name= 时的默认构造子名."""
+    """`RbtNode` -> `rbt_node`;只用于没显式给 name= 时的默认结构名."""
     first = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
     return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", first).lower()
 
