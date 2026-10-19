@@ -6,7 +6,7 @@
   "type": "module",
   "dependencies": {
     "@preact/signals-core": "^1.14.4",
-    "miko_ui": "^0.1.16"
+    "miko_ui": "^0.1.18"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",

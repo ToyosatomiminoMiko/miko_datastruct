@@ -1,0 +1,59 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 允许手动触发
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # 本项目只有静态前端(没有 Rust / WASM),所以不需要 graphcalc 那套 build.sh:
+  # `package.json` 的 build 脚本就是生产构建的唯一步骤链 --
+  # clean -> vitest -> tsc --noEmit -> vite build(产物在 dist/).
+  # 依赖一律走 `npm ci` + package-lock.json:CI 上没有 miko_ui 工作副本,
+  # 也绝不能把 file: 路径写进依赖(见 README「跑起来」一节的本地联调说明);
+  # 本地 `npm run ui:link` 只改被忽略的 node_modules/,对这里没有影响.
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test, typecheck and build
+        run: npm run build
+
+      # 只取 Pages 站点元数据,不自动 enable:configure-pages 的 enablement 需要
+      # GITHUB_TOKEN 之外的 token.仓库第一次部署前要在
+      # Settings -> Pages -> Source 里选一次 "GitHub Actions".
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
