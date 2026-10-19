@@ -1,0 +1,58 @@
+/*
+ * JSON 查看器的设计令牌:窗口正文内边距 / 列表行 / 检查状态色 / JSON 词法着色 / 节点语义色.
+ *
+ * 所有结构共用的观感(节点半径 / 值文字 / 指针线段 / 进入动画 / 平面取景)在
+ * src/visual/tokens.css 的 `--visual-*`;库的按钮 / 徽章 / 行外壳基线在 miko_ui 的
+ * styles/{tokens,widgets}.css.本文件只留查看器自己的东西.
+ *
+ * 跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):
+ * - `--viewer-node-red-fill` / `--viewer-node-black-fill` 被 viewer.css 的节点变体规则引用,
+ *   而变体名 `red` / `black` 来自 JSON 的 `attrs.color`(见 ui/viewer/viewer_format.ts 的
+ *   nodeVariant);改名要三处一起改.
+ */
+
+:root {
+    /* 窗口正文根的内边距(px)与编辑器最小高度(px) */
+    --viewer-window-padding: 12px;
+    --viewer-input-min-height: 120px;
+
+    /* 中性提示 / 错误:错误色与检查 FAIL 同色(都是"这份输入不对") */
+    --viewer-hint-color: #94a3b8;
+    --viewer-error-color: #e11d48;
+
+    /* 分区标题 / 计数 / 空状态 */
+    --viewer-section-color: #cbd5e1;
+    --viewer-section-count-color: #64748b;
+
+    /* 检查状态:PASS(浅绿)/ FAIL(玫红),与旧界面的性质结论同色系 */
+    --viewer-pass-color: #4ade80;
+    --viewer-pass-bg: rgba(74, 222, 128, 0.16);
+    --viewer-fail-color: #fb7185;
+    --viewer-fail-bg: rgba(251, 113, 133, 0.16);
+
+    /* 行内的第二行说明 / 折叠区块 / 属性徽章 */
+    --viewer-row-detail-color: #cbd5e1;
+    --viewer-detail-bg: rgba(148, 163, 184, 0.12);
+    --viewer-detail-line-color: #cbd5e1;
+    --viewer-attr-color: #94a3b8;
+    --viewer-attr-bg: rgba(148, 163, 184, 0.14);
+    --viewer-color-border: #64748b;
+
+    /*
+     * JSON 词法着色:key(青)/ 字符串(绿)/ 数字(琥珀)/ 字面量(紫)/ 标点(弱化).
+     * 与旧表达式的着色同一套思路:结构符号弱化,值给颜色.
+     */
+    --viewer-token-key-color: #7dd3fc;
+    --viewer-token-string-color: #86efac;
+    --viewer-token-number-color: #fbbf24;
+    --viewer-token-literal-color: #c084fc;
+    --viewer-token-punct-color: #64748b;
+
+    /*
+     * 节点的颜色语义:JSON 的 `attrs.color` 是 red / black 时,节点圆用这两条填充.
+     * 这是**示例结构(红黑树)**的语义色,不是查看器的通用概念:别的结构用自己的
+     * attrs + 样式表表达语义.
+     */
+    --viewer-node-red-fill: #ff0000;
+    --viewer-node-black-fill: #000000;
+}

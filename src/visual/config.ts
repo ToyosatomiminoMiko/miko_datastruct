@@ -97,3 +97,38 @@ export const VISUAL_WHEEL_ZOOM_SENSITIVITY = 0.0015;
  */
 export const VISUAL_WHEEL_LINE_PIXELS = 16;
 export const VISUAL_WHEEL_PAGE_PIXELS = 800;
+
+// 中性场景的自动布局(见 visual/layout.ts)
+//
+// 布局只回答"节点彼此别撞、内容别挤成一团",不知道圆有多大:节点半径归
+// visual.css 的 `--visual-node-radius`,内容实际多大由渲染后 `getBBox()` 量.
+// 这些数只影响首屏观感,用户可以自己缩放,不追求像素级最优.
+
+/** 树形布局:相邻两层的垂直步长(px) */
+export const VISUAL_LAYOUT_TREE_LAYER_STEP = 70;
+
+/**
+ * 树形布局:同层相邻节点的最小中心距(px).
+ *
+ * 必须大于圆的直径(视觉层 `--visual-node-radius` 的 2 倍):布局不知道半径,
+ * 改视觉层令牌时要回来看一眼.与层距同值是"横竖留白一致"的默认观感.
+ */
+export const VISUAL_LAYOUT_TREE_MIN_GAP = 70;
+
+/** 多个连通分量并排时,分量之间的水平间隙(px) */
+export const VISUAL_LAYOUT_COMPONENT_GAP = 120;
+
+/** 环形布局:最少半径(px),节点很少时圆不至于缩成一个点 */
+export const VISUAL_LAYOUT_GRAPH_MIN_RADIUS = 110;
+
+/** 环形布局:圆周长上每个节点占的弧长(px),节点越多圆越大 */
+export const VISUAL_LAYOUT_GRAPH_CHORD = 110;
+
+/**
+ * 「定位」时的最小缩放下限:1 = 世界单位与屏幕像素 1:1.
+ *
+ * 整幅图很大时自动适应会把 k 压得很小(例如 0.2),定位到某个节点时按当时的 k
+ * 移过去,节点仍然只有几个像素.这里给一个"至少要能看清节点值"的下限:比它小的
+ * 视角在定位时抬到 0.8,比它大的保持用户自己的缩放(不打断手动放大).
+ */
+export const VISUAL_FOCUS_MIN_ZOOM = 0.8;

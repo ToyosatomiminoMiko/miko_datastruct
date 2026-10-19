@@ -296,8 +296,9 @@ python/
 - `scene=` 完全接管(矩阵 / 多重图这类默认图元拼不出来的结构);
 - Term 的**反向解码**(Term -> Python)与显式 `encode`;往返测试 / 分享链接会需要;
 - SVG / Graphviz / Matplotlib 后端,以及**布局**(像素坐标);
-- web 端**通用 Scene 消费**:一个把 Scene JSON 布局成 `VisualScene` 的通用布局器 +
-  读 JSON 的入口,以及视觉层补"有向箭头 / 无向边"两个图元。
+- web 端**通用 Scene 消费**:把 Scene JSON 布局成 `VisualScene` 的通用布局器 + 读 JSON 的
+  入口已在 web 侧落地(树 / 环形自动布局);还差视觉层补"有向箭头 / 无向边"两个图元,以及
+  把 `checks` 并进同一份 JSON 的输出契约(web 的输入契约见根目录 README)。
 
 ## 测试
 

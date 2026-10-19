@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <!--
-  红黑树工具的宿主页:页面上只有手写的一颗 `#app`,整块桌面由 `src/main.ts` 调 `mountRBT()` 长出来,
-  HTML 里没有第二处标记可改;样式也由 `src/main.ts` 按顺序 import,构建时抽出 <link>.
+  数据结构的 JSON 查看器宿主页:页面上只有手写的一颗 `#app`,整块桌面由 `src/main.ts` 调
+  `mountViewer()` 长出来,HTML 里没有第二处标记可改;样式也由 `src/main.ts` 按顺序 import,
+  构建时抽出 <link>.
 
-  `darkreader-lock`:节点的颜色就是数据,不被改写的两条 CSS 保护管不到 Dark Reader(它只认扩展
-  自己的这套锁);没有它会把黑节点反成白底、节点值仍是白字,圆和数字同色读不出来.
+  `darkreader-lock`:节点的颜色就是数据(例如红黑树的红 / 黑),不被改写的两条 CSS 保护管不到
+  Dark Reader(它只认扩展自己的这套锁);没有它会把黑节点反成白底、节点值仍是白字,圆和数字
+  同色读不出来.
 -->
 <html lang="zh-CN">
 
@@ -13,7 +15,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- 让 Dark Reader 别改这个页面:扩展自己的约定,不是标准 -->
     <meta name="darkreader-lock" />
-    <title>Red-Black Tree</title>
+    <title>Data Structure Viewer</title>
 </head>
 
 <body>

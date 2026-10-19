@@ -10,6 +10,7 @@ import { create_svg_element } from 'miko_ui';
 
 import {
     VISUAL_FIT_MAX_ZOOM,
+    VISUAL_FOCUS_MIN_ZOOM,
     VISUAL_MAX_ZOOM,
     VISUAL_MIN_ZOOM,
     VISUAL_WHEEL_LINE_PIXELS,
@@ -280,6 +281,37 @@ describe('平面视口:手势绑定', () => {
         // 自动模式真的回来了:下一次重绘又会跟着内容走
         viewport.contentChanged(box(0, 0, 200, 200));
         expect(readTransform(world).x).toBeCloseTo((1000 - 200) / 2, 6);
+    });
+
+    it('focusPoint:把世界点移到可用区正中;视角太小时抬到可读下限,之后重绘不再抢视角', () => {
+        const { world, viewport } = mountViewport();
+        // 4000×400 装进视口:靠宽度缩到 ~0.33,定位时按这个比例移过去节点只有几个像素
+        viewport.contentChanged(box(0, 0, 4000, 400));
+        const fitted = readTransform(world);
+        expect(fitted.k).toBeLessThan(VISUAL_FOCUS_MIN_ZOOM);
+
+        viewport.focusPoint(1234, 56);
+
+        const focused = readTransform(world);
+        expect(focused.k).toBe(VISUAL_FOCUS_MIN_ZOOM);
+        // 可用区 = 视口扣掉顶部任务栏带(40)后的那块,点对到它的正中
+        expect(focused.x).toBeCloseTo(1000 / 2 - 1234 * focused.k, 6);
+        expect(focused.y).toBeCloseTo(40 + (800 - 40) / 2 - 56 * focused.k, 6);
+
+        // 定位是用户显式动作:进入手动模式,内容再变也不把视角拉走
+        viewport.contentChanged(box(0, 0, 10, 10));
+        expect(readTransform(world)).toEqual(focused);
+    });
+
+    it('focusPoint:用户已经放大过就保持自己的缩放,只移动中心', () => {
+        const { host, world, viewport } = mountViewport();
+        viewport.contentChanged(box(0, 0, 200, 100));
+        wheel(host, 500, 400, -100);
+        const zoomed = readTransform(world);
+        expect(zoomed.k).toBeGreaterThan(VISUAL_FOCUS_MIN_ZOOM);
+
+        viewport.focusPoint(0, 0);
+        expect(readTransform(world).k).toBeCloseTo(zoomed.k, 6);
     });
 
     it('连续两次左键按下不再被当成回正(双击判定与计时已删)', () => {

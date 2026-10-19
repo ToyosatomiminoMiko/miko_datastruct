@@ -10,3 +10,6 @@ python/out/
 # ui:unlink` 还原成 npm 版;两条都只动这里被忽略的目录,不碰 package.json 与 lock.
 # 链接状态下 Vite 的 server.fs.allow 由 vite.config.ts 的 libraryServeDirs() 自动
 # 补上库的真身目录(否则库样式表里 url() 引的 woff2 请求会 403 并静默退回回退字体).
+
+# headful-browser 的本地运行时目录(截图 / profile;不是项目产物)
+.browser-runtime/

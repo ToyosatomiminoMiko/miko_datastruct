@@ -7,10 +7,9 @@
  * src/ui/<结构>/tokens.css.
  *
  * 跨语言约束(改这里要回项目里看一眼,不一致时不会有任何报错):`--visual-node-radius`
- * 只在 CSS 这一侧定义,TS 不读它(内容占多大由渲染层向浏览器要 `getBBox()`);每个结构的
- * 布局必须保证同层相邻节点的中心距大于 2 × 这个半径,否则两个圆会叠在一起(红黑树这一条
- * 在 src/ui/rbt/config.ts 的 `RBT_MIN_HORIZONTAL_GAP`).进入动画的时长也只有 CSS 一处
- * (纯 CSS 动画,TS 侧不参与).
+ * 只在 CSS 这一侧定义,TS 不读它(内容占多大由渲染层向浏览器要 `getBBox()`);自动布局的
+ * 同层最小中心距必须大于 2 × 这个半径,否则两个圆会叠在一起(这一条是 src/visual/config.ts
+ * 的 `VISUAL_LAYOUT_TREE_MIN_GAP`).进入动画的时长也只有 CSS 一处(纯 CSS 动画,TS 不参与).
  */
 :root {
     /* 节点:半径 / 默认填充(没有语义变体时用)/ 值文字颜色与字号 */

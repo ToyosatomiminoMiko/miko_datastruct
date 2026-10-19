@@ -1,0 +1,306 @@
+@import '@/ui/viewer/tokens.css';
+
+/*
+ * JSON 查看器样式:编辑器 / 性质检查列表 / 帮助窗口 / 红黑树示例的节点变体.
+ *
+ * 标记由 ui/viewer/viewer_views.ts 生成(绘制面三层由视觉层 visual/surface.ts 建),
+ * 类名与文案在 config.ts.窗口外壳 / 编辑器外框 / 行外壳 / 徽章 / 按钮的基线归库的
+ * miko_ui/styles/{desktop,editor,widgets}.css;本文件只补查看器自己的增量:
+ * 窗口正文的滚动与内边距、JSON 词法颜色、两个列表窗口的排版、检查详情、节点变体配色.
+ *
+ * 平面绘制面 / 节点形状 / 值文字 / 指针线段 / 进入动画这些**所有结构共用**的观感在
+ * src/visual/visual.css;本文件最后只剩"color: red / black 长什么样".
+ */
+
+/* 窗口正文根(类名 `ui-scrollbar` 由库的 scrollbar.css 给外观):滚动归这一层 */
+#viewerEditorPanel,
+#viewerEntityPanel,
+#viewerCheckPanel,
+#viewerHelpPanel {
+    overflow: auto;
+    padding: var(--viewer-window-padding);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/*
+ * JSON 窗口的正文根是一列:编辑器宿主占满整高,提示 / 错误行在它下面.
+ * `.code-editor` 的 `min-height: 100%` 需要宿主高度确定才解析得出来;提示行出现时
+ * 由它让出高度(不让编辑器把错误行挤到窗口外).
+ */
+#viewerEditor {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#viewerEditor .code-editor {
+    min-height: max(100%, var(--viewer-input-min-height));
+}
+
+/*
+ * 占位文案:高亮层就位时 textarea 文字是透明的(`.is-highlighted`),而 `::placeholder`
+ * 的颜色在 Chromium 里由 currentColor 派生,会跟着一起看不见;显式给色并写回 opacity.
+ */
+#viewerEditor .code-editor-textarea::placeholder {
+    color: var(--viewer-hint-color);
+    opacity: 1;
+}
+
+/*
+ * JSON 词法着色:类名由 ui/viewer/viewer_highlight.ts 产出,颜色引 tokens.css.
+ * 库的样式表里没有任何 JSON 语言的颜色规则可覆盖(它不认识任何具体语言).
+ */
+#viewerEditor .viewer-token--key {
+    color: var(--viewer-token-key-color);
+}
+
+#viewerEditor .viewer-token--string {
+    color: var(--viewer-token-string-color);
+}
+
+#viewerEditor .viewer-token--number {
+    color: var(--viewer-token-number-color);
+}
+
+#viewerEditor .viewer-token--literal {
+    color: var(--viewer-token-literal-color);
+}
+
+#viewerEditor .viewer-token--punct {
+    color: var(--viewer-token-punct-color);
+}
+
+/* 提示 / 错误行:中性说明与解析失败共用一颗元素,类名决定颜色 */
+#viewerMessage {
+    margin: 0;
+    font-family: var(--font-code);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#viewerMessage.viewer-hint {
+    color: var(--viewer-hint-color);
+}
+
+#viewerMessage.viewer-error {
+    color: var(--viewer-error-color);
+    overflow-wrap: anywhere;
+}
+
+/*
+ * 两个列表窗口顶部的一行说明:实体是"共 N 个节点",检查是"n 条中 m 条 FAIL".
+ * 窗口标题(实体 / 检查)就是分组标识,窗口里不再重复一遍组名.
+ */
+.viewer-list-count,
+.viewer-check-summary {
+    margin: 0;
+    font-family: var(--font-code);
+    font-size: 12px;
+    color: var(--viewer-section-count-color);
+}
+
+/* 帮助窗口里的分区标题 */
+.viewer-section-title {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--viewer-section-color);
+    letter-spacing: 0.02em;
+}
+
+.viewer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.viewer-empty {
+    margin: 0;
+    font-size: 12px;
+    color: var(--viewer-hint-color);
+}
+
+/*
+ * 行内排版:
+ * - 实体行第一行是"label + 颜色 + 属性徽章",可以换行;
+ * - 检查行的摘要行(折叠态可见)第一行是"状态徽章 + 检查名",第二行整行是
+ *   `detail`(flex-basis 100% 把它挤到第二行,与 graphcalc 的求值行同形).
+ */
+.entity-row > .row-main,
+.check-row > .row-main {
+    row-gap: 5px;
+}
+
+.entity-row .object-name,
+.check-row .object-name {
+    font-size: 15px;
+    color: var(--color-text);
+}
+
+/* 颜色属性:色块 + 明文值(只画色块等于只靠颜色传达信息) */
+.viewer-color {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    color: var(--viewer-attr-color);
+}
+
+.viewer-color-swatch {
+    width: 10px;
+    height: 10px;
+    border: 1px solid var(--viewer-color-border);
+    border-radius: 2px;
+    /* 值由 EntityItem 用内联 CSS 变量写入,查看器不改写颜色字符串 */
+    background: var(--viewer-attr-color-value, transparent);
+}
+
+.viewer-color-code {
+    font-family: var(--font-code);
+    font-size: 11px;
+    color: inherit;
+}
+
+/* 其余属性:key: value 小徽章,可换行 */
+.viewer-attr {
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-code);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--viewer-attr-color);
+    background: var(--viewer-attr-bg);
+    overflow-wrap: anywhere;
+}
+
+/* 检查行第二行说明:整行独占 */
+.viewer-row-detail {
+    flex: 1 0 100%;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--viewer-row-detail-color);
+    overflow-wrap: anywhere;
+}
+
+/* 检查状态徽章:叠在库的 `.ui-badge` 基线上,只覆盖配色与字重 */
+.check-state {
+    min-width: 44px;
+    font-family: var(--font-code);
+    font-weight: bold;
+}
+
+.check-state.is-pass {
+    color: var(--viewer-pass-color);
+    background: var(--viewer-pass-bg);
+}
+
+.check-state.is-fail {
+    color: var(--viewer-fail-color);
+    background: var(--viewer-fail-bg);
+}
+
+/* 检查摘要行的内容:折叠区块里是 <summary> 的孩子,无折叠区块时是自己 */
+.viewer-summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+}
+
+/*
+ * 检查折叠区块的 <summary>:两行内容 + 自绘的展开三角.
+ *
+ * 不依赖原生的 `::marker`:它要 `display: list-item`,与"一行 flex 排布 + 第二行整行
+ * 说明"的布局打架(实测三角会占掉一块、把内容挤到下一行).这里把原生三角关掉,用
+ * `::before` 画一个随 [open] 旋转的小三角 -- 位置与内容基线对齐,不参与内容换行.
+ */
+.viewer-details > .viewer-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.viewer-details > .viewer-summary::-webkit-details-marker {
+    display: none;
+}
+
+.viewer-details > .viewer-summary::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    margin-top: 6px;
+    border-left: 5px solid var(--viewer-section-count-color);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 0.15s ease;
+}
+
+.viewer-details[open] > .viewer-summary::before {
+    transform: rotate(90deg);
+}
+
+/* 内容块吃掉 summary 里除三角外的宽度,两行排布仍由 `.viewer-summary-row` 负责 */
+.viewer-details > .viewer-summary > .viewer-summary-row {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* 检查行折叠区块:默认收起,展开细节的视觉与 graphcalc 求值行同形 */
+.viewer-details {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.viewer-details-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 4px 0 2px;
+    padding: 6px 8px;
+    border-left: 2px solid var(--color-accent-line);
+    border-radius: 0 2px 2px 0;
+    background: var(--viewer-detail-bg);
+}
+
+.viewer-detail-line {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--viewer-detail-line-color);
+    overflow-wrap: anywhere;
+}
+
+/* 帮助窗口:组标题 + 若干行说明 */
+.viewer-help-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.viewer-help-line {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--color-text-muted);
+    overflow-wrap: anywhere;
+}
+
+/*
+ * 红黑树示例的节点配色:颜色是数据,`attrs.color` 的 red / black 由查看器翻译成
+ * 视觉变体 `visual-node--red/black`(见 ui/viewer/viewer_format.ts),这里只给变体上色.
+ * 选择器带 `#viewerTree`:红 / 黑是这份示例的语义,别的结构即使用了同名变体也不该被
+ * 这份样式命中.
+ */
+#viewerTree .visual-node--red .visual-node__shape {
+    fill: var(--viewer-node-red-fill);
+}
+
+#viewerTree .visual-node--black .visual-node__shape {
+    fill: var(--viewer-node-black-fill);
+}

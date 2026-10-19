@@ -12,6 +12,7 @@
 import { bindDragGesture } from 'miko_ui';
 import {
     VISUAL_FIT_MAX_ZOOM,
+    VISUAL_FOCUS_MIN_ZOOM,
     VISUAL_MAX_ZOOM,
     VISUAL_MIN_ZOOM,
     VISUAL_PLANE_FIT_PADDING,
@@ -166,6 +167,15 @@ export interface PlaneViewportHandle {
      * 内容还没报过(如场景为空 / 测试环境量不到包围盒)时什么都不做.
      */
     fitViewport(): void;
+    /**
+     * 定位到世界坐标里的一个点:把它移到视口可用区的正中.
+     *
+     * 缩放取"用户当前缩放"与 `VISUAL_FOCUS_MIN_ZOOM` 的较大者:整幅图很大时自动
+     * 适应会把视角压得很小,按那个比例移过去节点仍只有几个像素.定位是用户显式
+     * 动作,所以进入手动模式(`manual = true`),之后重绘不再自动把视角拉走;要回
+     * 自动适应走「回正视图」.
+     */
+    focusPoint(x: number, y: number): void;
     /** 拆掉监听与观察者 */
     dispose(): void;
 }
@@ -282,6 +292,15 @@ export function mountPlaneViewport(
             // 手动挪过的视角由这次点击交回自动适应:先复位,再按最近内容装
             manual = false;
             fit();
+        },
+        focusPoint(x: number, y: number): void {
+            manual = true;
+            const zoom = Math.max(view.k, VISUAL_FOCUS_MIN_ZOOM);
+            // 可用区 = 扣掉顶部任务栏带之后的那块;点对到它的正中
+            const centerX = host.clientWidth / 2;
+            const centerY = options.topInset + (host.clientHeight - options.topInset) / 2;
+            view = { k: zoom, x: centerX - x * zoom, y: centerY - y * zoom };
+            apply();
         },
         dispose(): void {
             observer?.disconnect();

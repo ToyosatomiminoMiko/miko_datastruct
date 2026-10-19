@@ -1,8 +1,8 @@
 /*
  * 红黑树表达式的解析:字符串 -> `RbtNode | null`.
  *
- * 只管输入格式:树的形状与性质检查在 datastruct/rbt/rbt_tree.ts,错误文案由显示层的
- * src/ui/rbt/rbt_format.ts 拼(这里只抛错误码 + 出错片段).
+ * 只管输入格式:树的形状与性质检查在 datastruct/rbt/rbt_tree.ts;这里只抛错误码 + 出错
+ * 片段,给人看的句子由调用方拼.
  */
 import type { RbtColor, RbtNode } from './rbt_tree';
 
@@ -133,8 +133,8 @@ function parseNode(str: string): RbtNode | null {
 }
 
 /**
- * 把表达式解析成一棵树;空表达式给 `null`(空树).失败一律抛 `RbtParseError`,由挂载方
- * 交给 src/ui/rbt/rbt_format.ts 变成输出区里的一行错误.
+ * 把表达式解析成一棵树;空表达式给 `null`(空树).失败一律抛 `RbtParseError`,由调用方
+ * 把错误码 + 出错片段拼成一句人话.
  *
  * 这里不包 `console.error`:解析失败是预期内的用户输入错误,不该往控制台和测试的 stderr 刷屏.
  */
