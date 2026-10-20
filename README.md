@@ -67,6 +67,12 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 > `0.1.18` 还没有.本地 `ui:link` 时看不到差别;`npm ci` 出来的版本会退回"任务栏菜单按钮
 > 比同排低 1px"(浮层仍能开合 -- 走 `viewer.css` 里 `0.1.18 过渡`那条).库发版 + 升依赖
 > 之后再删那条过渡规则,本地与线上才完全一致.
+>
+> **同样的口径也适用于演示控制窗口**:它现在用库的独立浮窗 `mountFloatingWindow`(以及
+> `createWindowFrame` / `WindowConfigEntry` 的按轴缩放 `resize`),这是 `miko_ui` 工作副本里
+> 新增的公开 API,已发 npm 版还没有.本地 `ui:link` + `npm run build:dist` 正常;`npm ci`
+> 出来的版本会在 typecheck 阶段报 `no exported member 'mountFloatingWindow'`.库发一版并
+> 把这里的 `miko_ui` 依赖升到该版本之后,CI / 部署才重新成立.
 
 `vite.config.ts` 的 `base` 是部署路径的**唯一开关**(现在写成 `/miko_datastruct/`,与仓库名
 一致);换仓库名或换子路径只改那一处.
@@ -344,7 +350,7 @@ src/ui/viewer/viewer_chrome.ts   JSON 窗口标题栏:示例 / RUN 按钮 + 示�
 src/ui/viewer/demo_scenarios.ts  7 个演示剧本(初始结构 + 操作序列 + 检查 id + 章节)
 src/ui/viewer/demo_player.ts     播放器状态机:虚拟时钟 / 步骤 / 镜头请求 / 列表同步
 src/ui/viewer/demo_views.ts      演示控制条 / 章节进度条 / 键盘绑定
-src/ui/viewer/demo_window.ts     演示控制窗口:库窗口外壳 + 标题栏拖动 + 横向缩放 + 镜头避让几何
+src/ui/viewer/demo_window.ts     演示控制窗口:库独立浮窗 + 几何声明 + 镜头避让几何
 src/ui/viewer/viewer.ts         挂载:装配桌面 + 视口 + RUN / 示例 / 演示 / 检查配置的全流程
 src/ui/viewer/viewer_views.ts   桌面背景与六扇窗口正文(纯函数;诊断窗口用库的 createMessageArea)
 src/ui/viewer/viewer_items.ts   实体行 / 检查行(RowList 的两种行对象)
@@ -420,10 +426,10 @@ SVG.之后依次做过:编辑器换成库的 `CodeEditor`、面板换成桌面�
   (`visual/viewport.ts`)、演示播放器与控制窗口(`ui/viewer/demo_*`),内置 3 个 BST 剧本
   (原理 / 旋转 / 退化)与 4 个 RBT 剧本(入门 / 生根 / 综合插入 / 删除).设计见
   [`docs/animation.md`](docs/animation.md);M5(自由操作沙盒 / BST·RBT 对照 / 写回 JSON)未做.
-- 2026-10 补:演示浮条改成**独立控制窗口**:用库公开的 `createWindowFrame` + `bindDragGesture`
-  建外壳与拖动(库本身不改),高度固定 180、宽度初始 880 并可拖东西两边调宽(只留两根横向
-  手柄),没有 min / max;贴底时仍作为镜头底部避让带,拖离下沿后不再扣.窗口随演示会话
-  现建现拆,不进任务栏 /「全部还原」.
+- 2026-10 补:演示浮条改成**独立控制窗口**:用库的独立浮窗 `mountFloatingWindow` 建壳 /
+  拖动 / 按轴缩放 / 夹取,高度固定 180、宽度初始 880 并可拖东西两边调宽
+  (`resize: 'horizontal'` 只建两根横向手柄),没有 min / max;贴底时仍作为镜头底部避让带,
+  拖离下沿后不再扣.窗口随演示会话现建现拆,不进任务栏 /「全部还原」.
 - 2026-10 补:任务栏「演示」按钮外面那层 `.menu-anchor`(库的浮层 DOM 分组)**修在库侧**:
   锚点改成 `display: contents`,不生成盒子、不参与布局 -- 包不包这层 div,按钮在
   `.dock-actions` 里的矩形完全一致,不再比同排按钮低 1px.没有盒子就当不了绝对定位的

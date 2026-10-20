@@ -507,9 +507,9 @@ export function mountViewer(host: HTMLElement): void {
         });
         bar.element.id = VIEWER_DOM.demoBarId;
         /*
-          控制条装进一扇**独立窗口**(库的窗口外壳:固定大小、标题栏可拖).它只在
-          演示模式存在,所以不进桌面窗口清单 / 任务栏;用库的 createWindowFrame 现建
-          现拆,不改库.
+          控制条装进一扇**独立窗口**(库的浮窗通用件:固定高度、宽度可拖、标题栏
+          可拖).它只在演示模式存在,所以不进桌面窗口清单 / 任务栏;用
+          `createDemoWindow` 现建现拆.
 
           镜头避让带按窗口**当前位置**算:贴桌面下沿时扣掉它占的底部高度;用户把窗口
           拖到画布中间后就不再扣(否则等于给一个不存在的遮挡留白).
@@ -524,7 +524,6 @@ export function mountViewer(host: HTMLElement): void {
             });
         };
         const demoWindow = createDemoWindow({
-            host,
             layer: desktop.windowLayer,
             title: VIEWER_DEMO_WINDOW_TITLE,
             content: bar.element,
