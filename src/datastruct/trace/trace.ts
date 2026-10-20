@@ -75,7 +75,7 @@ export interface TraceStep {
     readonly document: SceneDocument;
     /** 步骤标题(粗体一行) */
     readonly title: string;
-    /** 步骤说明(最多两行;长文本由浮条省略) */
+    /** 步骤说明(最多两行;长文本由控制条省略) */
     readonly detail: string;
     /** 镜头对准的节点 key;不给 = 保持当前镜头 */
     readonly focus?: number;

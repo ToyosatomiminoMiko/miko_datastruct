@@ -14,7 +14,7 @@
  *
  * 为什么要端口(ports)而不是直接抓 DOM:
  * - 纯逻辑测试可以注入手动时钟 + 记录端口,同步断言"第几步画了什么、镜头去了哪";
- * - 落笔 / 检查列表 / 浮条分属不同层,播放器只发指令,不 import 它们.
+ * - 落笔 / 检查列表 / 控制条分属不同层,播放器只发指令,不 import 它们.
  *
  * 减少动态效果(reduced-motion)下:结构过渡与镜头都瞬移,但步骤仍可自动 / 手动前进.
  */
@@ -44,7 +44,7 @@ export const DEMO_TRANSITION_MS = 420;
 export const DEMO_HOLD_MIN_MS = 700;
 export const DEMO_HOLD_MAX_MS = 1800;
 
-/** 播放器对外状态(浮条按它刷新按钮 / 进度 / 速度) */
+/** 播放器对外状态(控制条按它刷新按钮 / 进度 / 速度) */
 export interface DemoPlayerSnapshot {
     readonly status: 'idle' | 'playing' | 'paused';
     /** 当前步骤(过渡中 = 目标步骤) */
@@ -68,7 +68,7 @@ export interface DemoPlayerPorts {
     /** 落到确定的一帧:写精确值、移除退场元素(落笔层会量一次包围盒) */
     settle(scene: MotionScene): void;
     /**
-     * 列表 / 检查窗口 / 浮条换成这一拍.
+     * 列表 / 检查窗口 / 控制条换成这一拍.
      *
      * 同时给出**锚定后的布局**:行末「定位」要按画面上真实坐标飞过去,而不是按
      * 未锚定的原始布局(两者差一次整帧平移).
@@ -210,7 +210,7 @@ export function cameraRequestForStep(step: TraceStep, points: ReadonlyMap<number
 /**
  * 建一个演示播放器.
  *
- * 构造时立刻落到第 0 拍(调用方在此之后再显示浮条):先把场景落定,再发第 0 拍的
+ * 构造时立刻落到第 0 拍(调用方在此之后再显示控制窗口):先把场景落定,再发第 0 拍的
  * 镜头请求(instant).之后所有时间推进都由 `clock` 驱动.
  */
 export function createDemoPlayer(options: DemoPlayerOptions): DemoPlayerHandle {

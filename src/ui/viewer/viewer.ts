@@ -34,8 +34,8 @@ import '@/ui/viewer/viewer.css';
 
 import {
     VIEWER_DEMO_ACTION_ID,
-    VIEWER_DEMO_BAR_GAP,
     VIEWER_DEMO_MENU_LABEL,
+    VIEWER_DEMO_WINDOW_TITLE,
     VIEWER_DESKTOP_INSET,
     VIEWER_DESKTOP_WINDOWS,
     VIEWER_DOCK_ACTIONS,
@@ -73,6 +73,11 @@ import {
 } from '@/ui/viewer/demo_player';
 import { findDemoScenario, demoScenarioMenuGroups } from '@/ui/viewer/demo_scenarios';
 import { bindDemoKeys, createDemoBar, type DemoBarHandle } from '@/ui/viewer/demo_views';
+import {
+    createDemoWindow,
+    demoWindowDocked,
+    type DemoWindowHandle,
+} from '@/ui/viewer/demo_window';
 import { createRafClock, prefersReducedMotion } from '@/visual/tween';
 import {
     DEFAULT_VIEWER_EXAMPLE,
@@ -95,6 +100,7 @@ import {
     create_element,
     mountDesktop,
     seedTextareaSource,
+    type AbsoluteGeometry,
     type CodeEditorHandle,
     type DesktopHandle,
     type MenuHandle,
@@ -209,11 +215,13 @@ export function mountViewer(host: HTMLElement): void {
 
       库的动作按钮只给 `data-dock-action` 与点击上报,不提供"自定义触发元素"的入口;
       这里做两件事把菜单接上:
-      1. 把按钮包进 `.menu-anchor`(库的浮层定位锚点:CSS 里 `.menu-popover` 相对它
-         `top:100%; left:0`);
+      1. 把按钮包进 `.menu-anchor`(库的浮层 DOM 分组:`display: contents`,零盒子,
+         不参与布局 -- 包不包这层 div,按钮在 `.dock-actions` 里的矩形完全一样);
       2. 在同一锚点里放一份菜单面板,交给 createMenu 做开合 / 选中.
+      落点不归应用:库的 `Popover` 打开时量触发件,写 `left/top/min-width`,视口边上
+      自动翻转 / 夹取(见 `miko_ui/src/widgets/overlayPlacement.ts`).
       按钮本身仍是库建的 `createButton`,类名与点击语义不变;这只是把现成节点挪进
-      一个定位容器,不复制按钮.
+      一个 DOM 分组,不复制按钮.
     */
     const dockDemoButton = desktop.dock.querySelector<HTMLButtonElement>(
         `[data-dock-action="${VIEWER_DEMO_ACTION_ID}"]`,
@@ -243,14 +251,16 @@ export function mountViewer(host: HTMLElement): void {
     let demoSession: DemoSession | null = null;
 
     /**
-     * 一次演示会话:播放器 + 浮条 + 增量落笔器 + 进入前的窗口状态.
+     * 一次演示会话:播放器 + 控制窗口 / 控制条 + 增量落笔器 + 进入前的窗口状态.
      *
      * 窗口状态在进入时快照,退出时按它恢复:演示只"临时让出画面",不改用户原来的
-     * 六窗口布局(docs/animation.md §9.2).
+     * 六窗口布局(docs/animation.md §9.2).控制窗口不进那六扇的状态机,随会话现建现拆.
      */
     interface DemoSession {
         readonly player: DemoPlayerHandle;
         readonly bar: DemoBarHandle;
+        /** 装控制条的窗口(固定大小、标题栏可拖;退出时随会话拆掉) */
+        readonly window: DemoWindowHandle;
         readonly painter: ScenePainter;
         readonly savedWindows: ReadonlyMap<ViewerWindowId, 'normal' | 'maximized' | 'minimized'>;
         /** 进入前的「检查配置」编辑器内容:演示改了它,退出要还原(否则静态检查配置与画面对不上) */
@@ -446,11 +456,12 @@ export function mountViewer(host: HTMLElement): void {
     };
 
     /**
-     * 进入演示:保存并最小化部分窗口 -> 写检查配置 -> 建浮条 / 落笔器 / 播放器.
+     * 进入演示:保存并最小化部分窗口 -> 写检查配置 -> 建控制窗口 / 落笔器 / 播放器.
      *
-     * 顺序上先起浮条再建播放器:播放器构造时会立刻发第 0 拍的 `state`,浮条必须已经在.
-     * 进入演示**不改 JSON 编辑器**(演示是"看",编辑器是"改";docs/animation.md §9.4),
-     * 只把剧本的检查 id 写进检查配置窗口,让检查窗口按同一套口径算.
+     * 顺序上先起控制条与窗口再建播放器:播放器构造时会立刻发第 0 拍的 `state`,
+     * 控制条必须已经在.进入演示**不改 JSON 编辑器**(演示是"看",编辑器是"改";
+     * docs/animation.md §9.4),只把剧本的检查 id 写进检查配置窗口,让检查窗口按
+     * 同一套口径算.
      */
     function enterDemo(id: string): void {
         const scenario = findDemoScenario(id);
@@ -477,7 +488,7 @@ export function mountViewer(host: HTMLElement): void {
         seedTextareaSource(checkInput, dumpCheckConfig(scenario.checkIds));
         checkEditor.refresh();
 
-        // ③ 浮条 + 键盘.先建浮条,播放器构造时就能按快照刷新它.
+        // ③ 控制窗口 + 键盘.先建控制条与窗口,播放器构造时就能按快照刷新它.
         const trace = scenario.build();
         let playerRef: DemoPlayerHandle | null = null;
         const bar = createDemoBar({
@@ -495,27 +506,30 @@ export function mountViewer(host: HTMLElement): void {
             onFollow: (follow) => playerRef?.setFollow(follow),
         });
         bar.element.id = VIEWER_DOM.demoBarId;
-        host.append(bar.element);
         /*
-          浮条别压住「检查」窗口:检查窗口是演示里唯一保留的窗口(不变量现场),浮条
-          压在它下沿会把 FAIL 行 / 展开细节挡掉.所以浮条横跨"检查窗口左边的整条
-          可见带",而不是死板地按 70vw 居中(那个宽度在 1400px 窗口下会伸进检查窗口
-          200 多像素).窗口被用户拖走时按进入时的几何算一次;演示期间不再跟踪.
+          控制条装进一扇**独立窗口**(库的窗口外壳:固定大小、标题栏可拖).它只在
+          演示模式存在,所以不进桌面窗口清单 / 任务栏;用库的 createWindowFrame 现建
+          现拆,不改库.
+
+          镜头避让带按窗口**当前位置**算:贴桌面下沿时扣掉它占的底部高度;用户把窗口
+          拖到画布中间后就不再扣(否则等于给一个不存在的遮挡留白).
         */
-        const checkGeometry = desktop.windows.getGeometry(VIEWER_WINDOW_CHECK);
-        const barAreaWidth = host.clientWidth > 0
-            ? host.clientWidth
-            : Math.max(checkGeometry.x + checkGeometry.w, 0);
-        bar.element.style.left = `${VIEWER_DEMO_BAR_GAP}px`;
-        bar.element.style.right = `${Math.max(
-            VIEWER_DEMO_BAR_GAP,
-            barAreaWidth - checkGeometry.x + VIEWER_DEMO_BAR_GAP,
-        )}px`;
-        bar.element.style.width = 'auto';
-        bar.element.style.transform = 'none';
-        const barHeight = bar.element.getBoundingClientRect().height;
-        // 浮条本身是镜头的避让区:底部 inset = 浮条高度 + 一条间距
-        viewport.setInsets({ top: DEFAULT_DESKTOP_CONFIG.dockReserve, bottom: barHeight > 0 ? barHeight + VIEWER_DEMO_BAR_GAP : 0 });
+        const applyDemoInsets = (geometry: AbsoluteGeometry): void => {
+            const desktopHeight = host.clientHeight;
+            viewport.setInsets({
+                top: DEFAULT_DESKTOP_CONFIG.dockReserve,
+                bottom: demoWindowDocked(geometry, desktopHeight)
+                    ? Math.max(0, desktopHeight - geometry.y)
+                    : 0,
+            });
+        };
+        const demoWindow = createDemoWindow({
+            host,
+            layer: desktop.windowLayer,
+            title: VIEWER_DEMO_WINDOW_TITLE,
+            content: bar.element,
+            onGeometryChange: applyDemoInsets,
+        });
 
         const keys = new AbortController();
         const painter = new ScenePainter(worldEl);
@@ -581,11 +595,11 @@ export function mountViewer(host: HTMLElement): void {
             exit: () => exitDemo(),
         }, keys.signal);
 
-        demoSession = { player, bar, painter, savedWindows, savedCheckConfig, keys };
+        demoSession = { player, bar, window: demoWindow, painter, savedWindows, savedCheckConfig, keys };
     }
 
     /**
-     * 退出演示:停播放器 / 拆浮条与落笔器 / 恢复窗口状态 / 把最后一次静态结构画回来.
+     * 退出演示:停播放器 / 拆控制窗口与落笔器 / 恢复窗口状态 / 把最后一次静态结构画回来.
      *
      * 恢复的是**进入前的窗口状态**(最小化 / 最大化都还原);JSON 编辑器内容从头到尾
      * 没被演示改过,所以画回来的仍是用户输入的那份结构.
@@ -598,6 +612,7 @@ export function mountViewer(host: HTMLElement): void {
         session.keys.abort();
         session.player.dispose();
         session.bar.dispose();
+        session.window.dispose();
         session.painter.dispose();
 
         for (const [windowId, state] of session.savedWindows) {

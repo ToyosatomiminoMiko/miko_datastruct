@@ -35,6 +35,14 @@
 
     /* 正文文字色 */
     --app-text-page: #dee2e6;
+
+    /*
+     * 全站直角:项目不出现圆角
+     */
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-pill: 0px;
+    --radius-round: 0px;
 }
 
 /*
@@ -44,6 +52,15 @@
  */
 * {
     box-sizing: border-box;
+}
+
+/*
+ * 全站直角(兜底):任何元素的圆角都钉在 0
+ */
+*,
+*::before,
+*::after {
+    border-radius: 0;
 }
 
 html,

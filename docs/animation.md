@@ -436,7 +436,7 @@ linkEndpoints(from: VisualPoint, to: VisualPoint, laneOffset: number): { start, 
 1. 把目标计算提成纯函数(不改变现有行为);
 2. 从当前 `PlaneViewState` **插值**到目标,而不是瞬间赋值;
 3. 让用户手势能打断;
-4. 给演示底部的浮条留出 `bottomInset`(现在只有顶部任务栏的 `topInset`)。
+4. 给演示控制窗口留出 `bottomInset`(贴底时扣;现在只有顶部任务栏的 `topInset`)。
 
 ```ts
 // visual/viewport.ts —— 实际签名(取景数学都是纯函数,句柄方法负责动画)
@@ -679,30 +679,43 @@ BST 有序。每点亮一条,画面上对应位置闪一下(根、一对红父�
   2. 把剧本的 `checkIds` 写进「检查配置」窗口(与载入示例同一套做法,退出时还原);
   3. 生成轨迹,进入演示模式。
 - JSON 窗口标题栏仍然只放「示例 / RUN」:演示是**桌面级模式入口**,与「回正视图」同属
-  任务栏动作区;但**播放控制**不进任务栏,播放 / 单步 / 退出都在底部浮条上。
+  任务栏动作区;但**播放控制**不进任务栏:控制条装在一扇独立的演示窗口里(高度固定、
+  宽度可拖,标题栏可拖,见 §9.3)。
 
 ### 9.2 演示模式的窗口处理
 
 - 最小化 `JSON` / `检查配置` / `诊断` / `帮助`,保留 `检查`(不变量是教学的一部分),
   `实体` 可保留也可收起(默认最小化,减少干扰);
 - 退出时恢复进入前的窗口状态(用 `desktop.windows.setMinimized(id, before)`);
-- 背景画布 **不换 DOM**,只把可见区让出来;顶部任务栏与底部浮条都作为镜头避让区
-  (`insets.top / insets.bottom`)。
+- 背景画布 **不换 DOM**,只把可见区让出来;顶部任务栏始终占 `insets.top`,演示控制
+  窗口贴桌面下沿时占 `insets.bottom`(拖离下沿后不再占,见 §9.3);
+- 控制窗口**不进**窗口清单 / 任务栏,也不参与最小化 /「全部还原」:它随演示会话
+  现建现拆(用库公开的 `createWindowFrame` + `bindDragGesture`,库本身不改)。
 
-### 9.3 底部浮条(演示控制)
+### 9.3 演示控制窗口
+
+控制条装进一扇**独立窗口**(库的窗口外壳 `createWindowFrame`):高度固定、宽度可拖、
+标题栏可拖,只随演示会话存在。它不进桌面窗口清单 / 任务栏,也不参与最小化 /「全部还原」;
+不挂 min / max 按钮,手柄只留东西两根(纵向没有缩放入口):高度固定取 `config.ts` 的常量,
+宽度在常量下限与桌面宽之间可调。
 
 ```text
+演示                                   ← 窗口标题栏:拖动起手区(纵向固定,横向可拖)
 [剧本名]        [3 / 18]   [◀ 上一步][⏸ 播放/暂停][下一步 ▶]   [0.5×|1×|2×]  [跟随镜头]  [退出]
 步骤标题(粗体,一行)
 步骤说明(常规,最多两行;过长省略,悬浮显示全文)
 进度条:按步骤等分,章与章之间留缺口,可点击跳转
 ```
 
-- 不挡画布中心:浮条贴在桌面底部,宽度取"检查窗口左边那条可见带"(而不是死板
-  `min(960px, 70vw)` 居中——在 1400px 窗口下那个宽度会伸进检查窗口 200 多像素,
-  把 FAIL 行 / 展开详情挡住);镜头可用区的 `bottomInset` 取浮条高度 + 间距。
+- **高度固定 / 宽度可调**:高度 180 固定(没有上下手柄);宽度初始 880,可拖东西两边在
+  `VIEWER_DEMO_WINDOW_MIN_WIDTH`(520px)与桌面宽之间调;桌面更窄时创建期用库的
+  `fitGeometry` 收一次;
+- **可拖**:标题栏拖动,几何走库的 `moveGeometry` / `writeGeometry`,夹取常量取
+  `DEFAULT_DESKTOP_CONFIG` 那一份(与常驻窗口同源);初始位置贴桌面左下;
+- **镜头避让**:窗口贴桌面下沿时 `bottomInset = 桌面高 − 窗口顶`(当前节点因此不会被
+  压住);拖离下沿超过容差(32px)后不再扣底部,避免给不存在的遮挡留白;
 - 键盘(仅演示模式,且焦点不在输入框):`Space` 播放/暂停,`←/→` 上一步/下一步,
-  `Home/End` 首尾,`Esc` 退出。
+  `Home/End` 首尾,`Esc` 退出;
 - 自动播放时,最后一步播完停在完成态并暂停,不循环;再按播放从第一步重放。
 
 ### 9.4 与现有功能的边界
@@ -739,11 +752,12 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 | visual | `layout.ts`(小改) | 抽出 `linkEndpoints()` / `assignLinkLanes()`,布局与动画共用端点公式 |
 | ui | `viewer/demo_scenarios.ts` | 7 个剧本(初始结构 + 操作序列 + 检查 id + 章节标题) |
 | ui | `viewer/demo_player.ts` | 播放器状态机:步骤 / 虚拟时钟 / 镜头请求 / 检查与列表同步 |
-| ui | `viewer/demo_views.ts` | 底部浮条标记 + 按章进度条 + 键盘绑定 |
+| ui | `viewer/demo_window.ts` | 演示控制窗口:库的窗口外壳 + 标题栏拖动 + 横向缩放 / 镜头避让几何 |
+| ui | `viewer/demo_views.ts` | 控制条标记 + 按章进度条 + 键盘绑定 |
 | ui | `viewer/viewer.ts`(扩展) | 「演示」菜单接线、模式进出、窗口状态恢复、RUN 冲突处理 |
 | ui | `viewer/viewer_chrome.ts` + `config.ts` | 标题栏节点表 / 任务栏「演示」动作 / 剧本菜单面板 / DOM 契约 |
 | 样式 | `visual/visual.css` + `tokens.css` | 状态类、染色过渡、reduced-motion |
-| 样式 | `ui/viewer/viewer.css` + `tokens.css` | 浮条、步骤文本、进度条 |
+| 样式 | `ui/viewer/viewer.css` + `tokens.css` | 控制窗口正文、步骤文本、进度条 |
 
 `ui` 侧不 import 算法,只 import 轨迹类型与剧本生成入口:`demo_player` 拿到
 `SceneTrace` 之后不再关心这是 BST 还是红黑树。
@@ -765,7 +779,7 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 | DOM(happy-dom) | `painter.test.ts` | 两次落笔复用同一批 DOM;状态类 / 变体类叠加与切换;settled 才移除退场元素并量包围盒 |
 | DOM(happy-dom) | `demo_player.test.ts` | 构造落第 0 拍;单步 / 回退 / seek;自动播放播完暂停;速度换算;reduce-motion / `cut` 硬切;镜头 hold / 跟随开关 |
 | DOM | `viewer.test.ts` 扩展 | 「定位」平滑镜头接线;窗口 / 回正 |
-| DOM | `demo_mode.test.ts` | 任务栏「演示」按钮与菜单;进入后窗口让位 / 浮条出现 / 第 0 拍落笔;单步与进度点;键盘 Esc / Space;退出恢复窗口与静态画面;RUN 先退出演示 |
+| DOM | `demo_mode.test.ts` | 任务栏「演示」按钮与菜单;进入后窗口让位 / 控制窗口出现 / 第 0 拍落笔;单步与进度点;键盘 Esc / Space;退出恢复窗口与静态画面;RUN 先退出演示 |
 | 纯逻辑 | `demo_scenarios.test.ts` | 7 个剧本每帧可解析、章节连续、检查已登记;BST 每帧有序;RBT 末帧五条全 PASS;情形 1/2/3、双黑四情形、退化层数等教学路径覆盖 |
 
 约定:
@@ -782,7 +796,7 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 | 期 | 内容 | 产出 | 状态 |
 | --- | --- | --- | --- |
 | **M0** | 镜头缓动:提 `focusPlaneView` / `framePlaneView`、`animateTo`、打断、上下 insets;「定位」改平滑 | 现有功能立刻受益,不引入演示模式 | **已完成** |
-| **M1** | 动画地基:tween 时钟、`ScenePainter` 增量落笔、`motion` 插值、浮条 + 播放器 | 能播放 / 暂停 / 单步 / 回退 | **已完成** |
+| **M1** | 动画地基:tween 时钟、`ScenePainter` 增量落笔、`motion` 插值、控制条 + 播放器 | 能播放 / 暂停 / 单步 / 回退 | **已完成** |
 | **M2** | BST 引擎 + 全套剧本(查找/插入/删除三情形/遍历/**旋转**/退化),含锚定与旋转几何 | BST 原理完整演示 | **已完成** |
 | **M3** | RBT 插入:模型 + fixup + 情形 1/2/3(复用 M2 的旋转)+ 每帧检查 | RBT 插入演示 | **已完成** |
 | **M4** | RBT 删除:物理移植 + 双黑 + 四情形 | RBT 删除演示 | **已完成** |
@@ -808,8 +822,8 @@ M5 是下一轮的可选项。
    值瞬移,红黑树尤其乱;物理移植才能看到"后继接替了它的位置和颜色"。
 6. **镜头所有权。** 演示的跟随与用户的拖动必须有一方说了算:用户手势只打断**当前**
    动画,「跟随镜头」开关决定下一步是否重新接管;不要靠 `manual` 开关硬切。
-7. **浮条遮画布。** 镜头可用区必须扣掉底部浮条,否则当前节点会被浮条压住
-   (`focusPoint` 现在只扣 topInset)。
+7. **控制窗口遮画布。** 镜头可用区要扣掉贴底的演示窗口,否则当前节点会被窗口压住
+   (`focusPoint` 除 topInset 外还要按窗口位置给底部 inset)。
 8. **减少动态效果。** `prefers-reduced-motion` 下所有过渡瞬移、相机直接切;不要连
    自动前进也关掉 —— 单步仍然是可用的。
 9. **后台标签页。** RAF 暂停后再回来,`performance.now()` 的差值可能极大;时钟 delta
@@ -835,7 +849,7 @@ M5 是下一轮的可选项。
 
 | 问题 | 结论 |
 | --- | --- |
-| 演示入口放任务栏「演示」动作 + 底部浮条、进入时最小化部分窗口? | **采用(后调整)**。按钮在任务栏动作区(与「回正视图」并排),剧本菜单挂在任务栏按钮下;JSON 标题栏只留示例 / RUN |
+| 演示入口放任务栏「演示」动作 + 演示控制窗口、进入时最小化部分窗口? | **采用(后调整)**。按钮在任务栏动作区(与「回正视图」并排),剧本菜单挂在任务栏按钮下;JSON 标题栏只留示例 / RUN |
 | RBT 删除是否这一轮做? | **做了**。物理移植后继 + 双黑四情形,剧本的删除序 `26,22,18,13,11` 覆盖四情形 |
 | JSON 编辑器要不要跟随 / 提供「写回」? | 不跟随(演示不改 JSON);「把当前帧写回 JSON」**本轮未做**,留到 M5 |
 | 自由操作沙盒? | 本轮不做,留到 M5。`TreeOp` 词表与 `framesFor` 形状已经为它留好 |
@@ -880,13 +894,24 @@ M5 是下一轮的可选项。
 | 性质检查 | `src/scene/scene_check.ts` 的 `runSceneChecks` | 每步跑一次,检查窗口实时 PASS / FAIL | 不改 |
 | 实体 / 检查列表 | `src/ui/viewer/viewer_items.ts` 的 `EntityItem` / `CheckItem`,库的 `RowList` | 每步 `sync`;行末「定位」改走平滑镜头(演示中按**锚定后的布局**定位) | 小改(定位回调) |
 | 桌面窗口 | `mountDesktop(...).windows`(`WindowManager`) | 进演示用 `setMinimized` / `getState`,退出恢复;「全部还原」保留 | 不改库(API 已有) |
-| 菜单 | 库的 `createMenu` | 任务栏「演示」按钮的剧本菜单:把库建的按钮包进 `.menu-anchor`,面板挂在同一锚点 | 接线(不改库) |
+| 菜单 | 库的 `createMenu` | 任务栏「演示」按钮的剧本菜单:把库建的按钮包进 `.menu-anchor`,面板挂在同一锚点 | 改库:`.menu-anchor` 变零盒子(`display:contents`),浮层落点收进 `Popover` |
 | 代码编辑器 | 库的 `createCodeEditor` | 演示不写 JSON 编辑器;进入时把剧本的检查 id 写进「检查配置」编辑器 | 接线(不改库) |
 | 库的动画能力 | `miko_ui` | **没有 tween / 动画助手**;rAF 只在 `EditorHighlight` / `MenuItem` 里用于合并重绘 | 新增 `src/visual/tween.ts` |
 | 样式 | `src/visual/visual.css`、`tokens.css` | 新增状态类、染色 transition、reduced-motion;保留现有 220ms 入场动画 | 小改 |
 | 取景常数 | `src/visual/config.ts` | 复用 `VISUAL_FOCUS_MIN_ZOOM`(0.8)/ `VISUAL_FIT_MAX_ZOOM`(1)/ `VISUAL_MIN_ZOOM` / `VISUAL_MAX_ZOOM` | 不改 |
 | 测试环境 | `happy-dom` | `getBBox()` 恒空;rAF 由测试 fake timer / 注入时钟驱动 | 播放器注入 `ManualClock`;视口镜头动画注入时钟;量不到就不动镜头 |
 | 值口径 | `src/scene/label_value.ts` | BST / RBT 剧本的 `label` 必须是十进制数,检查器按它读数 | 遵守 |
+
+菜单那一格是**本轮唯一的库改动**:`.menu-anchor` 一律不许影响触发按钮的布局 —— 它生成盒子
+就是父容器(`line box` / flex item)里的一员,高度、基线、父级 `align-items` 都会先分给它,
+按钮的矩形就可能与"没有这层 div"不同(默认 `block` 按继承的 `line-height` 撑行盒:锚点
+24.39px、按钮 22.39px,按钮比同排按钮低 1px)。所以库把它改成 `display: contents`:锚点
+不生成盒子,按钮就是 `.dock-actions` 的直接布局参与者,包不包这层 div 量出来的矩形一致。
+没有盒子就当不了绝对定位的包含块,于是浮层落点从 CSS 移进 `Popover`:打开时量触发件,写
+`left/top/min-width`,视口边上翻转 / 夹取(`overlayPlacement.ts`);动画、示例、任务栏的
+接线代码一个字没改。部署仍吃 npm 的 `miko_ui@0.1.18`(锚点还是 block):任务栏菜单按钮会
+退回"比同排低 1px"(浮层仍能开合),`viewer.css` 里 `0.1.18 过渡`那条 `.menu-popover`
+规则要在库发版 + 升依赖后删掉。
 
 两条已有的硬约束(实现时最容易踩,已写进 §5 / §13):
 
@@ -917,17 +942,18 @@ M5 是下一轮的可选项。
 | `src/visual/visual.css` / `tokens.css` | 修改 | 状态类、染色过渡、reduced-motion |
 | `src/ui/viewer/demo_scenarios.ts` | 新增 | 7 个剧本(3 BST + 4 RBT) |
 | `src/ui/viewer/demo_player.ts` | 新增 | 播放器状态机 + 虚拟时钟 + 镜头请求 |
-| `src/ui/viewer/demo_views.ts` | 新增 | 浮条 / 章节进度 / 键盘 |
+| `src/ui/viewer/demo_views.ts` | 新增 | 控制条 / 章节进度 / 键盘 |
+| `src/ui/viewer/demo_window.ts` | 新增 | 库窗口外壳 + 标题栏拖动 + 横向缩放(纵向固定) |
 | `src/ui/viewer/viewer.ts` | 修改 | 演示模式进出、窗口状态恢复、RUN 冲突 |
 | `src/ui/viewer/viewer_chrome.ts` / `config.ts` | 修改 | 任务栏「演示」动作 / 剧本菜单面板 / DOM 契约 |
-| `src/ui/viewer/viewer.css` / `tokens.css` | 修改 | 浮条样式 |
+| `src/ui/viewer/viewer.css` / `tokens.css` | 修改 | 控制窗口正文样式 |
 | `src/test_support/manual_clock.ts` | 新增 | 测试用手动时钟 |
 | 测试 | 新增 / 扩展 | `tween` / `anchor` / `motion` / `painter` / `demo_player` / `demo_mode` / `demo_scenarios` / `bst` / `bst_rotation` / `rbt_ops` / `trace`;`viewport` / `render` / `viewer` / `viewer_views` 扩展 |
 
 ### 17.2 已经核对过的事实
 
 - **web**:`npm test` = 282 项通过;`npm run typecheck` 通过;`npm run build` 通过。
-- **浏览器实测**(headful Chromium + Vite dev):进入「BST · 查找 / 插入 / 删除」浮条为 29 步、
+- **浏览器实测**(headful Chromium + Vite dev):进入「BST · 查找 / 插入 / 删除」控制窗口为 29 步、
   第 0 拍整棵树;单步后标题 / 计数 / 检查行同步;RBT 综合插入 57 步,情形 2 / 3 帧上
   检查窗口当场 FAIL / PASS;退出演示恢复 6 窗口与 5 节点静态红黑树;RUN 先退出演示。
 - **教学路径**:RBT 综合序列 `7,3,18,10,22,8,11,26,2,6,13` 情形 1/2/3 全出现;删除序
@@ -943,7 +969,7 @@ npm test           # 282 项:纯逻辑 / 纯数学 / happy-dom 行为
 npm run typecheck  # tsc --noEmit(含 noUnusedLocals / noUnusedParameters)
 npm run build      # clean -> test -> typecheck -> vite build
 # 浏览器: npm run dev 后打开 http://localhost:5173/miko_datastruct/
-#   任务栏「演示」-> 选剧本 -> 浮条控制 / 空格 / ← → / Home End / Esc
+#   任务栏「演示」-> 选剧本 -> 控制窗口(可拖)/ 空格 / ← → / Home End / Esc
 ```
 
 ### 17.4 会话删除后怎么继续
@@ -968,7 +994,7 @@ npm run build      # clean -> test -> typecheck -> vite build
 | **锚定** | 每步先平移整帧布局,让 `anchor` 节点落在上一帧 `anchorAt` 的位置 |
 | **分道** | 同一对节点之间多条连线时的横向偏移(现有 `layout.ts` 已实现) |
 | **状态类** | `visual-state--active / path / visited / found / fresh / ghost`,动画高亮用,与结构色变体叠加 |
-| **演示模式** | 最小化部分窗口 + 底部浮条 + 键盘控制的整屏观看状态;退出后恢复 |
+| **演示模式** | 最小化部分窗口 + 演示控制窗口 + 键盘控制的整屏观看状态;退出后恢复 |
 | **剧本生成 / 播放器** | 生成 = 纯逻辑产出步骤;播放器 = 虚拟时钟 + 插值 + 镜头 + 列表同步 |
 
 ---
@@ -986,7 +1012,7 @@ npm run build      # clean -> test -> typecheck -> vite build
 | 先锚定再插值 | `anchor.ts`;算法显式给 `anchor / anchorAt`(插入 / 删除 / 旋转),机械步骤自动锚到最小共同 key |
 | 旋转绕轴、β 子树短弧 | `motion.ts` 极坐标插值;α / γ 直线跟随;旋转帧 `framing:'hold'` |
 | 镜头中心 + 对数缩放、非线性缓动、打断 | `interpolatePlaneView` + `easeInOutCubic` + tween;拖动 / 滚轮立即 `cancelAnimation` |
-| 演示模式:任务栏入口、浮条、窗口让位、退出恢复 | `viewer.ts` + `demo_views.ts`;检查窗口保留,浮条排在检查窗口左侧,底部算进镜头 inset |
+| 演示模式:任务栏入口、控制窗口、窗口让位、退出恢复 | `viewer.ts` + `demo_window.ts` + `demo_views.ts`;检查窗口保留,控制窗口排在检查窗口左侧、高度固定 / 横向可拖,贴底时算进镜头 bottom inset |
 | 检查窗口就是"不变量面板" | 每帧 `runSceneChecks`;fixup 中间态 FAIL 是教学内容,不报错 |
 | reduced-motion | 结构与镜头瞬移,步骤仍可自动 / 手动前进 |
 | 7 个剧本 | `demo_scenarios.ts`:BST 原理 / 旋转 / 退化;RBT 入门 / 生根 / 综合插入 / 删除 |

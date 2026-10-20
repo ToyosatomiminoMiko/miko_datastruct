@@ -1,12 +1,12 @@
 /*
- * 演示模式底部浮条:标记(纯函数式装配)+ 键盘绑定.
+ * 演示控制条(装进演示窗口的正文):标记(纯函数式装配)+ 键盘绑定.
  *
- * 浮条只做三件事:显示"第几步 / 讲什么 / 进度",把按钮动作上报给播放器接线层,
+ * 控制条只做三件事:显示"第几步 / 讲什么 / 进度",把按钮动作上报给播放器接线层,
  * 按播放器快照刷新自身.它不认算法、不碰画布:所有语义(剧本 / 步骤 / 速度)都由
  * `SceneTrace` 与 `DemoPlayerSnapshot` 给.
  *
  * 为什么不放任务栏:任务栏是桌面级动作(回正视图 / 全部还原),演示是一个**模式**,
- * 进入 / 播放 / 退出都该在浮条上(docs/animation.md §9.2).
+ * 进入 / 播放 / 退出都该在控制条上(docs/animation.md §9.3).
  *
  * 键盘只在演示模式绑定,且焦点不在输入框里(见 {@link bindDemoKeys});Space / ← / →
  * 等在浏览器里有默认行为(滚动 / 光标),所以命中时统一 preventDefault.
@@ -16,9 +16,9 @@ import { create_element } from 'miko_ui';
 import type { DemoPlayerSnapshot } from '@/ui/viewer/demo_player';
 import type { SceneTrace } from '@/datastruct/trace/trace';
 
-/** 浮条根元素的类名(样式在 src/ui/viewer/viewer.css) */
+/** 控制条根元素的类名(样式在 src/ui/viewer/viewer.css) */
 export const DEMO_BAR_CLASS = 'demo-bar';
-/** 浮条上的按钮 / 进度点类名 */
+/** 控制条上的按钮 / 进度点类名 */
 export const DEMO_BAR_TITLE_CLASS = 'demo-bar__title';
 export const DEMO_BAR_COUNT_CLASS = 'demo-bar__count';
 export const DEMO_BAR_STEP_TITLE_CLASS = 'demo-bar__step-title';
@@ -38,10 +38,10 @@ export const DEMO_BAR_PAST_CLASS = 'is-past';
 /** 播放速度档位(0.5× / 1× / 2×);顺序即按钮显示顺序 */
 export const DEMO_SPEEDS = [0.5, 1, 2] as const;
 
-/** 浮条上的动作 id;接线层按它调播放器 */
+/** 控制条上的动作 id;接线层按它调播放器 */
 export type DemoBarAction = 'prev' | 'toggle' | 'next' | 'exit';
 
-/** 浮条文案:进度 / 按钮 / 可访问名 */
+/** 控制条文案:进度 / 按钮 / 可访问名 */
 export const DEMO_BAR_LABELS = {
     region: '演示控制',
     prev: '上一步',
@@ -64,7 +64,7 @@ export interface DemoBarOptions {
     readonly onFollow: (follow: boolean) => void;
 }
 
-/** 浮条句柄:元素 + 按快照刷新 + 拆卸 */
+/** 控制条句柄:元素 + 按快照刷新 + 拆卸 */
 export interface DemoBarHandle {
     readonly element: HTMLElement;
     /** 按播放器快照刷新按钮文案 / 当前进度 / 速度 / 跟随 */
@@ -92,7 +92,7 @@ function createProgressTick(stepIndex: number, title: string): HTMLButtonElement
 }
 
 /**
- * 建底部浮条:头部(剧本名 / 进度 / 播放控制 / 速度 / 跟随 / 退出)+ 步骤文本 +
+ * 建控制条:头部(剧本名 / 进度 / 播放控制 / 速度 / 跟随 / 退出)+ 步骤文本 +
  * 按章分组的进度点(章与章之间留缺口).
  */
 export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
@@ -201,7 +201,7 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
         progress,
     );
 
-    // 委托点击:按钮 / 进度点 / 速度档共用一份监听,浮条拆掉时一次全摘
+    // 委托点击:按钮 / 进度点 / 速度档共用一份监听,控制条拆掉时一次全摘
     element.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
@@ -233,7 +233,7 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
     const setStepText = (nextTitle: string, nextDetail: string): void => {
         stepTitle.textContent = nextTitle;
         stepDetail.textContent = nextDetail;
-        // 长说明在浮条里省略(最多两行),悬停看全文
+        // 长说明在控制条里省略(最多两行),悬停看全文
         stepDetail.title = nextDetail;
     };
 

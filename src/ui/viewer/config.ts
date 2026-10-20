@@ -27,7 +27,7 @@ export const VIEWER_DOM = {
     runButtonId: 'viewerRunButton',
     /** 「演示」按钮的剧本菜单面板(挂在任务栏按钮下的浮层) */
     demoMenuId: 'viewerDemoMenu',
-    /** 演示模式底部浮条(进入演示时挂到桌面根上) */
+    /** 演示控制窗口的正文根(演示条挂在库的窗口外壳里) */
     demoBarId: 'viewerDemoBar',
     /** 「示例」按钮的菜单面板(窗口标题栏 overlays 槽位) */
     exampleMenuId: 'viewerExampleMenu',
@@ -236,10 +236,42 @@ export const VIEWER_ADOPTED_NODES: readonly AdoptedNodeSpec<ViewerChromeNodeId>[
     { node: 'exampleMenu', window: VIEWER_WINDOW_JSON, slot: 'overlays' },
 ];
 
-// 演示模式:浮条与镜头的避让
+// 演示模式:控制窗口与镜头避让
 
-/** 浮条与视口底边之间的间距(px):底部 inset = 浮条高度 + 这个值 */
-export const VIEWER_DEMO_BAR_GAP = 16;
+/**
+ * 演示控制窗口的 `data-window` id.
+ *
+ * 它**不在** VIEWER_DESKTOP_WINDOWS 里:那六扇是常驻窗口(进任务栏、参与最小化 /
+ * 「全部还原」);演示窗口只在演示模式存在,由 ui/viewer/demo_window.ts 用库的
+ * createWindowFrame 现建现拆.`data-window` 仍沿用同一套命名,样式与测试按窗口定位.
+ */
+export const VIEWER_DEMO_WINDOW_ID = 'demo-window';
+
+/** 演示控制窗口的标题栏文案(剧本名在正文第一行;标题栏只说明这是哪扇窗) */
+export const VIEWER_DEMO_WINDOW_TITLE = '演示';
+
+/**
+ * 演示控制窗口的初始尺寸与纵向固定高度(px).
+ *
+ * 高度固定:正文就四行内容,窗口没有上下缩放手柄;宽度只是**初始值**,用户可以
+ * 拖左右边调宽(见 VIEWER_DEMO_WINDOW_MIN_WIDTH),按 1400px 桌面上"检查窗口左边
+ * 那条可见带"取整.桌面更窄时创建期会按库的夹取规则收一次.
+ */
+export const VIEWER_DEMO_WINDOW_SIZE = { w: 880, h: 180 } as const;
+
+/** 演示窗口可拖到的最小宽度(px):再窄四行内容会开始折行到不可读 */
+export const VIEWER_DEMO_WINDOW_MIN_WIDTH = 520;
+
+/** 演示窗口与桌面左 / 下沿的间距(px):初始位置贴左下角 */
+export const VIEWER_DEMO_WINDOW_GAP = 16;
+
+/**
+ * "窗口还停在桌面下沿"的容差(px).
+ *
+ * 镜头底部避让带只在窗口贴底时生效:用户在演示中把窗口拖到画布中间后,再按固定
+ * 高度扣底部 inset 只会白白浪费取景空间.
+ */
+export const VIEWER_DEMO_WINDOW_DOCK_SLOP = 32;
 
 // 任务栏动作:回正视图
 
@@ -453,7 +485,7 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
         lines: [
             '任务栏动作区的「演示」按钮打开剧本菜单: 二叉搜索树(原理 / 旋转 / 退化)与红黑树(插入 / 删除)。',
             '进入演示后 JSON / 实体 / 检查配置 / 诊断 / 帮助窗口最小化,只保留检查窗口;退出时恢复进入前的窗口状态与检查配置。',
-            '底部浮条: 上一步 / 播放暂停 / 下一步 / 进度条 / 0.5×–2× / 跟随镜头 / 退出。',
+            '演示窗口(高度固定 / 宽度可拖 / 标题栏可拖): 上一步 / 播放暂停 / 下一步 / 进度条 / 0.5×–2× / 跟随镜头 / 退出。',
             '键盘(焦点不在输入框): Space 播放暂停, ←/→ 单步, Home/End 首尾, Esc 退出。',
             '演示不改 JSON 编辑器;要接着做实验,退出后在编辑器里用最后一次 RUN 的结构继续。',
         ],

@@ -64,9 +64,9 @@ export interface PlaneBox {
 }
 
 /**
- * 视口上下要避开的固定带(px):顶部任务栏 + 底部演示浮条.
+ * 视口上下要避开的固定带(px):顶部任务栏 + 演示窗口占用的底部带.
  *
- * 镜头把"可用区"的正中当成世界点的落点:只扣掉上沿的话,当前节点会被底部浮条
+ * 镜头把"可用区"的正中当成世界点的落点:只扣掉上沿的话,当前节点会被演示窗口
  * 压住(docs/animation.md §13.7).
  */
 export interface PlaneInsets {
@@ -129,7 +129,7 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * 可用区(扣掉上下固定带)的屏幕中心.
  *
- * 镜头目标都往这里放:内容不会藏在任务栏或底部演示浮条后面.
+ * 镜头目标都往这里放:内容不会藏在任务栏或演示窗口后面.
  */
 export function planeViewUsableCenter(viewport: PlaneBox, insets: PlaneInsets): { x: number; y: number } {
     return {
@@ -172,7 +172,7 @@ export function planeViewFromCenter(
 /**
  * 把一块内容装进可用区并居中(缩放取"装得下"与 `maxZoom` 里小的那个).
  *
- * `padding` 四周都算;`insets` 上下各扣一次(任务栏 / 演示浮条).
+ * `padding` 四周都算;`insets` 上下各扣一次(任务栏 / 演示窗口).
  * 内容为空 / 视口还没量出尺寸(`clientWidth` 为 0,如 happy-dom 里)时给不出比例,
  * 直接回一个恒等视角:调用方不必先判断,拿到的一定是能用的状态.
  */
@@ -204,7 +204,7 @@ function fitBox(
 /**
  * 适应:把内容整块装进视口并居中(缩放取"装得下"与"不放大"里小的那个).
  *
- * `topInset` 为兼容旧调用保留;需要同时扣底部浮条时用第 4 个参数或 `fitBox` 的
+ * `topInset` 为兼容旧调用保留;需要同时扣底部带时用第 4 个参数或 `fitBox` 的
  * `insets` 版本(演示模式会传).
  */
 export function fitPlaneView(
@@ -358,7 +358,7 @@ export interface PlaneViewportOptions {
      * 与 `insets` 二选一:同时给时以 `insets` 为准.
      */
     readonly topInset?: number;
-    /** 上下两条固定带(演示浮条出现时底部也要扣);缺省只有 `topInset` */
+    /** 上下两条固定带(演示窗口出现时底部也要扣);缺省只有 `topInset` */
     readonly insets?: PlaneInsets;
     /** 时钟:测试注入手动时钟,生产用 rAF */
     readonly clock?: TweenClock;
@@ -405,7 +405,7 @@ export interface PlaneViewportHandle {
     cancelAnimation(): void;
     /** 当前视角(测试 / 调试 / 播放器同步用) */
     getView(): PlaneViewState;
-    /** 换上下固定带(演示浮条出现 / 退出时);手动模式下不重新适应,只影响下一次镜头 */
+    /** 换上下固定带(演示窗口出现 / 退出时);手动模式下不重新适应,只影响下一次镜头 */
     setInsets(insets: PlaneInsets): void;
     getInsets(): PlaneInsets;
     /** 拆掉监听与观察者 */

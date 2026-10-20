@@ -1,5 +1,5 @@
 /*
- * 演示模式(ui/viewer/viewer.ts 的「演示」菜单 + 浮条 + 播放器接线)的行为契约.
+ * 演示模式(ui/viewer/viewer.ts 的「演示」菜单 + 控制窗口 + 播放器接线)的行为契约.
  *
  * 用 reduce-motion(matchMedia 返回 true)让镜头 / 结构过渡瞬移:测试只验"进入模式 ->
  * 换帧 -> 单步 -> 退出恢复"这条接线,逐帧缓动在 visual/*.test.ts 里单独验.
@@ -8,7 +8,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { VIEWER_DOM } from '@/ui/viewer/config';
+import {
+    VIEWER_DEMO_WINDOW_ID,
+    VIEWER_DEMO_WINDOW_SIZE,
+    VIEWER_DEMO_WINDOW_TITLE,
+    VIEWER_DOM,
+} from '@/ui/viewer/config';
 import { findDemoScenario } from '@/ui/viewer/demo_scenarios';
 import { mountViewer } from '@/ui/viewer/viewer';
 import { VISUAL_NODE_CLASS } from '@/visual/config';
@@ -27,16 +32,23 @@ function renderedNodes(): Element[] {
     return [...document.querySelectorAll(`#${VIEWER_DOM.treeId} .${VISUAL_NODE_CLASS}`)];
 }
 
-/** 演示浮条里的步骤进度点 */
+/** 演示控制窗口里的步骤进度点 */
 function progressTicks(): HTMLElement[] {
     return [...byId<HTMLElement>(VIEWER_DOM.demoBarId).querySelectorAll<HTMLElement>('.demo-bar__tick')];
 }
 
-/** 点浮条上的按钮 / 进度点 */
+/** 点控制条上的按钮 / 进度点 */
 function clickBar(selector: string): void {
     const element = byId<HTMLElement>(VIEWER_DOM.demoBarId).querySelector<HTMLElement>(selector);
-    if (!element) throw new Error(`浮条里找不到 ${selector}`);
+    if (!element) throw new Error(`控制条里找不到 ${selector}`);
     element.click();
+}
+
+/** 演示控制窗口(库的窗口外壳;`data-window` 由 demo_window.ts 写) */
+function demoWindow(): HTMLElement {
+    const element = document.querySelector<HTMLElement>(`[data-window="${VIEWER_DEMO_WINDOW_ID}"]`);
+    if (!element) throw new Error('桌面上找不到演示控制窗口');
+    return element;
 }
 
 /** 任务栏里的「演示」按钮(库按 VIEWER_DOCK_ACTIONS 建) */
@@ -64,11 +76,11 @@ const JSON_WINDOW = 'json';
 const CHECK_WINDOW = 'check';
 
 /** 挂载查看器并种好视口尺寸 / 包围盒 / reduce-motion */
-function mountPanel(): void {
+function mountPanel(width = 800, height = 600): void {
     vi.spyOn(SVGGraphicsElement.prototype, 'getBBox')
         .mockReturnValue(new DOMRect(0, 0, 200, 100));
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
-    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(width);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(height);
     vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList);
     renderHost((host) => mountViewer(host));
 }
@@ -81,7 +93,7 @@ beforeEach(() => {
 });
 
 describe('演示模式:入口与进入', () => {
-    it('任务栏有「演示」按钮与剧本菜单;进入后窗口让位、浮条出现、画布换成第 0 拍', () => {
+    it('任务栏有「演示」按钮与剧本菜单;进入后窗口让位、控制窗口出现、画布换成第 0 拍', () => {
         mountPanel();
         const button = dockDemoButton();
         expect(button.textContent).toBe('演示');
@@ -97,11 +109,12 @@ describe('演示模式:入口与进入', () => {
         const trace = scenario.build();
         selectScenario('BST · 查找');
 
-        // 浮条出现,步骤数 = 轨迹步数
+        // 控制窗口出现,步骤数 = 轨迹步数
         const bar = byId<HTMLElement>(VIEWER_DOM.demoBarId);
         expect(bar).toBeTruthy();
         expect(progressTicks()).toHaveLength(trace.steps.length);
         expect(bar.querySelector('.demo-bar__step-title')?.textContent).toBe(trace.steps[0]?.title);
+        expect(demoWindow().contains(bar)).toBe(true);
 
         // JSON / 实体 / 检查配置 / 诊断 / 帮助让位,检查窗口保留
         expect(windowHidden(JSON_WINDOW)).toBe(true);
@@ -112,6 +125,47 @@ describe('演示模式:入口与进入', () => {
         expect(document.querySelector(`#${VIEWER_DOM.treeId} .${VISUAL_PAINTER_LINKS_CLASS}`)).not.toBeNull();
         expect(document.querySelector(`#${VIEWER_DOM.treeId} .${VISUAL_PAINTER_NODES_CLASS}`)).not.toBeNull();
         expectNoDuplicateIds();
+    });
+
+    it('控制条装进库的窗口外壳:纵向固定 / 横向可调、无 min max,标题栏可拖', () => {
+        mountPanel(1400, 700);
+        selectScenario('BST · 查找');
+
+        const windowEl = demoWindow();
+        // 外壳来自库的 createWindowFrame:在窗口层里,带 .window 类与标题栏
+        expect(windowEl.classList.contains('window')).toBe(true);
+        expect(windowEl.parentElement?.classList.contains('window-layer')).toBe(true);
+        expect(windowEl.querySelector('.window-title')?.textContent).toContain(VIEWER_DEMO_WINDOW_TITLE);
+        // 横向可调、纵向固定:只留东 / 西两根手柄,没有 min / max 按钮
+        const resizeDirections = [...windowEl.querySelectorAll('.resize-handle')]
+            .map((handle) => handle.getAttribute('data-window-resize'))
+            .sort();
+        expect(resizeDirections).toEqual(['e', 'w']);
+        expect(windowEl.querySelectorAll('.window-controls button')).toHaveLength(0);
+        expect(windowEl.style.width).toBe(`${VIEWER_DEMO_WINDOW_SIZE.w}px`);
+        expect(windowEl.style.height).toBe(`${VIEWER_DEMO_WINDOW_SIZE.h}px`);
+
+        // 标题栏拖动:窗口整体平移(夹取走库的窗口几何,与常驻窗口同一份规则)
+        const left = Number.parseFloat(windowEl.style.left);
+        const top = Number.parseFloat(windowEl.style.top);
+        const title = windowEl.querySelector<HTMLElement>('.window-title');
+        if (title === null) throw new Error('演示窗口没有标题栏');
+        title.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 100, pointerId: 1 }));
+        title.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 220, clientY: 80, pointerId: 1 }));
+        title.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 220, clientY: 80, pointerId: 1 }));
+        expect(Number.parseFloat(windowEl.style.left)).toBe(left + 120);
+        expect(Number.parseFloat(windowEl.style.top)).toBe(top - 20);
+
+        // 拖东边:宽度 +120,高度不变(缩放走库的 resizeGeometry,按总位移解释)
+        const eastHandle = windowEl.querySelector<HTMLElement>('.resize-handle[data-window-resize="e"]');
+        if (eastHandle === null) throw new Error('演示窗口没有东侧缩放手柄');
+        const width = Number.parseFloat(windowEl.style.width);
+        const height = Number.parseFloat(windowEl.style.height);
+        eastHandle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 600, clientY: 300, pointerId: 2 }));
+        eastHandle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 720, clientY: 300, pointerId: 2 }));
+        eastHandle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 720, clientY: 300, pointerId: 2 }));
+        expect(Number.parseFloat(windowEl.style.width)).toBe(width + 120);
+        expect(Number.parseFloat(windowEl.style.height)).toBe(height);
     });
 });
 
@@ -187,6 +241,7 @@ describe('演示模式:退出与 RUN 冲突', () => {
 
         clickBar('[data-demo-action="exit"]');
         expect(document.getElementById(VIEWER_DOM.demoBarId)).toBeNull();
+        expect(document.querySelector(`[data-window="${VIEWER_DEMO_WINDOW_ID}"]`)).toBeNull();
         expect(windowHidden(JSON_WINDOW)).toBe(false);
         // 演示没有改 JSON:画回来的仍是首屏那份 5 节点红黑树
         expect(renderedNodes()).toHaveLength(5);
@@ -202,17 +257,18 @@ describe('演示模式:退出与 RUN 冲突', () => {
 
         byId<HTMLButtonElement>(VIEWER_DOM.runButtonId).click();
         expect(document.getElementById(VIEWER_DOM.demoBarId)).toBeNull();
+        expect(document.querySelector(`[data-window="${VIEWER_DEMO_WINDOW_ID}"]`)).toBeNull();
         expect(windowHidden(JSON_WINDOW)).toBe(false);
         expect(renderedNodes()).toHaveLength(5);
     });
 
-    it('浮条「跟随镜头」开关可切换;速度档切换后 aria-pressed 跟着变', () => {
+    it('控制窗口「跟随镜头」开关可切换;速度档切换后 aria-pressed 跟着变', () => {
         mountPanel();
         selectScenario('BST · 查找');
         const bar = byId<HTMLElement>(VIEWER_DOM.demoBarId);
 
         const follow = bar.querySelector<HTMLInputElement>('.demo-bar__follow input');
-        if (!follow) throw new Error('浮条里找不到跟随镜头开关');
+        if (!follow) throw new Error('控制窗口里找不到跟随镜头开关');
         expect(follow.checked).toBe(true);
         follow.checked = false;
         follow.dispatchEvent(new Event('change', { bubbles: true }));

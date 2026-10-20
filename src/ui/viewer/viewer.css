@@ -10,6 +10,8 @@
  *
  * 平面绘制面 / 节点形状 / 值文字 / 指针线段 / 进入动画这些**所有结构共用**的观感在
  * src/visual/visual.css;本文件最后只剩"color: red / black 长什么样".
+ *
+ * 本文件不写 `border-radius`.
  */
 
 /* 窗口正文根(类名 `ui-scrollbar` 由库的 scrollbar.css 给外观):滚动归这一层 */
@@ -148,7 +150,6 @@
     width: 10px;
     height: 10px;
     border: 1px solid var(--viewer-color-border);
-    border-radius: 2px;
     /* 值由 EntityItem 用内联 CSS 变量写入,查看器不改写颜色字符串 */
     background: var(--viewer-attr-color-value, transparent);
 }
@@ -163,7 +164,6 @@
 .viewer-attr {
     flex: 0 0 auto;
     padding: 1px 6px;
-    border-radius: var(--radius-pill);
     font-family: var(--font-code);
     font-size: 11px;
     line-height: 1.4;
@@ -260,7 +260,6 @@
     margin: 4px 0 2px;
     padding: 6px 8px;
     border-left: 2px solid var(--color-accent-line);
-    border-radius: 0 2px 2px 0;
     background: var(--viewer-detail-bg);
 }
 
@@ -314,30 +313,26 @@
 }
 
 /*
- * 演示模式底部浮条(ui/viewer/demo_views.ts 建标记).
+ * 演示控制窗口(ui/viewer/demo_window.ts 建窗口外壳与拖动,ui/viewer/demo_views.ts
+ * 建正文里的控制条).
  *
- * 定位:贴在桌面底部、水平居中,宽度 min(960px, 70vw);绝对定位在桌面根里
- * (窗口层之上,但不挡画布中心).镜头可用区的 bottom inset 由 viewer.ts 按它的
- * 实测高度来扣,所以这里的高度不是写死的契约.
+ * 窗口外壳(.window / 标题栏 / 描边 / 底色 / 投影 / 拖动)全归库的
+ * createWindowFrame,这里只排正文:窗口几何(固定宽高、初始贴左下、拖动夹取)在
+ * demo_window.ts,样式表里不再出现绝对定位 / 边框 / 投影.
  *
- * 层级:库的窗口层与任务栏的 z 值在 DEFAULT_DESKTOP_CONFIG 里,这里取一个高于
- * 全部窗口的常数;浮条是模式级控件,不该被窗口盖住(演示模式已把窗口最小化).
+ * 窗口正文自带内边距,压掉 `.ui-panel-body` 的 10px 下边距;窗口高度固定,窄桌面
+ * 下 head 折行时让正文可滚,而不是被 `.window-body` 的 overflow:hidden 裁掉.
  */
+.demo-window > .window-body {
+    margin-bottom: 0;
+    overflow: auto;
+}
+
 .demo-bar {
-    position: absolute;
-    left: 50%;
-    bottom: 16px;
-    transform: translateX(-50%);
-    z-index: 4000;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    width: min(960px, 70vw);
     padding: 10px 14px 12px;
-    border: 1px solid var(--viewer-demo-bar-border);
-    border-radius: 10px;
-    background: var(--viewer-demo-bar-bg);
-    box-shadow: var(--viewer-demo-bar-shadow);
     color: var(--viewer-demo-bar-text);
 }
 
@@ -427,7 +422,6 @@
     height: 6px;
     padding: 0;
     border: none;
-    border-radius: 3px;
     background: var(--viewer-demo-bar-tick);
     cursor: pointer;
 }
@@ -446,7 +440,7 @@
     outline-offset: 1px;
 }
 
-/* 浮条上的按钮沿用库的 .ui-button 基线,只把深色条上的对比度补回来 */
+/* 控制条上的按钮沿用库的 .ui-button 基线,只把深色条上的对比度补回来 */
 .demo-bar .ui-button {
     font-size: 12px;
 }
@@ -458,8 +452,10 @@
 /*
  * 任务栏里的浮层菜单(「演示」剧本菜单).
  *
- * 库的 `.menu-popover` 默认贴锚点左下(`top:100%; left:0`);任务栏动作区在桌面右沿,
- * 按 left 展开会伸到视口外被裁掉.这里改成贴锚点右下展开,面板整体向左长.
+ * **0.1.18 过渡,升依赖后删**:新版库把落点收到了 `Popover` 里(打开时按触发件写内联
+ * `left/top`,`display: contents` 的锚点不再是包含块),内联样式会盖掉这条;而
+ * `miko_ui@0.1.18` 的锚点还是 block + `position: relative`,面板吃库的
+ * `top: 100%; left: 0`,在任务栏右沿需要改成贴右展开.
  */
 .dock .menu-popover {
     left: auto;
