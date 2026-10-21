@@ -103,7 +103,15 @@ export function createDemoOutline(options: DemoOutlineOptions): DemoOutlineHandl
         head.append(collapse);
     }
 
-    const list = create_element({ tag: 'div' }, { class: DEMO_OUTLINE_LIST_CLASS });
+    /*
+      列表是真正的滚动容器,`ui-scrollbar` 必须挂在它自己身上:库的滚动条规则挂在
+      `::-webkit-scrollbar*`(不可继承),标到祖先上不起作用;只有这一处滚动区,
+      所以不需要再给窗口正文加滚动条类.
+    */
+    const list = create_element(
+        { tag: 'div' },
+        { class: `${DEMO_OUTLINE_LIST_CLASS} ui-scrollbar` },
+    );
     const stepButtons: HTMLButtonElement[] = [];
 
     for (const [chapterIndex, chapter] of trace.chapters.entries()) {

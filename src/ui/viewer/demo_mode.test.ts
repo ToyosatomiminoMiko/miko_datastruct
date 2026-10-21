@@ -161,6 +161,8 @@ describe('演示模式:入口与进入', () => {
         expect(windowEl.querySelectorAll('.window-controls button')).toHaveLength(0);
         expect(windowEl.style.width).toBe(`${VIEWER_DEMO_WINDOW_SIZE.w}px`);
         expect(windowEl.style.height).toBe(`${VIEWER_DEMO_WINDOW_SIZE.h}px`);
+        // 窄桌面下正文可滚:滚动容器挂库的 ui-scrollbar(而不是浏览器默认滑条)
+        expect(windowEl.querySelector('.window-body')?.classList.contains('ui-scrollbar')).toBe(true);
 
         // 标题栏拖动:窗口整体平移(夹取走库的窗口几何,与常驻窗口同一份规则)
         const left = Number.parseFloat(windowEl.style.left);

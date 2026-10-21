@@ -88,6 +88,11 @@ export function createDemoWindow(options: DemoWindowOptions): DemoWindowHandle {
         onGeometryChange: options.onGeometryChange,
     });
     windowHandle.element.classList.add('demo-window');
+    /*
+      窄桌面下 head 会折行,正文可滚(见 viewer.css 的 `.demo-window > .window-body`);
+      滚动条外观同样走库的 `ui-scrollbar`(必须挂在滚动容器自己身上).
+    */
+    windowHandle.element.querySelector<HTMLElement>('.window-body')?.classList.add('ui-scrollbar');
 
     return {
         element: windowHandle.element,

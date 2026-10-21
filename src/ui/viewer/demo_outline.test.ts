@@ -14,6 +14,7 @@ import {
     DEMO_OUTLINE_CHAPTER_HEAD_CLASS,
     DEMO_OUTLINE_COLLAPSE_CLASS,
     DEMO_OUTLINE_CURRENT_CLASS,
+    DEMO_OUTLINE_LIST_CLASS,
     DEMO_OUTLINE_PAST_CLASS,
     DEMO_OUTLINE_STEP_CLASS,
     DEMO_OUTLINE_SUMMARY_CLASS,
@@ -51,6 +52,9 @@ describe('演示步骤目录:结构', () => {
         expect(rows[0]?.textContent).toContain(trace.steps[0]?.title ?? '');
         expect(outline.element.querySelector(`.${DEMO_OUTLINE_SUMMARY_CLASS}`)?.textContent)
             .toBe(`${trace.chapters.length} 章 · ${trace.steps.length} 步`);
+        // 滚动条外观归库:滚动容器自己必须挂 ui-scrollbar(::-webkit-scrollbar 不可继承)
+        expect(outline.element.querySelector(`.${DEMO_OUTLINE_LIST_CLASS}`)?.classList.contains('ui-scrollbar'))
+            .toBe(true);
 
         outline.dispose();
         expect(document.body.contains(outline.element)).toBe(false);
