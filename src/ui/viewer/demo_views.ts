@@ -12,7 +12,7 @@
  * 等在浏览器里有默认行为(滚动 / 光标),所以命中时统一 preventDefault.
  */
 
-import { create_element } from 'miko_ui';
+import { createInlineToggle, createSegmented, createSwitch, create_element } from 'miko_ui';
 import type { DemoPlayerSnapshot } from '@/ui/viewer/demo_player';
 import type { SceneTrace } from '@/datastruct/trace/trace';
 
@@ -27,16 +27,26 @@ export const DEMO_BAR_PROGRESS_CLASS = 'demo-bar__progress';
 export const DEMO_BAR_CHAPTER_CLASS = 'demo-bar__chapter';
 export const DEMO_BAR_TICK_CLASS = 'demo-bar__tick';
 export const DEMO_BAR_SPEED_CLASS = 'demo-bar__speed';
-export const DEMO_BAR_SPEED_BUTTON_CLASS = 'demo-bar__speed-button';
 export const DEMO_BAR_ACTION_CLASS = 'demo-bar__action';
 export const DEMO_BAR_FOLLOW_CLASS = 'demo-bar__follow';
+/** 「步骤」目录开关(与控制条同一排,不占纵向空间) */
+export const DEMO_BAR_OUTLINE_CLASS = 'demo-bar__outline';
 /** 当前步骤的状态类(进度点 / 当前按钮) */
 export const DEMO_BAR_CURRENT_CLASS = 'is-current';
 /** 已经播过的步骤 */
 export const DEMO_BAR_PAST_CLASS = 'is-past';
 
-/** 播放速度档位(0.5× / 1× / 2×);顺序即按钮显示顺序 */
-export const DEMO_SPEEDS = [0.5, 1, 2] as const;
+/**
+ * 播放速度档位(0.5× / 1× / 2×);顺序即按钮显示顺序.
+ *
+ * 值用字符串是因为库的分段单选 `createSegmented` 的值域是 `T extends string`;
+ * 上报给播放器时再 `Number(value)` 转回倍速(见下面的 `onChange`).
+ */
+export const DEMO_SPEEDS = [
+    { value: '0.5', label: '0.5×' },
+    { value: '1', label: '1×' },
+    { value: '2', label: '2×' },
+] as const;
 
 /** 控制条上的动作 id;接线层按它调播放器 */
 export type DemoBarAction = 'prev' | 'toggle' | 'next' | 'exit';
@@ -49,6 +59,9 @@ export const DEMO_BAR_LABELS = {
     play: '播放',
     pause: '暂停',
     follow: '跟随镜头',
+    followTitle: '镜头跟随当前步骤(关掉后演示不再抢视角)',
+    outline: '步骤',
+    outlineTitle: '显示 / 隐藏左侧步骤目录(列出每一章的每一步)',
     exit: '退出',
     speedGroup: '播放速度',
     progressGroup: '步骤进度',
@@ -62,6 +75,9 @@ export interface DemoBarOptions {
     readonly onSeek: (stepIndex: number) => void;
     readonly onSpeed: (speed: number) => void;
     readonly onFollow: (follow: boolean) => void;
+    /** 「步骤」目录初始是否展开(接线层建目录窗口时用同一个值) */
+    readonly outlineVisible: boolean;
+    readonly onOutlineToggle: (visible: boolean) => void;
 }
 
 /** 控制条句柄:元素 + 按快照刷新 + 拆卸 */
@@ -71,6 +87,8 @@ export interface DemoBarHandle {
     update(snapshot: DemoPlayerSnapshot): void;
     /** 换这一拍的标题 / 说明 */
     setStepText(title: string, detail: string): void;
+    /** 同步「步骤」开关(目录窗口从自己的「收起」按钮关掉时也要勾回去) */
+    setOutlineVisible(visible: boolean): void;
     dispose(): void;
 }
 
@@ -122,26 +140,38 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
         DEMO_BAR_LABELS.next,
     );
 
-    const speedButtons = DEMO_SPEEDS.map((speed) => create_element(
-        { tag: 'button' },
-        {
-            type: 'button',
-            class: `ui-button ${DEMO_BAR_SPEED_BUTTON_CLASS}`,
-            'data-demo-speed': String(speed),
-            'aria-pressed': speed === 1 ? 'true' : 'false',
-            title: `${speed} 倍速`,
-        },
-        `${speed}×`,
-    ));
+    /*
+      速度档用库的分段单选 `createSegmented`:一次只有一个 `.active`,按钮组带
+      `role="group"` + `aria-pressed`,键盘与读屏语义都是库定好的;应用侧只给列数 /
+      组名 / 初值,不再自己写"三个按钮 + 手写高亮".
+    */
+    const speedSegmented = createSegmented({
+        columns: DEMO_SPEEDS.length,
+        ariaLabel: DEMO_BAR_LABELS.speedGroup,
+        value: '1',
+        items: DEMO_SPEEDS,
+    });
+    speedSegmented.element.classList.add(DEMO_BAR_SPEED_CLASS);
 
-    const followInput = create_element({ tag: 'input' }, { type: 'checkbox' });
-    followInput.checked = true;
-    const followLabel = create_element(
-        { tag: 'label' },
-        { class: DEMO_BAR_FOLLOW_CLASS },
-        followInput,
-        DEMO_BAR_LABELS.follow,
-    );
+    /*
+      两个布尔开关都用库的 `createSwitch`(而不是手写 `<input type="checkbox">`):
+      轨道 / 圆钮 / 焦点态是库的控件基线,应用侧只声明"初值 + 标签".标签用
+      `createInlineToggle` 生成 `<label for>`,点文字也能切换,可访问名由可见标签给
+      (所以不再传 ariaLabel,否则读屏会把名字念两遍).
+
+      状态归属:开关自己持有勾选态;播放器快照是「跟随镜头」的真相,目录窗口显隐是
+      「步骤」的真相 -- 外部只在不一致时 `set()` 回写,用户切换由 `onChange` 上报.
+    */
+    const followSwitch = createSwitch({ value: true });
+    const followToggle = createInlineToggle(DEMO_BAR_LABELS.follow, followSwitch);
+    followToggle.classList.add(DEMO_BAR_FOLLOW_CLASS);
+    followToggle.title = DEMO_BAR_LABELS.followTitle;
+
+    // 「步骤」目录开关:目录窗口默认展开,收起后画布更干净
+    const outlineSwitch = createSwitch({ value: options.outlineVisible });
+    const outlineToggle = createInlineToggle(DEMO_BAR_LABELS.outline, outlineSwitch);
+    outlineToggle.classList.add(DEMO_BAR_OUTLINE_CLASS);
+    outlineToggle.title = DEMO_BAR_LABELS.outlineTitle;
 
     const exitButton = create_element(
         { tag: 'button' },
@@ -161,12 +191,9 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
             toggleButton,
             nextButton,
         ),
-        create_element(
-            { tag: 'div' },
-            { class: DEMO_BAR_SPEED_CLASS, role: 'group', 'aria-label': DEMO_BAR_LABELS.speedGroup },
-            ...speedButtons,
-        ),
-        followLabel,
+        speedSegmented.element,
+        followToggle,
+        outlineToggle,
         exitButton,
     );
 
@@ -201,7 +228,8 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
         progress,
     );
 
-    // 委托点击:按钮 / 进度点 / 速度档共用一份监听,控制条拆掉时一次全摘
+    // 委托点击:播放按钮 / 进度点共用一份监听,控制条拆掉时一次全摘
+    // (速度档归库的 segmented,它自己绑按钮,不从这里走)
     element.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
@@ -212,12 +240,6 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
             if (Number.isSafeInteger(stepIndex)) options.onSeek(stepIndex);
             return;
         }
-        const speedButton = target.closest<HTMLElement>(`.${DEMO_BAR_SPEED_BUTTON_CLASS}`);
-        if (speedButton !== null) {
-            const speed = Number(speedButton.dataset.demoSpeed);
-            if (Number.isFinite(speed)) options.onSpeed(speed);
-            return;
-        }
         const actionButton = target.closest<HTMLElement>('[data-demo-action]');
         if (actionButton === null) return;
         const action = actionButton.dataset.demoAction;
@@ -226,15 +248,26 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
         }
     }, { signal });
 
-    followInput.addEventListener('change', () => {
-        options.onFollow(followInput.checked);
-    }, { signal });
+    // 用户切换:库的开关先把值写回自己的 input,再回调;这里只负责上报给播放器 / 窗口层
+    const stopFollow = followSwitch.onChange((value) => {
+        options.onFollow(value);
+    });
+    const stopOutline = outlineSwitch.onChange((value) => {
+        options.onOutlineToggle(value);
+    });
+    const stopSpeed = speedSegmented.onChange((value) => {
+        options.onSpeed(Number(value));
+    });
 
     const setStepText = (nextTitle: string, nextDetail: string): void => {
         stepTitle.textContent = nextTitle;
         stepDetail.textContent = nextDetail;
         // 长说明在控制条里省略(最多两行),悬停看全文
         stepDetail.title = nextDetail;
+    };
+
+    const setOutlineVisible = (visible: boolean): void => {
+        if (outlineSwitch.get() !== visible) outlineSwitch.set(visible);
     };
 
     const update = (snapshot: DemoPlayerSnapshot): void => {
@@ -244,12 +277,14 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
         toggleButton.title = playing ? DEMO_BAR_LABELS.pause : DEMO_BAR_LABELS.play;
         prevButton.disabled = snapshot.step <= 0;
         nextButton.disabled = snapshot.step >= snapshot.total - 1;
-        for (const button of speedButtons) {
-            const speed = Number(button.dataset.demoSpeed);
-            button.setAttribute('aria-pressed', speed === snapshot.speed ? 'true' : 'false');
+        // 速度档:segmented 只认自己的值域,按倍速反查对应的字符串档位再回写
+        const speedValue = DEMO_SPEEDS.find((item) => Number(item.value) === snapshot.speed)?.value;
+        if (speedValue !== undefined && speedSegmented.get() !== speedValue) {
+            speedSegmented.set(speedValue);
         }
-        // 用户正在操作速度 / 跟随控件时不要写回 checked,否则一次 change 会被同步覆盖
-        if (followInput.checked !== snapshot.follow) followInput.checked = snapshot.follow;
+        // 播放器快照是跟随状态的真相;只在控件与快照不一致时回写(用户切换的那一拍
+        // 由 onChange 先上报,快照回来时两边已经一致,不会互相覆盖)
+        if (followSwitch.get() !== snapshot.follow) followSwitch.set(snapshot.follow);
 
         const ticks = element.querySelectorAll<HTMLElement>(`.${DEMO_BAR_TICK_CLASS}`);
         for (const tick of ticks) {
@@ -265,7 +300,14 @@ export function createDemoBar(options: DemoBarOptions): DemoBarHandle {
         element,
         update,
         setStepText,
+        setOutlineVisible,
         dispose(): void {
+            stopFollow();
+            stopOutline();
+            stopSpeed();
+            followSwitch.dispose();
+            outlineSwitch.dispose();
+            speedSegmented.dispose();
             abort.abort();
             element.remove();
         },

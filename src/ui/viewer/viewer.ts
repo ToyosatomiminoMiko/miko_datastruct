@@ -73,9 +73,12 @@ import {
 } from '@/ui/viewer/demo_player';
 import { findDemoScenario, demoScenarioMenuGroups } from '@/ui/viewer/demo_scenarios';
 import { bindDemoKeys, createDemoBar, type DemoBarHandle } from '@/ui/viewer/demo_views';
+import { createDemoOutline, type DemoOutlineHandle } from '@/ui/viewer/demo_outline';
 import {
+    createDemoOutlineWindow,
     createDemoWindow,
     demoWindowDocked,
+    type DemoOutlineWindowHandle,
     type DemoWindowHandle,
 } from '@/ui/viewer/demo_window';
 import { createRafClock, prefersReducedMotion } from '@/visual/tween';
@@ -261,6 +264,10 @@ export function mountViewer(host: HTMLElement): void {
         readonly bar: DemoBarHandle;
         /** 装控制条的窗口(固定大小、标题栏可拖;退出时随会话拆掉) */
         readonly window: DemoWindowHandle;
+        /** 左侧步骤目录的正文(按章列出每一步;点行 / 点章头跳转) */
+        readonly outline: DemoOutlineHandle;
+        /** 装目录的窗口(贴左列,从任务栏下沿排到控制窗口上沿) */
+        readonly outlineWindow: DemoOutlineWindowHandle;
         readonly painter: ScenePainter;
         readonly savedWindows: ReadonlyMap<ViewerWindowId, 'normal' | 'maximized' | 'minimized'>;
         /** 进入前的「检查配置」编辑器内容:演示改了它,退出要还原(否则静态检查配置与画面对不上) */
@@ -491,6 +498,12 @@ export function mountViewer(host: HTMLElement): void {
         // ③ 控制窗口 + 键盘.先建控制条与窗口,播放器构造时就能按快照刷新它.
         const trace = scenario.build();
         let playerRef: DemoPlayerHandle | null = null;
+        let outlineWindowRef: DemoOutlineWindowHandle | null = null;
+        /** 目录显隐的唯一入口:控制条的开关与目录自己的「收起」都走这里,开关状态才不会分叉 */
+        const setOutlineVisible = (visible: boolean): void => {
+            outlineWindowRef?.setVisible(visible);
+            bar.setOutlineVisible(visible);
+        };
         const bar = createDemoBar({
             trace,
             onAction: (action) => {
@@ -504,6 +517,9 @@ export function mountViewer(host: HTMLElement): void {
             onSeek: (stepIndex) => playerRef?.seek(stepIndex),
             onSpeed: (speed) => playerRef?.setSpeed(speed),
             onFollow: (follow) => playerRef?.setFollow(follow),
+            // 目录默认展开:演示的第一眼就该看到"接下来讲什么",嫌挤再收起
+            outlineVisible: true,
+            onOutlineToggle: (visible) => setOutlineVisible(visible),
         });
         bar.element.id = VIEWER_DOM.demoBarId;
         /*
@@ -529,6 +545,23 @@ export function mountViewer(host: HTMLElement): void {
             content: bar.element,
             onGeometryChange: applyDemoInsets,
         });
+
+        /*
+          步骤目录:与控制窗口并列的一扇演示专用浮窗.它占左列(演示模式里那三扇常量
+          窗口已被最小化,正好空出来),不挡中间画布;贴底的控制窗口仍在下方.
+          目录不接管聚焦态,键盘焦点留在用户刚操作的控制条上.
+        */
+        const outline = createDemoOutline({
+            trace,
+            onSeek: (stepIndex) => playerRef?.seek(stepIndex),
+            onCollapse: () => setOutlineVisible(false),
+        });
+        outline.element.id = VIEWER_DOM.demoOutlineId;
+        const outlineWindow = createDemoOutlineWindow({
+            layer: desktop.windowLayer,
+            content: outline.element,
+        });
+        outlineWindowRef = outlineWindow;
 
         const keys = new AbortController();
         const painter = new ScenePainter(worldEl);
@@ -569,6 +602,7 @@ export function mountViewer(host: HTMLElement): void {
             camera: applyCamera,
             state(snapshot): void {
                 bar.update(snapshot);
+                outline.update(snapshot);
             },
         };
 
@@ -594,7 +628,17 @@ export function mountViewer(host: HTMLElement): void {
             exit: () => exitDemo(),
         }, keys.signal);
 
-        demoSession = { player, bar, window: demoWindow, painter, savedWindows, savedCheckConfig, keys };
+        demoSession = {
+            player,
+            bar,
+            window: demoWindow,
+            outline,
+            outlineWindow,
+            painter,
+            savedWindows,
+            savedCheckConfig,
+            keys,
+        };
     }
 
     /**
@@ -611,6 +655,10 @@ export function mountViewer(host: HTMLElement): void {
         session.keys.abort();
         session.player.dispose();
         session.bar.dispose();
+        // 先拆正文再拆窗口外壳:正文节点是 append 进 .window-body 的,顺序反过来
+        // 外壳会先摘掉,节点留在已拆的 body 里(不会泄漏到桌面,但显式收干净)
+        session.outline.dispose();
+        session.outlineWindow.dispose();
         session.window.dispose();
         session.painter.dispose();
 

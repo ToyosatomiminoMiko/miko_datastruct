@@ -355,25 +355,27 @@
     color: var(--viewer-demo-bar-muted);
 }
 
-.demo-bar__transport,
-.demo-bar__speed {
+.demo-bar__transport {
     display: flex;
     align-items: center;
     gap: 4px;
-}
-
-.demo-bar__transport {
     margin-left: auto;
 }
 
-/* 速度档:一组小按钮,当前档由 aria-pressed 高亮(读屏与样式共用一份真相) */
-.demo-bar__speed-button[aria-pressed='true'] {
-    color: #0f172a;
-    background: var(--viewer-demo-bar-accent);
-    border-color: var(--viewer-demo-bar-accent);
+/*
+ * 速度档:库的 `.segmented`(三列单选),当前档由 `.active` 高亮 -- 应用侧不再自绘
+ * aria-pressed 选中态.这里只把按钮压到演示条的密度,与旁边的 `.ui-button` 等高.
+ */
+.demo-bar__speed {
+    gap: 4px;
 }
 
-.demo-bar__follow {
+.demo-bar__speed button {
+    padding: 2px 6px;
+}
+
+.demo-bar__follow,
+.demo-bar__outline {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -447,6 +449,143 @@
 
 .demo-bar__action {
     font-size: 12px;
+}
+
+/*
+ * 演示步骤目录窗口(ui/viewer/demo_window.ts 建外壳,ui/viewer/demo_outline.ts 建正文).
+ *
+ * 与控制窗口并列:目录贴左列,从任务栏下沿排到控制窗口上沿.窗口正文默认 padding: 0、
+ * 裁切归 `.window-body`,这里只负责把目录排成"固定头部 + 可滚列表"两段,并让粘性章
+ * 标题的底色与窗口底色一致(否则滚动时下面的步骤会透上来).
+ *
+ * 列表滚动条由库的 `.ui-scrollbar` 给外观;目录正文自己加 `scroll-padding-top`,
+ * 让 `scrollIntoView({block:'nearest'})` 不会把当前步顶到粘性章标题底下.
+ */
+.demo-outline-window > .window-body {
+    margin-bottom: 0;
+    overflow: hidden;
+}
+
+.demo-outline {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    color: var(--viewer-demo-bar-text);
+}
+
+.demo-outline__head {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-accent-line);
+}
+
+.demo-outline__summary {
+    font-family: var(--font-code);
+    font-size: 11px;
+    color: var(--viewer-demo-bar-muted);
+}
+
+.demo-outline__collapse {
+    margin-left: auto;
+    font-size: 11px;
+}
+
+.demo-outline__list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 4px 0 10px;
+    scroll-padding-top: 28px;
+}
+
+/* 章标题:滚动时粘在列表上沿;按钮与步骤按钮共用一份点击委托 */
+.demo-outline__chapter-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 12px 4px;
+    border: 0;
+    background: var(--color-bg-panel);
+    color: var(--viewer-demo-outline-chapter);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-align: left;
+    cursor: pointer;
+}
+
+.demo-outline__chapter-head:hover {
+    color: var(--viewer-demo-bar-text);
+}
+
+.demo-outline__chapter-index {
+    font-family: var(--font-code);
+    font-weight: 400;
+    color: var(--viewer-demo-outline-chapter-index);
+}
+
+.demo-outline__chapter-count {
+    margin-left: auto;
+    font-family: var(--font-code);
+    font-weight: 400;
+    color: var(--viewer-demo-outline-chapter-index);
+}
+
+/* 步骤行:序号右对齐成一列窄数字,标题占满剩余宽度 */
+.demo-outline__step {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 12px 4px 18px;
+    border: 0;
+    background: transparent;
+    color: var(--viewer-demo-outline-step);
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+    cursor: pointer;
+}
+
+.demo-outline__step:hover {
+    background: var(--viewer-demo-outline-hover-bg);
+    color: var(--viewer-demo-bar-text);
+}
+
+.demo-outline__step-index {
+    min-width: 18px;
+    font-family: var(--font-code);
+    font-size: 10px;
+    text-align: right;
+    color: var(--viewer-demo-outline-step-index);
+}
+
+/* 已经播过的步骤压暗,方便"讲到哪一段"一眼可读 */
+.demo-outline__step.is-past {
+    color: var(--viewer-demo-outline-step-past);
+}
+
+.demo-outline__step.is-current {
+    background: var(--viewer-demo-outline-cursor-bg);
+    box-shadow: inset 3px 0 0 var(--viewer-demo-bar-accent);
+    color: var(--viewer-demo-outline-cursor-text);
+}
+
+.demo-outline__step.is-current .demo-outline__step-index {
+    color: var(--viewer-demo-bar-accent);
+}
+
+.demo-outline__step:focus-visible,
+.demo-outline__chapter-head:focus-visible {
+    outline: 1px solid var(--viewer-demo-bar-accent);
+    outline-offset: -2px;
 }
 
 /*

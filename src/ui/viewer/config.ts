@@ -29,6 +29,8 @@ export const VIEWER_DOM = {
     demoMenuId: 'viewerDemoMenu',
     /** 演示控制窗口的正文根(演示条挂在库的窗口外壳里) */
     demoBarId: 'viewerDemoBar',
+    /** 演示步骤目录的正文根(挂在左侧目录窗口里) */
+    demoOutlineId: 'viewerDemoOutline',
     /** 「示例」按钮的菜单面板(窗口标题栏 overlays 槽位) */
     exampleMenuId: 'viewerExampleMenu',
     /** JSON 编辑器宿主:库的 CodeEditor 外框长在它里面 */
@@ -272,6 +274,26 @@ export const VIEWER_DEMO_WINDOW_GAP = 16;
  * 高度扣底部 inset 只会白白浪费取景空间.
  */
 export const VIEWER_DEMO_WINDOW_DOCK_SLOP = 32;
+
+/**
+ * 演示步骤目录窗口的 `data-window` id 与标题栏文案.
+ *
+ * 与控制窗口一样只在演示模式存在:目录按章列出整条轨迹的每一步,用来回答"接下来
+ * 讲什么 / 现在讲到哪";不放进桌面窗口清单,也不参与最小化 /「全部还原」.
+ */
+export const VIEWER_DEMO_OUTLINE_WINDOW_ID = 'demo-outline';
+export const VIEWER_DEMO_OUTLINE_WINDOW_TITLE = '步骤目录';
+
+/**
+ * 目录窗口宽度(px)与最小尺寸.
+ *
+ * 宽度按"章节标题 + 一句 12px 步骤标题"取 312:再窄标题开始折行,再宽会压掉中间
+ * 画布.高度不是一个固定值:窗口从任务栏下沿一直排到控制窗口上沿,所以几何用
+ * `h: { from: 'bottom', inset }` 表达(见 demo_window.ts),这里只给最小高度兜底.
+ */
+export const VIEWER_DEMO_OUTLINE_WINDOW_WIDTH = 312;
+export const VIEWER_DEMO_OUTLINE_WINDOW_MIN_WIDTH = 240;
+export const VIEWER_DEMO_OUTLINE_WINDOW_MIN_HEIGHT = 200;
 
 // 任务栏动作:回正视图
 

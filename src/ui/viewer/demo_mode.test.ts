@@ -9,11 +9,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+    VIEWER_DEMO_OUTLINE_WINDOW_ID,
     VIEWER_DEMO_WINDOW_ID,
     VIEWER_DEMO_WINDOW_SIZE,
     VIEWER_DEMO_WINDOW_TITLE,
     VIEWER_DOM,
 } from '@/ui/viewer/config';
+import {
+    DEMO_OUTLINE_CURRENT_CLASS,
+    DEMO_OUTLINE_STEP_CLASS,
+} from '@/ui/viewer/demo_outline';
 import { findDemoScenario } from '@/ui/viewer/demo_scenarios';
 import { mountViewer } from '@/ui/viewer/viewer';
 import { VISUAL_NODE_CLASS } from '@/visual/config';
@@ -49,6 +54,18 @@ function demoWindow(): HTMLElement {
     const element = document.querySelector<HTMLElement>(`[data-window="${VIEWER_DEMO_WINDOW_ID}"]`);
     if (!element) throw new Error('桌面上找不到演示控制窗口');
     return element;
+}
+
+/** 步骤目录窗口(与控制窗口并列的另一扇演示专用浮窗) */
+function outlineWindow(): HTMLElement {
+    const element = document.querySelector<HTMLElement>(`[data-window="${VIEWER_DEMO_OUTLINE_WINDOW_ID}"]`);
+    if (!element) throw new Error('桌面上找不到步骤目录窗口');
+    return element;
+}
+
+/** 目录里的步骤行(顺序 = 播放顺序) */
+function outlineSteps(): HTMLElement[] {
+    return [...outlineWindow().querySelectorAll<HTMLElement>(`.${DEMO_OUTLINE_STEP_CLASS}`)];
 }
 
 /** 任务栏里的「演示」按钮(库按 VIEWER_DOCK_ACTIONS 建) */
@@ -228,6 +245,95 @@ describe('演示模式:播放控制', () => {
     });
 });
 
+describe('演示模式:步骤目录', () => {
+    it('进入演示后左侧有目录窗口:按章列出全部步骤,当前步高亮', () => {
+        mountPanel(1400, 700);
+        const scenario = findDemoScenario('bst-basics');
+        if (!scenario) throw new Error('缺少 bst-basics 剧本');
+        const trace = scenario.build();
+        selectScenario('BST · 查找');
+
+        const windowEl = outlineWindow();
+        expect(windowEl.classList.contains('window')).toBe(true);
+        expect(windowEl.parentElement?.classList.contains('window-layer')).toBe(true);
+        expect(windowEl.querySelector('.window-title')?.textContent).toContain('步骤');
+        expect(outlineSteps()).toHaveLength(trace.steps.length);
+        expect(windowEl.querySelector('.demo-outline__summary')?.textContent)
+            .toBe(`${trace.chapters.length} 章 · ${trace.steps.length} 步`);
+
+        const current = windowEl.querySelectorAll(`.${DEMO_OUTLINE_CURRENT_CLASS}`);
+        expect(current).toHaveLength(1);
+        expect(current[0]?.getAttribute('aria-current')).toBe('step');
+        expect(current[0]?.textContent).toContain(trace.steps[0]?.title ?? '');
+        expectNoDuplicateIds();
+    });
+
+    it('点步骤 / 点章头跳到那一步;单步后目录高亮跟着动', () => {
+        mountPanel();
+        const scenario = findDemoScenario('bst-basics');
+        if (!scenario) throw new Error('缺少 bst-basics 剧本');
+        const trace = scenario.build();
+        const chapter = trace.chapters[2];
+        if (chapter === undefined) throw new Error('剧本至少要有三章');
+        selectScenario('BST · 查找');
+
+        const rows = outlineSteps();
+        rows[7]?.click();
+        expect(byId(VIEWER_DOM.demoBarId).querySelector('.demo-bar__count')?.textContent)
+            .toBe(`8 / ${trace.steps.length}`);
+        expect(rows[7]?.classList.contains(DEMO_OUTLINE_CURRENT_CLASS)).toBe(true);
+        expect(rows[6]?.classList.contains('is-past')).toBe(true);
+
+        outlineWindow()
+            .querySelectorAll<HTMLElement>('.demo-outline__chapter-head')[2]
+            ?.click();
+        expect(byId(VIEWER_DOM.demoBarId).querySelector('.demo-bar__count')?.textContent)
+            .toBe(`${chapter.firstStep + 1} / ${trace.steps.length}`);
+
+        clickBar('[data-demo-action="next"]');
+        expect(rows[chapter.firstStep + 1]?.classList.contains(DEMO_OUTLINE_CURRENT_CLASS)).toBe(true);
+        expect(rows[chapter.firstStep]?.classList.contains('is-past')).toBe(true);
+    });
+
+    it('「步骤」开关与目录里的「收起」双向同步;隐藏走库的 is-hidden', () => {
+        mountPanel();
+        selectScenario('BST · 查找');
+        const windowEl = outlineWindow();
+        // 与「跟随镜头」一样是库的 createSwitch(.switch > input + .slider)
+        expect(
+            byId<HTMLElement>(VIEWER_DOM.demoBarId).querySelector('.demo-bar__outline .switch'),
+        ).not.toBeNull();
+        const checkbox = byId<HTMLElement>(VIEWER_DOM.demoBarId)
+            .querySelector<HTMLInputElement>('.demo-bar__outline input');
+        if (!checkbox) throw new Error('控制条里找不到「步骤」开关');
+        expect(checkbox.checked).toBe(true);
+
+        checkbox.checked = false;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(windowEl.classList.contains('is-hidden')).toBe(true);
+        expect(windowEl.inert).toBe(true);
+
+        checkbox.checked = true;
+        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(windowEl.classList.contains('is-hidden')).toBe(false);
+        expect(windowEl.inert).toBe(false);
+
+        // 从目录自己的「收起」关掉:控制条开关必须回去,否则两处状态分叉
+        windowEl.querySelector<HTMLElement>('.demo-outline__collapse')?.click();
+        expect(windowEl.classList.contains('is-hidden')).toBe(true);
+        expect(checkbox.checked).toBe(false);
+    });
+
+    it('退出演示时目录窗口一起拆掉', () => {
+        mountPanel();
+        selectScenario('BST · 查找');
+        expect(document.querySelector(`[data-window="${VIEWER_DEMO_OUTLINE_WINDOW_ID}"]`)).not.toBeNull();
+
+        clickBar('[data-demo-action="exit"]');
+        expect(document.querySelector(`[data-window="${VIEWER_DEMO_OUTLINE_WINDOW_ID}"]`)).toBeNull();
+    });
+});
+
 describe('演示模式:退出与 RUN 冲突', () => {
     it('退出后恢复进入前的窗口状态,并把最后一次静态结构画回来', () => {
         mountPanel();
@@ -267,6 +373,10 @@ describe('演示模式:退出与 RUN 冲突', () => {
         selectScenario('BST · 查找');
         const bar = byId<HTMLElement>(VIEWER_DOM.demoBarId);
 
+        // 开关是库的 createSwitch:根是 .switch,视觉在 .slider 上,原生 checkbox 只留交互
+        const followBox = bar.querySelector<HTMLElement>('.demo-bar__follow .switch');
+        expect(followBox).not.toBeNull();
+        expect(followBox?.querySelector('.slider')).not.toBeNull();
         const follow = bar.querySelector<HTMLInputElement>('.demo-bar__follow input');
         if (!follow) throw new Error('控制窗口里找不到跟随镜头开关');
         expect(follow.checked).toBe(true);
@@ -274,9 +384,14 @@ describe('演示模式:退出与 RUN 冲突', () => {
         follow.dispatchEvent(new Event('change', { bubbles: true }));
         expect(follow.checked).toBe(false);
 
-        const speedButtons = [...bar.querySelectorAll<HTMLButtonElement>('.demo-bar__speed-button')];
+        // 速度档是库的 segmented:单选,当前档由 .active + aria-pressed 表达
+        const speedGroup = bar.querySelector<HTMLElement>('.demo-bar__speed');
+        expect(speedGroup?.classList.contains('segmented')).toBe(true);
+        const speedButtons = [...(speedGroup?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+        expect(speedButtons.map((button) => button.textContent)).toEqual(['0.5×', '1×', '2×']);
         expect(speedButtons.map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false']);
         speedButtons[2]?.click();
         expect(speedButtons.map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true']);
+        expect(speedButtons[2]?.classList.contains('active')).toBe(true);
     });
 });

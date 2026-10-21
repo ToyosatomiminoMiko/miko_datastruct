@@ -64,3 +64,18 @@
     --viewer-demo-bar-tick: #334155;
     --viewer-demo-bar-tick-past: #475569;
 }
+
+/*
+ * 演示步骤目录窗口:章节标题 / 步骤行 / 当前步.底色与窗口描边仍归库的 .window,
+ * 这里只给目录自己的文字层级与"当前步"的高亮;目录是专用面板,不参与通用列表观感.
+ */
+:root {
+    --viewer-demo-outline-chapter: #94a3b8;
+    --viewer-demo-outline-chapter-index: #64748b;
+    --viewer-demo-outline-step: #c7cedd;
+    --viewer-demo-outline-step-past: #7c879c;
+    --viewer-demo-outline-step-index: #64748b;
+    --viewer-demo-outline-cursor-bg: rgba(56, 189, 248, 0.14);
+    --viewer-demo-outline-cursor-text: #e0f2fe;
+    --viewer-demo-outline-hover-bg: rgba(148, 163, 184, 0.12);
+}
