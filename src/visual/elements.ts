@@ -42,7 +42,7 @@ export interface NodeElements {
     readonly group: SVGGElement;
     /** 形状(当前是圆):半径由 TS 常量写进 `r` 属性,填充与入场动画归 CSS */
     readonly shape: SVGCircleElement;
-    /** 值文字:居中对齐归 CSS,内容由场景给 */
+    /** 值文字元素:居中对齐归 CSS,内容由场景给(文档里是 `String(key)`) */
     readonly label: SVGTextElement;
 }
 
@@ -150,7 +150,7 @@ export function createNodeElements(node: VisualNode): NodeElements {
     const label = create_svg_element(
         { tag: 'text', into: group },
         { class: VISUAL_NODE_LABEL_CLASS },
-        node.label,
+        node.text,
     );
     return { group, shape, label };
 }
@@ -201,7 +201,7 @@ export function writeNodeElements(elements: NodeElements, node: VisualNode): voi
         node.variant === undefined ? null : visualNodeVariantClass(node.variant),
     );
     // textContent 相同就不写:动画每帧都在调,避免无意义的文本节点替换
-    if (elements.label.textContent !== node.label) elements.label.textContent = node.label;
+    if (elements.label.textContent !== node.text) elements.label.textContent = node.text;
 }
 
 /**

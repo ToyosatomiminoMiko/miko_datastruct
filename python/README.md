@@ -41,13 +41,13 @@ python3 demo.py --out /tmp/dataviz       # 顺便把 JSON 写成文件
 python3 -m unittest discover -s tests -t .
 ```
 
-柯尼斯堡那段的 JSON(节选):
+柯尼斯堡那段的 JSON(节选;陆地 key 就是数据键 "K" / "N" / …,桥按它引用):
 
 ```json
 {
-  "nodes": [{"key": 0, "label": "K"}, "...": "..."],
+  "nodes": [{"key": "K"}, {"key": "N"}, "...": "..."],
   "pointers": [],
-  "edges": [{"a": 0, "b": 1}, "...": "..."]
+  "edges": [{"a": "K", "b": "N"}, "...": "..."]
 }
 ```
 
@@ -56,24 +56,24 @@ python3 -m unittest discover -s tests -t .
 ```json
 {
   "nodes": [
-    {"key": 0, "label": "8"},
-    {"key": 1, "label": "4"},
-    {"key": 2, "label": "2"}
+    {"key": 8},
+    {"key": 4},
+    {"key": 2}
   ],
-  "pointers": [{"from": 0, "to": 1}, {"from": 1, "to": 2}],
+  "pointers": [{"from": 8, "to": 4}, {"from": 4, "to": 2}],
   "edges": []
 }
 ```
 
-红黑树那段:
+红黑树那段(`key` 就是树里的数字键,颜色在 attrs):
 
 ```json
 {
   "nodes": [
-    {"key": 0, "label": "13", "attrs": {"color": "black"}},
-    {"key": 1, "label": "8", "attrs": {"color": "red"}}
+    {"key": 13, "attrs": {"color": "black"}},
+    {"key": 8, "attrs": {"color": "red"}}
   ],
-  "pointers": [{"from": 0, "to": 1}],
+  "pointers": [{"from": 13, "to": 8}],
   "edges": []
 }
 ```
@@ -87,7 +87,7 @@ README 的"输入:中性场景 JSON"一节一致。
 
 | 角色 | 写法(类型标注) | 基数 | 输出 |
 | --- | --- | --- | --- |
-| **属性** `Attr` | `key: str` / `value: int = 0` | 标量 | 进 label / `attrs` |
+| **属性** `Attr` | `key: str` / `value: int = 0` | 标量 | `key` / `id` / `value` 字段成为 scene key,其余进 `attrs` |
 | **指针** `Pointer` | `left: "Node \| None"` / `T` | 0..1 | 一条有向指针 |
 | **指针** `Pointer` | `children: list[T]` / `Sequence[T]` | 0..n | 多条有向指针 |
 
@@ -103,7 +103,7 @@ README 的"输入:中性场景 JSON"一节一致。
 - **pointer**(字段角色):有向,属于某个 node,`A.left -> B` 与 `B.parent -> A` 是两条
   不同的指针,各自照画,不合并、不去重;
 - **edge**(结构种类 `as_="edge"`):无向,一条边连接两个 node,有自己的对象身份
-  (柯尼斯堡的多重边就要靠这个),可选属性做边标签;
+  (柯尼斯堡的多重边就要靠这个),可选属性进 `attrs`;
 - 有向带权边以后再加,它是第三种连接类型(`arc` + 权重),不要用 `directed` 布尔开关去
   冒充类型。
 
@@ -122,10 +122,14 @@ README 的"输入:中性场景 JSON"一节一致。
 
 ### 身份与 key
 
-- 身份是 **`id(obj)`**:同一个对象第二次遇到只加指针;值相等的两个对象是两个节点;
-- `key` / `id` 属性只影响**标签**(默认优先用它),**不代表唯一性约束**;库不会按 key 合并。
-- 场景里的 `nodes[].key` 是**输出编号**,与数据对象的 `key` / `id` 属性无关:前者按遍历
-  顺序从 0 开始,后者只影响标签。
+- 遍历身份是 **`id(obj)`**:同一个对象第二次遇到只加指针;值相等的两个对象是两个节点,
+  库不会按数据键合并;
+- 输出里 `nodes[].key` 就是**数据键**:取节点对象第一个存在的 `key` -> `id` -> `value`
+  属性(只认 `Attr` 角色)的值;没有这样的属性时退回遍历序号(按遍历顺序只数 node,
+  从 0 开始);
+- 同一个文档里 key 必须**唯一**且**同类型**(全 number 或全 string);重复报
+  `duplicate-key`,混用报 `bad-key`。它是节点在画布上的显示文字,也是 pointers / edges
+  引用它的标识。
 
 ## 输出契约
 
@@ -134,41 +138,42 @@ README 的"输入:中性场景 JSON"一节一致。
 ```json
 {
   "nodes": [
-    { "key": 0, "label": "13", "attrs": { "color": "black" } },
-    { "key": 1, "label": "8",  "attrs": { "color": "red" } }
+    { "key": 13, "attrs": { "color": "black" } },
+    { "key": 8,  "attrs": { "color": "red" } }
   ],
-  "pointers": [{ "from": 0, "to": 1 }],
-  "edges": [{ "a": 0, "b": 1, "label": "name=桥1", "attrs": { "name": "桥1" } }]
+  "pointers": [{ "from": 13, "to": 8 }],
+  "edges": [{ "a": 13, "b": 8, "attrs": { "name": "桥1" } }]
 }
 ```
 
 - `nodes` / `pointers` / `edges` 是三种图元,方向语义严格区分;
 - JSON 里**没有结构名、没有检查结论**:要跑哪些检查由 web 侧「检查配置」窗口单独给;
-- `nodes[].key` 是**整数**,按遍历顺序从 0 开始,在 nodes 内唯一;
+- `nodes[].key` 是**数据键**(number 或 string),在同一份文档内唯一且同类型;数值必须是
+  有限数、字符串不能为空(与 web 解析器的校验一致);它是节点的显示文字与引用标识,
+  没有单独的展示字段;
 - `pointers[].from` / `to`、`edges[].a` / `b` 都引用节点 key;
 - pointer / edge **自己不带 key**:现在没有别的图元引用它们,`n0` / `e0` 这种前缀也因此
   是多余的(角色已经由数组区分);将来需要选中边 / 给边挂东西时再加;
 - `pointers` 的方向就是 `from -> to`:**没有 `variant`**,`left` / `right` 这类字段名是
   数据结构语义,不属于中性场景;树布局需要左右顺序时按 pointers 数组顺序即可;
 - **没有 `shape`**:树 / 图 / 链是内容本身的性质,由 web 从 nodes / pointers / edges 推
-  (度数、是否有环、有没有无向边),不靠一个自报的标签;
-- **`attrs` 是差异化入口**:节点 / 边的通用槽(`key` / `label`、`a` / `b`)之外的所有
+  (度数、是否有环、有没有无向边),不靠一个自报的 shape 标记;
+- **`attrs` 是差异化入口**:节点 / 边的通用槽(`key`、`a` / `b`、`from` / `to`)之外的所有
   `Attr` 字段都进 `attrs`,键就是字段名;值用原生 JSON 标量,Enum 取 `.value`;
-- `label` 来源:节点的 `label="字段名"`,没写就按 `key` -> `id` -> `value` 找;这个字段
-  只进 `label`,不再重复进 `attrs`;
-- 边 `label` 是展示文字;`attrs` 里放它的其余属性;
+- 节点的 key 来源字段只成为 `nodes[].key`,不再重复进 `attrs`;没有来源字段(退回遍历
+  序号)时,所有属性都进 `attrs`;
+- 边没有单独的展示文字;它的其余属性都在 `attrs` 里;
 - `None` 不当成值,不进 `attrs`(JSON 里省略);空 attrs 也省略。
 
 ### 和 web 侧的一一对应
 
 | Python 侧 | web 侧 |
 | --- | --- |
-| `nodes` / `nodes[].key` | 节点与节点引用 |
-| `Attr` | 节点 label / `attrs` |
+| `nodes` / `nodes[].key` | 节点、节点显示文字与节点引用 |
+| `Attr` | 节点 scene key(数据键)/ `attrs` |
 | `Pointer` | 有向连接(画布上目前是无线段) |
 | `as_="edge"` | 无向边(画布上目前是无线段) |
 | `attrs` | 各结构自己的渲染 / 样式映射(没有 `variant` 字段) |
-| `label` 钩子 | 节点的展示文字 |
 
 **关键差异**:web 的 `VisualScene` 带世界坐标,Python 的 Scene **不带**。布局由 web 侧从
 内容推形状(有 `edges` -> 图;只有 `pointers` 且入度 ≤ 1 / 无环 -> 树),Python 不参与。
@@ -196,7 +201,7 @@ print(diagram.dumps())   # web 读的 JSON
 ### L1:二叉搜索树(只有指针,没有额外 attrs)
 
 ```python
-@reg.structure(name="bst", label="key")
+@reg.structure(name="bst")
 @dataclass
 class BstNode:
     key: int
@@ -206,13 +211,14 @@ class BstNode:
 
 - 两个 `T | None` 字段就是两条有向指针,不需要 `roles=`;没有 `parent`,Scene 就是一棵
   干净的有向树;
-- 节点只有 `key` / `label`,没有 attrs —— 写出的 JSON 是最小形状;
+- 节点只有 `key`,没有 attrs —— `key` 直接成为 `nodes[].key`(8 / 4 / 2 / …),
+  写出的 JSON 是最小形状;
 - "有序"不是类能声明的约束,不进 JSON:由 web 的 `checkBstOrder` 在载入时现算。
 - 与 `examples/rbt.py` 的关系:红黑树在同样的字段上多一个 `color` 属性,BST 是没有
   颜色的那一半;先跑通 BST,再加颜色与检查就是 RBT。
 - 这棵 BST 同时是 web 动画演示的起手结构:演示设计见根目录 `docs/animation.md`。
 
-### L2:红黑树(标注即指针 + Enum + label 钩子)
+### L2:红黑树(标注即指针 + Enum + 数据键)
 
 ```python
 from enum import Enum
@@ -221,10 +227,7 @@ class Color(Enum):
     RED = "red"
     BLACK = "black"
 
-@reg.structure(
-    name="rbt",
-    label="key",
-)
+@reg.structure(name="rbt")
 @dataclass
 class RbtNode:
     key: int
@@ -235,7 +238,8 @@ class RbtNode:
 
 - `color` 是普通 `Attr`(Enum),Scene 里就是 `attrs.color = "red" / "black"`;没有
   `variant` 字段,渲染端按 `attrs` 决定观感;
-- `label="key"`: `key` 是节点的通用展示槽,进 `label`,并从 `attrs` 排除。
+- `key` 是数据键:直接成为 `nodes[].key`(13 / 8 / 1 / …),显示与引用都用它,
+  并且不再重复进 `attrs`。
 
 ### 图:柯尼斯堡七桥(node / edge / container)
 
@@ -275,7 +279,7 @@ python/
   dataviz/scene.py         Scene 写端(节点 / 有向指针 / 无向边)+ JSON
   dataviz/diagram.py       Diagram(scene)+ 完整 JSON
   dataviz/backend.py       JsonBackend / Backend 协议
-  dataviz/formatting.py    属性值格式化(标签 / JSON 标量)
+  dataviz/formatting.py    属性值 JSON 标量化(attrs / scene key)
   examples/                node / 柯尼斯堡七桥 / 二叉搜索树 / 红黑树
   demo.py                  演示入口
   tests/                   unittest
@@ -290,7 +294,7 @@ python/
 - 推断与歧义报错(注册期能报的报,注解解析延迟到 `finalize()` / 第一次遍历);
 - 结构种类:`node` / `edge`(恰好两端点)/ `container`;
 - 遍历:身份 / 共享 / 环 / 路径 / 深度与节点数上限 / 指针运行时类型检查 / `on_unknown="opaque"`;
-- Scene 写端:节点 key / label / `attrs` / 有向指针(`from -> to`)/ 无向边 / JSON;
+- Scene 写端:节点数据键 / `attrs` / 有向指针(`from -> to`)/ 无向边 / JSON;
 - `Diagram.dumps()`:一份 JSON 只含三种图元,不含结构名 / 检查结论;
 - `describe()`、`snapshot()`、`finalize()`、`subclasses=True`;
 - 四个端到端例子 + unittest。
@@ -313,5 +317,5 @@ python3 -m unittest discover -s tests -t .
 
 测试按层分布:`test_registry.py`(注册 / 查询 / 覆盖 / 快照 / 参数校验)、
 `test_fields.py`(字段发现 / 角色推断 / edge 与 container 校验 / 报错码)、
-`test_scene.py`(标签 / attrs / 有向指针 / 无向边 / 错误)、`test_examples.py`
-(三个例子的 Scene / JSON 端到端结果)。
+`test_scene.py`(scene key / attrs / 有向指针 / 无向边 / 错误)、`test_examples.py`
+(四个例子的 Scene / JSON 端到端结果)。

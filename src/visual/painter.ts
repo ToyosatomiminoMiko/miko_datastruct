@@ -22,6 +22,7 @@
  * 帧从哪来、什么时候落定由播放器决定.动画中途**不量包围盒**(量到的是中间态,自动适应
  * 会跟着抖),只有落定帧量一次交给视口;演示期间视口用 `manual` 模式,不自动 fit.
  */
+import type { SceneNodeKey } from '@/scene/scene_document';
 import { create_svg_element } from 'miko_ui';
 import {
     createLinkElements,
@@ -56,12 +57,12 @@ export type PaintLinkState = 'path' | 'ghost';
 
 /** 一帧里的一个节点:稳定身份 + 位置 + 值文字 + 可选变体 / 状态 / 透明度 */
 export interface PaintNode {
-    /** 稳定身份:跨帧配 DOM 元素用(同一个 key = 同一个圆) */
-    readonly key: number;
+    /** 稳定身份:跨帧配 DOM 元素用(同一个 key = 同一个圆);key 是文档里的数据键 */
+    readonly key: SceneNodeKey;
     /** 节点中心的世界坐标 */
     readonly at: VisualPoint;
-    /** 值文字(已经格式化好,视觉层不拼接) */
-    readonly label: string;
+    /** 值文字(`String(key)`;文档没有单独的值字段,视觉层不拼接) */
+    readonly text: string;
     /** 语义变体:`visual-node--<variant>` 的类名后缀(红黑树的 red / black 等) */
     readonly variant?: string;
     /** 高亮状态类 `visual-state--<state>`;缺省不挂 */
@@ -163,7 +164,7 @@ export class ScenePainter {
     private readonly nodesLayer: SVGGElement;
 
     /** 节点表:key -> 元素与状态 */
-    private readonly nodes = new Map<number, NodeEntry>();
+    private readonly nodes = new Map<SceneNodeKey, NodeEntry>();
 
     /** 连线表:id -> 元素与状态 */
     private readonly links = new Map<string, LinkEntry>();
@@ -233,7 +234,7 @@ export class ScenePainter {
     // 节点
 
     private applyNodes(nodes: readonly PaintNode[], settled: boolean): void {
-        const seen = new Set<number>();
+        const seen = new Set<SceneNodeKey>();
         for (const node of nodes) {
             seen.add(node.key);
             let entry = this.nodes.get(node.key);

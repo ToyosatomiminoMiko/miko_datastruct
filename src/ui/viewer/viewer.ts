@@ -56,7 +56,7 @@ import {
     type ViewerWindowId,
 } from '@/ui/viewer/config';
 import { parseSceneDocument } from '@/scene/scene_document_parse';
-import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
+import type { SceneDocument, SceneDocumentNode, SceneNodeKey } from '@/scene/scene_document';
 import type { SceneCheckResult } from '@/scene/scene_check';
 import { runSceneChecks } from '@/datastruct/checks';
 import { layoutScene, type SceneLayout } from '@/visual/layout';
@@ -136,9 +136,9 @@ interface CheckRowItem {
  */
 function buildVisualScene(document: SceneDocument, layout: SceneLayout): VisualScene {
     const positions = new Map(layout.nodes.map((node) => [node.key, node] as const));
-    const pointOf = (key: number): { x: number; y: number } => {
+    const pointOf = (key: SceneNodeKey): { x: number; y: number } => {
         const node = positions.get(key);
-        if (node === undefined) throw new Error(`布局里没有节点 ${key}`);
+        if (node === undefined) throw new Error(`布局里没有节点 ${String(key)}`);
         return { x: node.x, y: node.y };
     };
 
@@ -146,9 +146,11 @@ function buildVisualScene(document: SceneDocument, layout: SceneLayout): VisualS
         nodes: document.nodes.map((node) => {
             const at = pointOf(node.key);
             const variant = nodeVariant(node.attrs);
+            // 文档没有单独的值字段:节点上显示的就是 String(key)
+            const text = String(node.key);
             return variant === undefined
-                ? { at, label: node.label }
-                : { at, label: node.label, variant };
+                ? { at, text }
+                : { at, text, variant };
         }),
         // 端点由布局算好(收进圆边界 + 同对连线分道);这里只把 key 换成坐标并保留方向语义
         links: layout.links.map((link) => ({
@@ -203,7 +205,7 @@ export function mountViewer(host: HTMLElement): void {
     const checkInput = checkEditor.textarea;
     const worldEl = views.world;
     // 最近一次布局里"节点 key -> 平面坐标":「定位」按它移视口
-    const positions = new Map<number, { x: number; y: number }>();
+    const positions = new Map<SceneNodeKey, { x: number; y: number }>();
     // 「示例」按钮的浮层菜单:数据是 examples.ts 的分组,选中回调在下面接
     const menu = createMenu<string>({
         groups: viewerExampleMenuGroups(),
@@ -279,7 +281,7 @@ export function mountViewer(host: HTMLElement): void {
     const checkList = new RowList<CheckRowItem, CheckItem>(views.checkList);
 
     /** 「定位」:把视口平滑地移到某个节点(没有布局位置时什么都不做,例如被清空之后) */
-    const locate = (key: number): void => {
+    const locate = (key: SceneNodeKey): void => {
         const point = positions.get(key);
         if (point === undefined) return;
         viewport.focusPoint(point.x, point.y, { animated: true });

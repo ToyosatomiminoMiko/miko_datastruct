@@ -7,9 +7,10 @@
  * 把错误显示出来.
  *
  * 校验口径(与 python/README.md 的输出契约一致):
- * - `nodes` 必填,数组;`key` 是整数且在文档内唯一,`label` 是字符串,`attrs` 可省略;
+ * - `nodes` 必填,数组;`key` 是 number / string,在文档内唯一且同类型;`attrs` 可省略;
  * - `pointers` / `edges` 可省略(默认空数组);
  * - pointer / edge 引用的 key 必须存在;
+ * - 没有 node / edge 的 label:节点展示文字由 key 现算(`String(key)`);
  * - 未知字段一律忽略:Python 侧以后加字段时,旧的 web 不该因此拒收整份文档.
  *
  * JSON 里没有检查结论,也没有结构名:要跑哪些检查由「检查配置」窗口单独给.
@@ -23,6 +24,7 @@ import type {
     SceneDocumentEdge,
     SceneDocumentNode,
     SceneDocumentPointer,
+    SceneNodeKey,
 } from '@/scene/scene_document';
 
 /** 解析失败的稳定错误码(测试与显示层按它区分,不靠文案匹配) */
@@ -32,7 +34,6 @@ export type SceneDocumentErrorCode =
     | 'node-shape'
     | 'node-key'
     | 'node-key-duplicate'
-    | 'node-label'
     | 'node-attrs'
     | 'pointer-shape'
     | 'pointer-ref'
@@ -42,7 +43,7 @@ export type SceneDocumentErrorCode =
 /**
  * 文档解析失败.
  *
- * `path` 是出错位置(`nodes[2].label` 这种),`message` 是给人看的一句话;
+ * `path` 是出错位置(`nodes[2].key` 这种),`message` 是给人看的一句话;
  * 显示层把两者拼起来即可,不必再按错误码写一份文案表.
  */
 export class SceneDocumentError extends Error {
@@ -84,16 +85,15 @@ function readOptionalArray(
 }
 
 /**
- * 读节点 key:非负安全整数.
+ * 读节点 key:有限数字或非空字符串.
  *
- * 限定非负是因为 Python 的 Scene key 从 0 开始按遍历顺序编号;负数能过类型检查
- * 但不会是合法输出,收进来只会让"引用不存在"的报错更难懂.
+ * 不限定整数 / 非负:key 是数据键,树 / 堆的键可以是负数或小数;字符串留给 "K" / "N"
+ * 这类命名节点(图).同一文档内 key 类型是否一致由 `readNodes` 统一检查.
  */
-function readNodeKey(value: unknown, path: string, code: SceneDocumentErrorCode): number {
-    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-        fail(code, path, '必须是 0 或正整数');
-    }
-    return value;
+function readNodeKey(value: unknown, path: string, code: SceneDocumentErrorCode): SceneNodeKey {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value !== '') return value;
+    fail(code, path, '必须是数字或非空字符串');
 }
 
 /** 读一个 attrs:必须是对象,值只能是字符串 / 数字 / 布尔 */
@@ -115,24 +115,26 @@ function readAttributes(
     return attrs;
 }
 
-// 四段:节点 / 指针 / 边 / 检查
+// 三段:节点 / 指针 / 边
 
 function readNodes(raw: readonly unknown[]): readonly SceneDocumentNode[] {
     const nodes: SceneDocumentNode[] = [];
-    const seen = new Set<number>();
+    const seen = new Set<SceneNodeKey>();
+    let keyType: 'number' | 'string' | null = null;
     for (const [index, item] of raw.entries()) {
         const path = `nodes[${index}]`;
         if (!isRecord(item)) fail('node-shape', path, '必须是对象');
         const key = readNodeKey(optional(item, 'key'), `${path}.key`, 'node-key');
-        if (seen.has(key)) fail('node-key-duplicate', `${path}.key`, `节点 key 重复: ${key}`);
+        const currentType: 'number' | 'string' = typeof key === 'number' ? 'number' : 'string';
+        if (keyType !== null && currentType !== keyType) {
+            fail('node-key', `${path}.key`, '同一文档内节点 key 必须同为数字或同为字符串');
+        }
+        keyType = currentType;
+        if (seen.has(key)) fail('node-key-duplicate', `${path}.key`, `节点 key 重复: ${String(key)}`);
         seen.add(key);
-
-        const label = optional(item, 'label');
-        if (typeof label !== 'string') fail('node-label', `${path}.label`, '必须是字符串');
 
         nodes.push({
             key,
-            label,
             attrs: readAttributes(optional(item, 'attrs'), `${path}.attrs`, 'node-attrs'),
         });
     }
@@ -142,45 +144,53 @@ function readNodes(raw: readonly unknown[]): readonly SceneDocumentNode[] {
 /**
  * 一条连接两端节点的引用(Object 里 from/to 或 a/b).
  *
- * `shapeCode` 管"字段本身写错了"(不是整数),`refCode` 管"引用了不存在的 key":
- * 两种错要在同一段里报,但错误码必须能区分"格式"与"悬空引用".
+ * `shapeCode` 管"字段本身写错了"(不是数字 / 非空字符串),`refCode` 管"引用了不存在的
+ * key":两种错要在同一段里报,但错误码必须能区分"格式"与"悬空引用".
  */
 function readNodeReference(
     item: Record<string, unknown>,
     field: string,
     path: string,
-    nodeKeys: ReadonlySet<number>,
+    nodeKeys: ReadonlySet<SceneNodeKey>,
+    keyType: 'number' | 'string' | null,
     shapeCode: SceneDocumentErrorCode,
     refCode: SceneDocumentErrorCode,
-): number {
+): SceneNodeKey {
     const key = readNodeKey(optional(item, field), `${path}.${field}`, shapeCode);
-    if (!nodeKeys.has(key)) fail(refCode, `${path}.${field}`, `引用了不存在的节点 key: ${key}`);
+    // 引用与节点 key 必须同类型:文档内 key 同类型是硬约束,混类型引用几乎一定是写错了
+    if (keyType !== null && typeof key !== keyType) {
+        fail(shapeCode, `${path}.${field}`, 'key 类型与文档内节点 key 不一致');
+    }
+    if (!nodeKeys.has(key)) fail(refCode, `${path}.${field}`, `引用了不存在的节点 key: ${String(key)}`);
     return key;
 }
 
-function readPointers(raw: readonly unknown[], nodeKeys: ReadonlySet<number>): readonly SceneDocumentPointer[] {
+function readPointers(
+    raw: readonly unknown[],
+    nodeKeys: ReadonlySet<SceneNodeKey>,
+    keyType: 'number' | 'string' | null,
+): readonly SceneDocumentPointer[] {
     return raw.map((item, index) => {
         const path = `pointers[${index}]`;
         if (!isRecord(item)) fail('pointer-shape', path, '必须是对象');
         return {
-            from: readNodeReference(item, 'from', path, nodeKeys, 'pointer-shape', 'pointer-ref'),
-            to: readNodeReference(item, 'to', path, nodeKeys, 'pointer-shape', 'pointer-ref'),
+            from: readNodeReference(item, 'from', path, nodeKeys, keyType, 'pointer-shape', 'pointer-ref'),
+            to: readNodeReference(item, 'to', path, nodeKeys, keyType, 'pointer-shape', 'pointer-ref'),
         };
     });
 }
 
-function readEdges(raw: readonly unknown[], nodeKeys: ReadonlySet<number>): readonly SceneDocumentEdge[] {
+function readEdges(
+    raw: readonly unknown[],
+    nodeKeys: ReadonlySet<SceneNodeKey>,
+    keyType: 'number' | 'string' | null,
+): readonly SceneDocumentEdge[] {
     return raw.map((item, index) => {
         const path = `edges[${index}]`;
         if (!isRecord(item)) fail('edge-shape', path, '必须是对象');
-        const label = optional(item, 'label');
-        if (label !== undefined && label !== null && typeof label !== 'string') {
-            fail('edge-shape', `${path}.label`, '必须是字符串或 null');
-        }
         return {
-            a: readNodeReference(item, 'a', path, nodeKeys, 'edge-shape', 'edge-ref'),
-            b: readNodeReference(item, 'b', path, nodeKeys, 'edge-shape', 'edge-ref'),
-            label: label ?? null,
+            a: readNodeReference(item, 'a', path, nodeKeys, keyType, 'edge-shape', 'edge-ref'),
+            b: readNodeReference(item, 'b', path, nodeKeys, keyType, 'edge-shape', 'edge-ref'),
             attrs: readAttributes(optional(item, 'attrs'), `${path}.attrs`, 'edge-shape'),
         };
     });
@@ -196,10 +206,12 @@ export function readSceneDocument(value: unknown): SceneDocument {
     if (!isRecord(value)) fail('document-shape', '$', '顶层必须是一个 JSON 对象');
     const nodes = readNodes(readOptionalArray(value, 'nodes', '$', 'document-shape'));
     const nodeKeys = new Set(nodes.map((node) => node.key));
+    // 空文档没有节点可参照:引用只能是悬空的,类型检查跳过
+    const keyType = nodes.length === 0 ? null : (typeof nodes[0]?.key as 'number' | 'string');
     return {
         nodes,
-        pointers: readPointers(readOptionalArray(value, 'pointers', '$', 'document-shape'), nodeKeys),
-        edges: readEdges(readOptionalArray(value, 'edges', '$', 'document-shape'), nodeKeys),
+        pointers: readPointers(readOptionalArray(value, 'pointers', '$', 'document-shape'), nodeKeys, keyType),
+        edges: readEdges(readOptionalArray(value, 'edges', '$', 'document-shape'), nodeKeys, keyType),
     };
 }
 

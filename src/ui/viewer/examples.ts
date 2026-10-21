@@ -31,19 +31,19 @@ export interface ViewerExample {
 
 /** 示例 JSON 里节点 / 指针 / 边的形状(只用于在这里写数据,不做校验) */
 interface ExampleNode {
-    readonly key: number;
-    readonly label: string;
+    /** 数据键:节点的显示文字、指针引用、有序检查都用它(number 树 / string 命名节点) */
+    readonly key: number | string;
     readonly attrs?: Readonly<Record<string, string | number | boolean>>;
 }
 
 interface ExamplePointer {
-    readonly from: number;
-    readonly to: number;
+    readonly from: number | string;
+    readonly to: number | string;
 }
 
 interface ExampleEdge {
-    readonly a: number;
-    readonly b: number;
+    readonly a: number | string;
+    readonly b: number | string;
 }
 
 /** 节点 / 指针 / 边 -> 编辑器里的那段 JSON 文本(缩进与检查配置窗口一致) */
@@ -70,17 +70,17 @@ export const VIEWER_EXAMPLES: readonly ViewerExample[] = [
         // 一棵故意写错黑高的 5 节点红黑树:首屏要同时看到 PASS / FAIL、折叠详情与「定位」
         json: scene(
             [
-                { key: 0, label: '10', attrs: { color: 'black' } },
-                { key: 1, label: '5', attrs: { color: 'red' } },
-                { key: 2, label: '1', attrs: { color: 'black' } },
-                { key: 3, label: '8', attrs: { color: 'black' } },
-                { key: 4, label: '15', attrs: { color: 'red' } },
+                { key: 10, attrs: { color: 'black' } },
+                { key: 5, attrs: { color: 'red' } },
+                { key: 1, attrs: { color: 'black' } },
+                { key: 8, attrs: { color: 'black' } },
+                { key: 15, attrs: { color: 'red' } },
             ],
             [
-                { from: 0, to: 1 },
-                { from: 1, to: 2 },
-                { from: 1, to: 3 },
-                { from: 0, to: 4 },
+                { from: 10, to: 5 },
+                { from: 5, to: 1 },
+                { from: 5, to: 8 },
+                { from: 10, to: 15 },
             ],
         ),
         checkIds: ['checkColors', 'checkRootBlack', 'checkRedChildrenBlack', 'checkBlackHeight', 'checkBstOrder'],
@@ -92,21 +92,21 @@ export const VIEWER_EXAMPLES: readonly ViewerExample[] = [
         group: '树',
         json: scene(
             [
-                { key: 0, label: '8' },
-                { key: 1, label: '4' },
-                { key: 2, label: '12' },
-                { key: 3, label: '2' },
-                { key: 4, label: '6' },
-                { key: 5, label: '10' },
-                { key: 6, label: '14' },
+                { key: 8 },
+                { key: 4 },
+                { key: 12 },
+                { key: 2 },
+                { key: 6 },
+                { key: 10 },
+                { key: 14 },
             ],
             [
-                { from: 0, to: 1 },
-                { from: 0, to: 2 },
-                { from: 1, to: 3 },
-                { from: 1, to: 4 },
-                { from: 2, to: 5 },
-                { from: 2, to: 6 },
+                { from: 8, to: 4 },
+                { from: 8, to: 12 },
+                { from: 4, to: 2 },
+                { from: 4, to: 6 },
+                { from: 12, to: 10 },
+                { from: 12, to: 14 },
             ],
         ),
         checkIds: ['checkBstOrder'],
@@ -118,21 +118,21 @@ export const VIEWER_EXAMPLES: readonly ViewerExample[] = [
         group: '树',
         json: scene(
             [
-                { key: 0, label: '1' },
-                { key: 1, label: '3' },
-                { key: 2, label: '2' },
-                { key: 3, label: '7' },
-                { key: 4, label: '4' },
-                { key: 5, label: '5' },
-                { key: 6, label: '8' },
+                { key: 1 },
+                { key: 3 },
+                { key: 2 },
+                { key: 7 },
+                { key: 4 },
+                { key: 5 },
+                { key: 8 },
             ],
             [
-                { from: 0, to: 1 },
-                { from: 0, to: 2 },
                 { from: 1, to: 3 },
-                { from: 1, to: 4 },
+                { from: 1, to: 2 },
+                { from: 3, to: 7 },
+                { from: 3, to: 4 },
                 { from: 2, to: 5 },
-                { from: 2, to: 6 },
+                { from: 2, to: 8 },
             ],
         ),
         checkIds: ['checkHeapOrder'],
@@ -144,17 +144,17 @@ export const VIEWER_EXAMPLES: readonly ViewerExample[] = [
         group: '线性结构',
         json: scene(
             [
-                { key: 0, label: '1' },
-                { key: 1, label: '2' },
-                { key: 2, label: '3' },
-                { key: 3, label: '4' },
-                { key: 4, label: '5' },
+                { key: 1 },
+                { key: 2 },
+                { key: 3 },
+                { key: 4 },
+                { key: 5 },
             ],
             [
-                { from: 0, to: 1 },
                 { from: 1, to: 2 },
                 { from: 2, to: 3 },
                 { from: 3, to: 4 },
+                { from: 4, to: 5 },
             ],
         ),
         checkIds: ['checkLinkedList', 'checkListSorted'],
@@ -167,20 +167,20 @@ export const VIEWER_EXAMPLES: readonly ViewerExample[] = [
         // 4 块陆地 + 7 座无向桥;K-N、K-S 各两座,多重边就是两条独立的 edges 项
         json: scene(
             [
-                { key: 0, label: 'K' },
-                { key: 1, label: 'N' },
-                { key: 2, label: 'S' },
-                { key: 3, label: 'E' },
+                { key: 'K' },
+                { key: 'N' },
+                { key: 'S' },
+                { key: 'E' },
             ],
             [],
             [
-                { a: 0, b: 1 },
-                { a: 0, b: 1 },
-                { a: 0, b: 2 },
-                { a: 0, b: 2 },
-                { a: 0, b: 3 },
-                { a: 1, b: 3 },
-                { a: 2, b: 3 },
+                { a: 'K', b: 'N' },
+                { a: 'K', b: 'N' },
+                { a: 'K', b: 'S' },
+                { a: 'K', b: 'S' },
+                { a: 'K', b: 'E' },
+                { a: 'N', b: 'E' },
+                { a: 'S', b: 'E' },
             ],
         ),
         checkIds: ['checkEulerCircuit'],

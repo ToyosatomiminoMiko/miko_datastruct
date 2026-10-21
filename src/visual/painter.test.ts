@@ -13,6 +13,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { create_svg_element } from 'miko_ui';
 
+import type { SceneNodeKey } from '@/scene/scene_document';
 import {
     VISUAL_LINK_CLASS,
     VISUAL_LINK_EDGE_CLASS,
@@ -48,8 +49,8 @@ function nodeGroups(world: SVGGElement): SVGGElement[] {
 }
 
 /** 一个最小节点帧;要改哪个字段由调用方覆盖 */
-function nodeOf(key: number, x: number, y: number, patch: Partial<PaintNode> = {}): PaintNode {
-    return { key, at: { x, y }, label: String(key), ...patch };
+function nodeOf(key: SceneNodeKey, x: number, y: number, patch: Partial<PaintNode> = {}): PaintNode {
+    return { key, at: { x, y }, text: String(key), ...patch };
 }
 
 /** 一条最小连线帧 */
@@ -77,10 +78,10 @@ describe('场景增量落笔:稳定身份与状态', () => {
         const world = createWorld();
         const painter = new ScenePainter(world);
 
-        painter.apply({ nodes: [nodeOf(1, 10, 20, { label: '10', variant: 'black' })], links: [] }, { settled: false });
+        painter.apply({ nodes: [nodeOf(1, 10, 20, { text: '10', variant: 'black' })], links: [] }, { settled: false });
         const first = nodeGroups(world)[0];
 
-        painter.apply({ nodes: [nodeOf(1, 30, 40, { label: '12', variant: 'red' })], links: [] }, { settled: true });
+        painter.apply({ nodes: [nodeOf(1, 30, 40, { text: '12', variant: 'red' })], links: [] }, { settled: true });
         const second = nodeGroups(world)[0];
 
         expect(second).toBe(first);
@@ -89,6 +90,19 @@ describe('场景增量落笔:稳定身份与状态', () => {
         expect(second.classList.contains(visualNodeVariantClass('red'))).toBe(true);
         expect(second.classList.contains(visualNodeVariantClass('black'))).toBe(false);
         expect(nodeGroups(world)).toHaveLength(1);
+    });
+
+    it('key 可以是字符串:跨帧仍是同一批 DOM,节点文字 = String(key)', () => {
+        const world = createWorld();
+        const painter = new ScenePainter(world);
+
+        painter.apply({ nodes: [nodeOf('K', 0, 0)], links: [] }, { settled: false });
+        const first = nodeGroups(world)[0];
+        painter.apply({ nodes: [nodeOf('K', 70, 0)], links: [] }, { settled: true });
+
+        expect(nodeGroups(world)[0]).toBe(first);
+        expect(first.querySelector(`.${VISUAL_NODE_LABEL_CLASS}`)?.textContent).toBe('K');
+        expect(first.getAttribute('transform')).toBe('translate(70,0)');
     });
 
     it('新节点挂 entering,消失节点在落定前保留并挂 leaving,落定后移除', () => {
@@ -133,7 +147,7 @@ describe('场景增量落笔:稳定身份与状态', () => {
     it('状态类与结构变体类叠加,状态切换清旧类', () => {
         const world = createWorld();
         const painter = new ScenePainter(world);
-        const baseNode = nodeOf(1, 0, 0, { label: '7', variant: 'red', state: 'active' });
+        const baseNode = nodeOf(1, 0, 0, { text: '7', variant: 'red', state: 'active' });
         const baseLink = linkOf('1->2#0', { x: 0, y: 0 }, { x: 70, y: 0 }, {
             directed: false,
             state: 'ghost',

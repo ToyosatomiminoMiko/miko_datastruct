@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { readSceneDocument } from '@/scene/scene_document_parse';
+import type { SceneDocument, SceneNodeKey } from '@/scene/scene_document';
 import { runSceneChecks } from '@/datastruct/checks';
 import { TreeModel } from '@/datastruct/bst/bst';
 import {
@@ -44,13 +45,30 @@ function assertEveryFrameIsBst(steps: readonly TraceStep[]): void {
     }
 }
 
+/**
+ * key 直接承载数据键:返回 key -> 数值.没有 label 可解析,文档里的 key 就是节点值.
+ */
+function valueOfKey(document: SceneDocument): Map<SceneNodeKey, number> {
+    const result = new Map<SceneNodeKey, number>();
+    for (const node of document.nodes) {
+        expect(typeof node.key, `节点 key 必须是数字,实际是 ${String(node.key)}`).toBe('number');
+        result.set(node.key, node.key as number);
+    }
+    return result;
+}
+
+/** 取 key 对应的数值(key 不在文档里时给 NaN,断言会直接失败并指出问题) */
+function numeric(valueOf: ReadonlyMap<SceneNodeKey, number>, key: SceneNodeKey): number {
+    return valueOf.get(key) ?? Number.NaN;
+}
+
 /** 逐帧断言 pointers 的语义顺序:父节点 key 升序;每个父 left 在前、right 在后 */
 function assertPointerOrder(steps: readonly TraceStep[]): void {
     for (const step of steps) {
         const document = readSceneDocument(step.document);
-        const labelOf = new Map(document.nodes.map((node) => [node.key, node.label] as const));
-        const groups = new Map<number, number[]>();
-        const parentOrder: number[] = [];
+        const valueOf = valueOfKey(document);
+        const groups = new Map<SceneNodeKey, SceneNodeKey[]>();
+        const parentOrder: SceneNodeKey[] = [];
         for (const pointer of document.pointers) {
             if (!groups.has(pointer.from)) {
                 groups.set(pointer.from, []);
@@ -58,12 +76,12 @@ function assertPointerOrder(steps: readonly TraceStep[]): void {
             }
             groups.get(pointer.from)?.push(pointer.to);
         }
-        expect(parentOrder).toEqual([...parentOrder].sort((a, b) => a - b));
+        expect(parentOrder).toEqual([...parentOrder].sort((a, b) => numeric(valueOf, a) - numeric(valueOf, b)));
         for (const [from, children] of groups) {
             if (children.length !== 2) continue;
-            const parentValue = Number(labelOf.get(from));
-            expect(Number(labelOf.get(children[0]))).toBeLessThan(parentValue);
-            expect(Number(labelOf.get(children[1]))).toBeGreaterThan(parentValue);
+            const parentValue = numeric(valueOf, from);
+            expect(numeric(valueOf, children[0] as SceneNodeKey)).toBeLessThan(parentValue);
+            expect(numeric(valueOf, children[1] as SceneNodeKey)).toBeGreaterThan(parentValue);
         }
     }
 }
@@ -114,7 +132,7 @@ describe('RBT 插入:教学情形', () => {
         const steps = insertAll(tree, [10, 5, 15, 1]);
         expect(titles(steps)).toContain('情形 1');
         expect(titles(steps)).toContain('根染黑');
-        expect(tree.root?.value).toBe(10);
+        expect(tree.root?.key).toBe(10);
         expect(tree.root?.color).toBe('black');
         assertEveryFrameIsBst(steps);
         assertFinalRbt(tree, steps);

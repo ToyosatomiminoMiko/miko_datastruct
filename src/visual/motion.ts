@@ -19,7 +19,7 @@
  * 这一层是纯函数:没有 DOM,没有时钟;测试可以逐点断言.
  */
 
-import type { SceneDocument } from '@/scene/scene_document';
+import type { SceneDocument, SceneNodeKey } from '@/scene/scene_document';
 import type { SceneLayout, SceneLayoutPoint } from '@/visual/layout';
 import { assignLinkLanes, linkEndpoints } from '@/visual/layout';
 import type { VisualPoint } from '@/visual/scene';
@@ -30,9 +30,10 @@ export type VariantOf = (attrs: Readonly<Record<string, string | number | boolea
 
 /** 中间帧里的一个节点:位置 + 文字 + 结构变体 + 动画高亮 + 透明度 */
 export interface MotionNode {
-    readonly key: number;
+    readonly key: SceneNodeKey;
     readonly at: VisualPoint;
-    readonly label: string;
+    /** 节点上显示的文字(文档没有单独的值字段,一律 `String(key)`) */
+    readonly text: string;
     readonly variant?: string;
     readonly state?: TraceNodeState;
     /** 0..1;进入 / 离开时淡入淡出,常驻为 1 */
@@ -43,8 +44,8 @@ export interface MotionNode {
 export interface MotionLink {
     /** 稳定标识 `${from}->${to}#${同序对序号}`,落笔层按它复用 DOM */
     readonly id: string;
-    readonly from: number;
-    readonly to: number;
+    readonly from: SceneNodeKey;
+    readonly to: SceneNodeKey;
     readonly directed: boolean;
     readonly start: VisualPoint;
     readonly end: VisualPoint;
@@ -87,9 +88,9 @@ export function sceneFromLayout(
     options: { readonly marks?: TraceMarks; readonly variantOf?: VariantOf } = {},
 ): MotionScene {
     const positions = new Map(layout.nodes.map((node) => [node.key, node] as const));
-    const pointOf = (key: number): SceneLayoutPoint => {
+    const pointOf = (key: SceneNodeKey): SceneLayoutPoint => {
         const node = positions.get(key);
-        if (node === undefined) throw new Error(`布局里没有节点 ${key}`);
+        if (node === undefined) throw new Error(`布局里没有节点 ${String(key)}`);
         return { x: node.x, y: node.y };
     };
     const rawLinks = [
@@ -99,7 +100,7 @@ export function sceneFromLayout(
     const laneOffsets = assignLinkLanes(rawLinks);
     const ids = linkIdsOfDocument(document);
     const linkMarks = options.marks?.links ?? [];
-    const nodeMarks = new Map<number, TraceNodeState>();
+    const nodeMarks = new Map<SceneNodeKey, TraceNodeState>();
     for (const mark of options.marks?.nodes ?? []) nodeMarks.set(mark.key, mark.state);
 
     return {
@@ -107,7 +108,7 @@ export function sceneFromLayout(
             const at = pointOf(node.key);
             const variant = options.variantOf?.(node.attrs);
             const state = nodeMarks.get(node.key);
-            const base = { key: node.key, at: { x: at.x, y: at.y }, label: node.label, opacity: 1 };
+            const base = { key: node.key, at: { x: at.x, y: at.y }, text: String(node.key), opacity: 1 };
             return {
                 ...base,
                 ...(variant === undefined ? {} : { variant }),
@@ -180,16 +181,16 @@ export function polarInterpolate(
 }
 
 /** 有向连接的孩子(按连线在文档里的顺序:左孩子在前,右孩子在后) */
-function childrenOf(scene: MotionScene, key: number): number[] {
+function childrenOf(scene: MotionScene, key: SceneNodeKey): SceneNodeKey[] {
     return scene.links.filter((link) => link.directed && link.from === key).map((link) => link.to);
 }
 
 /** 从 key 出发沿有向连接可达的全部节点(含 key 自己) */
-function subtreeKeys(scene: MotionScene, key: number): Set<number> {
-    const result = new Set<number>();
+function subtreeKeys(scene: MotionScene, key: SceneNodeKey): Set<SceneNodeKey> {
+    const result = new Set<SceneNodeKey>();
     const stack = [key];
     while (stack.length > 0) {
-        const current = stack.pop() as number;
+        const current = stack.pop() as SceneNodeKey;
         if (result.has(current)) continue;
         result.add(current);
         for (const child of childrenOf(scene, current)) stack.push(child);
@@ -205,7 +206,7 @@ function subtreeKeys(scene: MotionScene, key: number): Set<number> {
  * 只有 1 个孩子时退回几何判断(哪个孩子画在 x 的右边).判断不出来返回 null,
  * 这一帧退化成普通直线插值,不会画错只是没那么好看.
  */
-function betaRootOf(previous: MotionScene, x: number, y: number): number | null {
+function betaRootOf(previous: MotionScene, x: SceneNodeKey, y: SceneNodeKey): SceneNodeKey | null {
     const xChildren = childrenOf(previous, x);
     if (!xChildren.includes(y)) return null;
     const xNode = previous.nodes.find((node) => node.key === x);
@@ -215,7 +216,7 @@ function betaRootOf(previous: MotionScene, x: number, y: number): number | null 
         : xNode !== undefined && yNode !== undefined && yNode.at.x >= xNode.at.x;
     const yChildren = childrenOf(previous, y);
     if (yChildren.length === 0) return null;
-    return yIsRight ? (yChildren[0] as number) : (yChildren[yChildren.length - 1] as number);
+    return yIsRight ? (yChildren[0] as SceneNodeKey) : (yChildren[yChildren.length - 1] as SceneNodeKey);
 }
 
 /** 插值的中间结果(位置 / 透明度),最后再组装成 MotionScene */
@@ -247,7 +248,7 @@ export function interpolateScenes(
     const clamped = Math.min(Math.max(t, 0), 1);
     const previousNodes = new Map(previous.nodes.map((node) => [node.key, node] as const));
     const nextNodes = new Map(next.nodes.map((node) => [node.key, node] as const));
-    const samples = new Map<number, NodeSample>();
+    const samples = new Map<SceneNodeKey, NodeSample>();
 
     // ① 两帧都有的节点:先记"直线"作为默认,旋转 / 子树提示再覆盖
     for (const [key, node] of nextNodes) {
@@ -332,7 +333,7 @@ export function interpolateScenes(
     // ⑤ 连线:取并集,先这一帧的(顺序稳定),再上一帧独有的(淡出)
     const previousLinks = new Map(previous.links.map((link) => [link.id, link] as const));
     const nextLinks = new Map(next.links.map((link) => [link.id, link] as const));
-    const positionOf = (key: number): VisualPoint => {
+    const positionOf = (key: SceneNodeKey): VisualPoint => {
         const sample = samples.get(key);
         if (sample !== undefined) return sample.at;
         return previousNodes.get(key)?.at ?? nextNodes.get(key)?.at ?? { x: 0, y: 0 };

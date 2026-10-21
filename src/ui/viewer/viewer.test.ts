@@ -113,9 +113,9 @@ function treeLinks(tree: SVGSVGElement): Element[] {
     return [...tree.querySelectorAll(`.${VISUAL_LINK_CLASS}`)];
 }
 
-/** 节点值(按文档顺序) */
-function treeLabels(tree: SVGSVGElement): string[] {
-    return [...tree.querySelectorAll(`.${VISUAL_NODE_LABEL_CLASS}`)].map((label) => label.textContent ?? '');
+/** 节点文字 = String(key)(按文档顺序) */
+function treeNodeTexts(tree: SVGSVGElement): string[] {
+    return [...tree.querySelectorAll(`.${VISUAL_NODE_LABEL_CLASS}`)].map((node) => node.textContent ?? '');
 }
 
 /**
@@ -147,7 +147,7 @@ describe('查看器:首屏默认示例', () => {
         // 树里的 pointers 是有向的:每条线都配一枚箭头
         expect(tree.querySelectorAll(`.${VISUAL_LINK_POINTER_CLASS}`)).toHaveLength(4);
         expect(tree.querySelectorAll(`.${VISUAL_POINTER_ARROW_CLASS}`)).toHaveLength(4);
-        expect(treeLabels(tree).sort()).toEqual(['1', '10', '15', '5', '8']);
+        expect(treeNodeTexts(tree).sort()).toEqual(['1', '10', '15', '5', '8']);
 
         // 实体与检查在两个窗口里:实体列表与检查列表各挂在各自的面板下
         expect(byId<HTMLElement>(VIEWER_DOM.entityListId).closest(`#${VIEWER_DOM.entityPanelId}`)).not.toBeNull();
@@ -205,22 +205,22 @@ describe('查看器:RUN 按钮', () => {
         const { input, tree } = mountPanel();
         expect(treeNodes(tree)).toHaveLength(5);
 
-        setSource(input, JSON.stringify({ nodes: [{ key: 0, label: 'only' }] }));
+        setSource(input, JSON.stringify({ nodes: [{ key: 'only' }] }));
         // 输入只是编辑器里的文本:画布与列表仍是上一次 RUN 的结果
         expect(treeNodes(tree)).toHaveLength(5);
         expect(document.querySelectorAll('.entity-row')).toHaveLength(5);
 
         clickRun();
         expect(treeNodes(tree)).toHaveLength(1);
-        expect(treeLabels(tree)).toEqual(['only']);
+        expect(treeNodeTexts(tree)).toEqual(['only']);
         expect(document.querySelectorAll('.entity-row')).toHaveLength(1);
     });
 
     it('Ctrl/Cmd+Enter 等同点 RUN', () => {
         const { input, tree } = mountPanel();
         setSource(input, JSON.stringify({
-            nodes: [{ key: 0, label: 'A' }, { key: 1, label: 'B' }],
-            pointers: [{ from: 0, to: 1 }],
+            nodes: [{ key: 'A' }, { key: 'B' }],
+            pointers: [{ from: 'A', to: 'B' }],
         }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
         expect(treeNodes(tree)).toHaveLength(2);
@@ -271,19 +271,19 @@ describe('查看器:输入变化', () => {
         const { input, tree } = mountPanel();
         setSourceAndRun(input, JSON.stringify({
             nodes: [
-                { key: 0, label: 'K' },
-                { key: 1, label: 'N' },
-                { key: 2, label: 'S' },
-                { key: 3, label: 'E' },
+                { key: 'K' },
+                { key: 'N' },
+                { key: 'S' },
+                { key: 'E' },
             ],
             edges: [
-                { a: 0, b: 1 }, { a: 0, b: 1 },
-                { a: 0, b: 2 }, { a: 0, b: 2 },
-                { a: 0, b: 3 }, { a: 1, b: 3 }, { a: 2, b: 3 },
+                { a: 'K', b: 'N' }, { a: 'K', b: 'N' },
+                { a: 'K', b: 'S' }, { a: 'K', b: 'S' },
+                { a: 'K', b: 'E' }, { a: 'N', b: 'E' }, { a: 'S', b: 'E' },
             ],
         }));
 
-        expect(treeLabels(tree).sort()).toEqual(['E', 'K', 'N', 'S']);
+        expect(treeNodeTexts(tree).sort()).toEqual(['E', 'K', 'N', 'S']);
         expect(treeLinks(tree)).toHaveLength(7);
         // 无向边:没有箭头;两条平行边 K-N / K-S 各画成两条分道的线
         expect(tree.querySelectorAll(`.${VISUAL_LINK_EDGE_CLASS}`)).toHaveLength(7);
@@ -301,8 +301,8 @@ describe('查看器:输入变化', () => {
     it('反向指针 a->b / b->a:两条线分道,两枚箭头都画出来', () => {
         const { input, tree } = mountPanel();
         setSourceAndRun(input, JSON.stringify({
-            nodes: [{ key: 0, label: 'A' }, { key: 1, label: 'B' }],
-            pointers: [{ from: 0, to: 1 }, { from: 1, to: 0 }],
+            nodes: [{ key: 'A' }, { key: 'B' }],
+            pointers: [{ from: 'A', to: 'B' }, { from: 'B', to: 'A' }],
         }));
 
         const links = tree.querySelectorAll(`.${VISUAL_LINK_POINTER_CLASS}`);
@@ -333,7 +333,7 @@ describe('查看器:输入变化', () => {
 
     it('非法 JSON / 悬空引用:只显示一行错误,上一轮内容清干净', () => {
         const { input, tree } = mountPanel();
-        setSourceAndRun(input, '{"nodes":[{"key":0,"label":"A"}],"pointers":[{"from":0,"to":9}]}');
+        setSourceAndRun(input, '{"nodes":[{"key":0}],"pointers":[{"from":0,"to":9}]}');
 
         expect(diagnosticMessages('error')).toEqual([
             `[error] ${VIEWER_ERROR_UI_PREFIX}pointers[0].to: 引用了不存在的节点 key: 9`,
@@ -354,7 +354,7 @@ describe('查看器:输入变化', () => {
     it('只有节点、没有检查配置:图照画,检查窗口为空', () => {
         const { input, tree } = mountPanel();
         setCheckConfig('[]');
-        setSourceAndRun(input, JSON.stringify({ nodes: [{ key: 0, label: 'A' }] }));
+        setSourceAndRun(input, JSON.stringify({ nodes: [{ key: 'A' }] }));
 
         expect(treeNodes(tree)).toHaveLength(1);
         expect(document.querySelectorAll('.check-row')).toHaveLength(0);
@@ -367,15 +367,15 @@ describe('查看器:输入变化', () => {
         const { input } = mountPanel();
         setSource(input, JSON.stringify({
             nodes: [
-                { key: 0, label: 'K' },
-                { key: 1, label: 'N' },
-                { key: 2, label: 'S' },
-                { key: 3, label: 'E' },
+                { key: 'K' },
+                { key: 'N' },
+                { key: 'S' },
+                { key: 'E' },
             ],
             edges: [
-                { a: 0, b: 1 }, { a: 0, b: 1 },
-                { a: 0, b: 2 }, { a: 0, b: 2 },
-                { a: 0, b: 3 }, { a: 1, b: 3 }, { a: 2, b: 3 },
+                { a: 'K', b: 'N' }, { a: 'K', b: 'N' },
+                { a: 'K', b: 'S' }, { a: 'K', b: 'S' },
+                { a: 'K', b: 'E' }, { a: 'N', b: 'E' }, { a: 'S', b: 'E' },
             ],
         }));
         clickRun();
@@ -475,11 +475,11 @@ describe('查看器:列表交互', () => {
             if (!world) throw new Error('树里找不到世界层');
             const fitted = parseTransform(world.getAttribute('transform') ?? '');
 
-            // 根节点(实体列表第一行,label 10)的世界坐标
+            // 根节点(实体列表第一行,节点 10)的世界坐标
             const firstRow = document.querySelector<HTMLElement>('.entity-row');
-            const nodeLabel = firstRow?.querySelector('.object-name')?.textContent;
+            const nodeText = firstRow?.querySelector('.object-name')?.textContent;
             const node = treeNodes(tree).find((candidate) =>
-                candidate.querySelector(`.${VISUAL_NODE_LABEL_CLASS}`)?.textContent === nodeLabel);
+                candidate.querySelector(`.${VISUAL_NODE_LABEL_CLASS}`)?.textContent === nodeText);
             if (!node) throw new Error('画布上找不到实体行对应的节点');
             const nodePosition = parseTransform(node.getAttribute('transform') ?? '');
 

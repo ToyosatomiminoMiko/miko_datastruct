@@ -6,8 +6,8 @@
  * 都用库的公开件,应用只加自己的增量类名(见 ui/viewer/viewer.css).
  *
  * 两种行的差别:
- * - 实体行:label + attrs(颜色画成"色块 + 明文值",其余是 `key: value` 小徽章),
- *   行末「定位」把视口移到这个节点;
+ * - 实体行:节点文字(文档里就是 `String(key)`,没有单独的值字段)+ attrs(颜色画成
+ *   "色块 + 明文值",其余是 `key: value` 小徽章),行末「定位」把视口移到这个节点;
  * - 检查行:PASS / FAIL 徽章 + 检查名 + 行内一句话;有 `details` 时收进
  *   `<details>`(默认收起,展开态在行重建时用库的 carryDetailsOpen 保留),
  *   FAIL 且有 `node` 时行末「定位」移到违规节点.
@@ -53,11 +53,11 @@ function createSummaryRow(badge: HTMLElement, name: HTMLElement, detail: HTMLEle
 }
 
 /** 「定位」按钮:点击后由调用方把视口移到节点;不在任何 `<summary>` 里,不会开合细节 */
-function createLocateButton(label: string, onLocate: () => void): HTMLButtonElement {
+function createLocateButton(text: string, onLocate: () => void): HTMLButtonElement {
     const button = createButton({
         text: VIEWER_LOCATE_BUTTON_TEXT,
         class: 'row-locate-btn',
-        ariaLabel: `${VIEWER_LOCATE_BUTTON_LABEL}: ${label}`,
+        ariaLabel: `${VIEWER_LOCATE_BUTTON_LABEL}: ${text}`,
         title: VIEWER_LOCATE_BUTTON_LABEL,
     });
     button.onClick(onLocate);
@@ -67,20 +67,22 @@ function createLocateButton(label: string, onLocate: () => void): HTMLButtonElem
 /**
  * 实体行:一个节点一行.
  *
- * 第一行是"label + 颜色 + 其余属性":颜色不只用色块表达(色觉 / 低对比度用户读不到),
- * 所以色块旁边写出属性值;其余属性统一成 `key: value` 小徽章.
+ * 第一行是"节点文字 + 颜色 + 其余属性":节点文字是 `String(key)`(文档里没有单独的
+ * 值字段);颜色不只用色块表达(色觉 / 低对比度用户读不到),所以色块旁边写出属性值;
+ * 其余属性统一成 `key: value` 小徽章.
  */
 export class EntityItem {
     /** 行引擎要的句柄:行根元素 */
     readonly row: HTMLElement;
 
     constructor(node: SceneDocumentNode, onLocate: () => void) {
+        const nodeText = String(node.key);
         const { row, main } = createObjectRow(
             VIEWER_ENTITY_ROW_CLASS,
-            createRowActions(createLocateButton(`节点 ${node.label}`, onLocate)),
+            createRowActions(createLocateButton(`节点 ${nodeText}`, onLocate)),
         );
 
-        main.append(create_element({ tag: 'strong' }, { class: 'object-name' }, node.label));
+        main.append(create_element({ tag: 'strong' }, { class: 'object-name' }, nodeText));
 
         const color = node.attrs.color;
         const renderedColor = typeof color === 'string';
@@ -112,19 +114,22 @@ export class EntityItem {
             );
         }
 
-        // 节点的业务 key 不在正文里重复(label 才是给人看的),但读屏 / 悬停要能查到
-        row.dataset.nodeKey = String(node.key);
-        row.title = `节点 #${node.key}`;
+        // 行正文已经显示 String(key),这里只是给读屏 / 悬停 / 测试留一个稳定的 key 钩子
+        row.dataset.nodeKey = nodeText;
+        row.title = `节点 #${nodeText}`;
         this.row = row;
     }
 
     /**
-     * 内容键:key + label + attrs 的全部取值.
+     * 内容键:key + attrs 的全部取值.
+     *
+     * 显示文字由 key 派生,所以不必再进内容键(改 key 一定改显示文字,改 attrs 一定
+     * 重画属性徽章).
      *
      * 必须在建行之前算出来(见库的 RowList):先建再比会让每次同步都白建一遍 DOM.
      */
     static cacheKey(node: SceneDocumentNode): string {
-        return JSON.stringify([node.key, node.label, node.attrs]);
+        return JSON.stringify([node.key, node.attrs]);
     }
 }
 

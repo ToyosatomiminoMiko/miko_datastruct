@@ -32,7 +32,7 @@ describe('recordFrames:yield 时取快照', () => {
         const steps = recordFrames(() => tree.snapshot(), emptyThenInsert(tree));
         expect(steps).toHaveLength(2);
         expect(steps[0]?.document.nodes).toEqual([]);
-        expect(steps[1]?.document.nodes.map((node) => node.label)).toEqual(['5']);
+        expect(steps[1]?.document.nodes.map((node) => node.key)).toEqual([5]);
         expect(steps[1]?.title).toContain('插入 5');
     });
 

@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { SceneDocument } from '@/scene/scene_document';
+import type { SceneDocument, SceneNodeKey } from '@/scene/scene_document';
 import { readSceneDocument } from '@/scene/scene_document_parse';
 import { runSceneChecks } from '@/datastruct/checks';
 import {
@@ -19,6 +19,7 @@ import {
     searchFrames,
     shapeFrames,
     traverseFrames,
+    type TreeNode,
 } from '@/datastruct/bst/bst';
 import { recordFrames, type TraceStep } from '@/datastruct/trace/trace';
 
@@ -35,13 +36,31 @@ function assertFramesValidate(steps: readonly TraceStep[], ids: readonly string[
     }
 }
 
+/**
+ * 节点的「数据价值」现在就是 key 本身:BST 的 key 必须是数字.返回 key -> 数值,
+ * 顺便钉住"文档里没有 label,key 直接承载数据键"这件事.
+ */
+function valueOfKey(document: SceneDocument): Map<SceneNodeKey, number> {
+    const result = new Map<SceneNodeKey, number>();
+    for (const node of document.nodes) {
+        expect(typeof node.key, `节点 key 必须是数字,实际是 ${String(node.key)}`).toBe('number');
+        result.set(node.key, node.key as number);
+    }
+    return result;
+}
+
+/** 取 key 对应的数值(key 不在文档里时给 NaN,断言会直接失败并指出问题) */
+function numeric(valueOf: ReadonlyMap<SceneNodeKey, number>, key: SceneNodeKey): number {
+    return valueOf.get(key) ?? Number.NaN;
+}
+
 /** 逐帧断言 pointers 的语义顺序:父节点 key 升序;每个父 left 在前、right 在后 */
 function assertPointerOrder(steps: readonly TraceStep[]): void {
     for (const step of steps) {
         const document = readSceneDocument(step.document);
-        const labelOf = new Map(document.nodes.map((node) => [node.key, node.label] as const));
-        const groups = new Map<number, number[]>();
-        const parentOrder: number[] = [];
+        const valueOf = valueOfKey(document);
+        const groups = new Map<SceneNodeKey, SceneNodeKey[]>();
+        const parentOrder: SceneNodeKey[] = [];
         for (const pointer of document.pointers) {
             if (!groups.has(pointer.from)) {
                 groups.set(pointer.from, []);
@@ -49,14 +68,14 @@ function assertPointerOrder(steps: readonly TraceStep[]): void {
             }
             groups.get(pointer.from)?.push(pointer.to);
         }
-        expect(parentOrder).toEqual([...parentOrder].sort((a, b) => a - b));
+        expect(parentOrder).toEqual([...parentOrder].sort((a, b) => numeric(valueOf, a) - numeric(valueOf, b)));
         for (const [from, children] of groups) {
             expect(children.length).toBeLessThanOrEqual(2);
             if (children.length !== 2) continue;
             // pointers 顺序 = 左右:第一个孩子必须比父小(左),第二个必须比父大(右)
-            const parentValue = Number(labelOf.get(from));
-            expect(Number(labelOf.get(children[0]))).toBeLessThan(parentValue);
-            expect(Number(labelOf.get(children[1]))).toBeGreaterThan(parentValue);
+            const parentValue = numeric(valueOf, from);
+            expect(numeric(valueOf, children[0] as SceneNodeKey)).toBeLessThan(parentValue);
+            expect(numeric(valueOf, children[1] as SceneNodeKey)).toBeGreaterThan(parentValue);
         }
     }
 }
@@ -68,7 +87,7 @@ function lastStep(steps: readonly TraceStep[]): TraceStep {
 }
 
 function values(tree: TreeModel): number[] {
-    return tree.inOrder().map((node) => node.value);
+    return tree.inOrder().map((node) => node.key);
 }
 
 const BASE = [8, 4, 12, 2, 6, 10, 14] as const;
@@ -78,8 +97,18 @@ describe('BST 模型:结构与快照', () => {
         const tree = new TreeModel().build([8, 4, 12, 2, 6, 10, 14, 4]);
         expect(values(tree)).toEqual([2, 4, 6, 8, 10, 12, 14]);
         expect(tree.nodes.size).toBe(7);
-        expect(tree.find(6)?.value).toBe(6);
+        expect(tree.find(6)?.key).toBe(6);
         expect(tree.find(0)).toBeNull();
+    });
+
+    it('节点 key 就是数据键:没有 value 字段,find / findByKey 都按 key 走', () => {
+        const tree = new TreeModel().build([8, 4, 12]);
+        const eight = tree.find(8) as TreeNode;
+        expect(eight.key).toBe(8);
+        expect('value' in eight, 'TreeNode 不再有 value 字段').toBe(false);
+        expect(tree.findByKey(8)).toBe(eight);
+        expect(tree.findByKey(8)?.key).toBe(8);
+        expect(tree.findByKey(99)).toBeNull();
     });
 
     it('空树快照是空文档;有节点时 nodes 按 key 升序、attrs 为空', () => {
@@ -90,20 +119,22 @@ describe('BST 模型:结构与快照', () => {
         const tree = new TreeModel().build(BASE);
         const document = tree.snapshot();
         expect(document.edges).toEqual([]);
-        expect(document.nodes.map((node) => node.key)).toEqual([...document.nodes.map((node) => node.key)].sort((a, b) => a - b));
+        // key 直接承载数据键:插入 8 之后文档里就是 { key: 8 };nodes 按 key 升序
+        expect(document.nodes.map((node) => node.key)).toEqual([2, 4, 6, 8, 10, 12, 14]);
+        expect(document.nodes.every((node) => !('label' in node)), '快照节点不再有 label').toBe(true);
         expect(document.nodes.every((node) => Object.keys(node.attrs).length === 0)).toBe(true);
-        expect(document.nodes.find((node) => node.key === tree.find(8)?.key)?.label).toBe('8');
+        expect(document.nodes.find((node) => node.key === tree.find(8)?.key)?.key).toBe(8);
     });
 
     it('快照顺序 + 高度 + 子树 key 都是确定性的', () => {
         const tree = new TreeModel().build(BASE);
         expect(tree.snapshot()).toEqual(tree.snapshot());
         expect(tree.height()).toBe(3);
-        expect(tree.preOrder().map((node) => node.value)).toEqual([8, 4, 2, 6, 12, 10, 14]);
-        expect(tree.postOrder().map((node) => node.value)).toEqual([2, 6, 4, 10, 14, 12, 8]);
-        expect(tree.minimum(tree.root as NonNullable<TreeModel['root']>).value).toBe(2);
+        expect(tree.preOrder().map((node) => node.key)).toEqual([8, 4, 2, 6, 12, 10, 14]);
+        expect(tree.postOrder().map((node) => node.key)).toEqual([2, 6, 4, 10, 14, 12, 8]);
+        expect(tree.minimum(tree.root as NonNullable<TreeModel['root']>).key).toBe(2);
         expect(tree.subtreeKeys(tree.find(4) as NonNullable<TreeModel['root']>)).toHaveLength(3);
-        // 同一组输入,两棵树的 key 分配完全一样(轨迹可复现的前提)
+        // 同一组输入,两棵树的节点 key(数据键)完全一样(轨迹可复现的前提)
         const twin = new TreeModel().build(BASE);
         expect(tree.snapshot()).toEqual(twin.snapshot());
     });
@@ -145,7 +176,7 @@ describe('BST 插入轨迹', () => {
         const parentKey = tree.find(6)?.key;
         const steps = recordFrames(() => tree.snapshot(), insertFrames(tree, 5));
         expect(values(tree)).toEqual([2, 4, 5, 6, 8, 10, 12, 14]);
-        expect(tree.find(5)?.value).toBe(5);
+        expect(tree.find(5)?.key).toBe(5);
         expect(lastStep(steps).marks?.nodes?.some((mark) => mark.state === 'fresh')).toBe(true);
         expect(lastStep(steps).focus).toBe(tree.find(5)?.key);
         expect(lastStep(steps).anchor).toBe(parentKey);
@@ -166,7 +197,7 @@ describe('BST 插入轨迹', () => {
         const tree = new TreeModel();
         const steps = recordFrames(() => tree.snapshot(), insertFrames(tree, 5));
         expect(steps).toHaveLength(1);
-        expect(tree.root?.value).toBe(5);
+        expect(tree.root?.key).toBe(5);
         expect(lastStep(steps).document.nodes).toHaveLength(1);
         expect(lastStep(steps).anchor).toBeUndefined();
         assertFramesValidate(steps);
@@ -217,7 +248,7 @@ describe('BST 删除轨迹:叶子 / 单孩子 / 双孩子', () => {
         expect(tree.find(12)).toBeNull();
         // 物理移植:后继节点对象整个接到被删位置,key / 父指针跟着它走
         expect(tree.find(14)?.key).toBe(successorKey);
-        expect(tree.find(14)?.parent?.value).toBe(8);
+        expect(tree.find(14)?.parent?.key).toBe(8);
         expect(values(tree)).toEqual([2, 4, 6, 8, 10, 14]);
         assertFramesValidate(steps);
         assertPointerOrder(steps);
@@ -228,7 +259,7 @@ describe('BST 删除轨迹:叶子 / 单孩子 / 双孩子', () => {
         const oldRootKey = tree.root?.key;
         const successorKey = tree.find(10)?.key;
         const steps = recordFrames(() => tree.snapshot(), deleteFrames(tree, 8));
-        expect(tree.root?.value).toBe(10);
+        expect(tree.root?.key).toBe(10);
         expect(tree.root?.key).toBe(successorKey);
         expect(lastStep(steps).anchor).toBe(successorKey);
         expect(lastStep(steps).anchorAt).toBe(oldRootKey);

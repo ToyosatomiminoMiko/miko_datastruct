@@ -39,8 +39,8 @@ function createWorld(): SVGGElement {
 function smallScene(): VisualScene {
     return {
         nodes: [
-            { at: { x: 0, y: 0 }, label: '10', variant: 'black' },
-            { at: { x: 70, y: 70 }, label: '5', variant: 'red' },
+            { at: { x: 0, y: 0 }, text: '10', variant: 'black' },
+            { at: { x: 70, y: 70 }, text: '5', variant: 'red' },
         ],
         links: [{ from: { x: 0, y: 0 }, to: { x: 70, y: 70 }, directed: true }],
     };
@@ -126,8 +126,8 @@ describe('视觉层:场景落笔与内容测量', () => {
         // 5px 的连线 < 10px 的箭头:底边最多退到起点,不能反向画
         renderScene(world, {
             nodes: [
-                { at: { x: 0, y: 0 }, label: 'A' },
-                { at: { x: 5, y: 0 }, label: 'B' },
+                { at: { x: 0, y: 0 }, text: 'A' },
+                { at: { x: 5, y: 0 }, text: 'B' },
             ],
             links: [{ from: { x: 0, y: 0 }, to: { x: 5, y: 0 }, directed: true }],
         });
@@ -150,8 +150,8 @@ describe('视觉层:场景落笔与内容测量', () => {
 
         renderScene(world, {
             nodes: [
-                { at: { x: 0, y: 0 }, label: 'A' },
-                { at: { x: 70, y: 0 }, label: 'B' },
+                { at: { x: 0, y: 0 }, text: 'A' },
+                { at: { x: 70, y: 0 }, text: 'B' },
             ],
             links: [{ from: { x: 26, y: 0 }, to: { x: 44, y: 0 }, directed: false }],
         });
@@ -176,7 +176,7 @@ describe('视觉层:场景落笔与内容测量', () => {
         const world = createWorld();
         stubBBox(world, { x: 0, y: 0, width: 100, height: 100 });
 
-        renderScene(world, { nodes: [{ at: { x: 1, y: 2 }, label: 'x' }], links: [] });
+        renderScene(world, { nodes: [{ at: { x: 1, y: 2 }, text: 'x' }], links: [] });
 
         const node = world.querySelector(`.${VISUAL_NODE_CLASS}`);
         expect(node?.getAttribute('class')).toBe(VISUAL_NODE_CLASS);

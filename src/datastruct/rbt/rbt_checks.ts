@@ -2,7 +2,7 @@
  * 红黑树性质检查:登记为 `checkColors` / `checkRootBlack` 等函数名,由「检查配置」
  * 窗口按 id 选取后运行.
  *
- * 检查对象是**中性文档**,不是 Python 对象:手上只有节点(key / label / attrs)与有向
+ * 检查对象是**中性文档**,不是 Python 对象:手上只有节点(key / attrs)与有向
  * 指针.所以三条约定要先写清楚:
  *
  * - 颜色从 `attrs.color` 读(`red` / `black`,大小写不敏感);颜色写错本身就是一条
@@ -11,28 +11,28 @@
  *   同一口径:第一个孩子是左,第二个是右).中性表示丢掉了 Python 字段名(left /
  *   right),单孩子因此分不出左右:有序检查对"左 / 右"两种解释都试一次,任一成立
  *   即算有序;
- * - 值从 `label` 读,只认十进制数;不是数的标签跳过该节点的比较(与旧实现一致).
+ * - 值从 `key` 读:树 / 堆 / 链的 key 就是参与比较的数值,有序检查要求它是 number;
+ *   字符串 key(图里的命名节点)不参与数值比较,直接 FAIL 而不是静默跳过.
  *
  * 五条结论独立运行、不短路:检查窗口要一次把问题列全,而不是修一条看一次.
  */
 
-import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
+import type { SceneDocument, SceneDocumentNode, SceneNodeKey } from '@/scene/scene_document';
 import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/scene/scene_check';
-import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/scene/label_value';
 
 type NodeColor = 'red' | 'black';
 
 /** 一次检查要用的文档索引:节点表 / 出边(孩子)表 / 入度(找根) */
 interface TreeIndex {
-    readonly nodeByKey: ReadonlyMap<number, SceneDocumentNode>;
-    readonly childrenOf: ReadonlyMap<number, readonly number[]>;
-    readonly roots: readonly number[];
+    readonly nodeByKey: ReadonlyMap<SceneNodeKey, SceneDocumentNode>;
+    readonly childrenOf: ReadonlyMap<SceneNodeKey, readonly SceneNodeKey[]>;
+    readonly roots: readonly SceneNodeKey[];
 }
 
 function buildTreeIndex(document: SceneDocument): TreeIndex {
-    const nodeByKey = new Map<number, SceneDocumentNode>(document.nodes.map((node) => [node.key, node] as const));
-    const childrenOf = new Map<number, number[]>(document.nodes.map((node) => [node.key, []] as const));
-    const incoming = new Map<number, number>(document.nodes.map((node) => [node.key, 0] as const));
+    const nodeByKey = new Map<SceneNodeKey, SceneDocumentNode>(document.nodes.map((node) => [node.key, node] as const));
+    const childrenOf = new Map<SceneNodeKey, SceneNodeKey[]>(document.nodes.map((node) => [node.key, []] as const));
+    const incoming = new Map<SceneNodeKey, number>(document.nodes.map((node) => [node.key, 0] as const));
 
     for (const pointer of document.pointers) {
         childrenOf.get(pointer.from)?.push(pointer.to);
@@ -53,6 +53,16 @@ function colorOf(node: SceneDocumentNode): NodeColor | null {
     return normalized === 'red' || normalized === 'black' ? normalized : null;
 }
 
+/** 节点在文案里的称呼:显示文字就是 key 本身 */
+function keyText(key: SceneNodeKey): string {
+    return String(key);
+}
+
+/** 有序检查的数值口径:key 必须是 number;字符串 key 返回 null(调用方 FAIL) */
+function numericKeyOf(node: SceneDocumentNode): number | null {
+    return typeof node.key === 'number' ? node.key : null;
+}
+
 /** 构造一条 PASS 结论(没有细节、不定位) */
 function pass(name: string): SceneCheckResult {
     return { name, passed: true, detail: '', details: [], node: null };
@@ -62,15 +72,15 @@ function pass(name: string): SceneCheckResult {
 function fail(
     name: string,
     detail: string,
-    node: number | null,
+    node: SceneNodeKey | null,
     details: readonly string[] = [],
 ): SceneCheckResult {
     return { name, passed: false, detail, details, node };
 }
 
 /** 节点在文案里的称呼(标签是给人看的,key 只用于定位) */
-function nameOf(index: TreeIndex, key: number): string {
-    return index.nodeByKey.get(key)?.label ?? `#${key}`;
+function nameOf(index: TreeIndex, key: SceneNodeKey): string {
+    return index.nodeByKey.get(key) === undefined ? `#${keyText(key)}` : keyText(key);
 }
 
 // 1. 颜色合法
@@ -88,9 +98,9 @@ const checkColors: SceneCheckFunction = (document) => {
     const first = invalid[0] as SceneDocumentNode;
     return fail(
         name,
-        `节点 ${invalid.map((node) => node.label).join(', ')} 的 attrs.color 不是 red / black`,
+        `节点 ${invalid.map((node) => keyText(node.key)).join(', ')} 的 attrs.color 不是 red / black`,
         first.key,
-        invalid.map((node) => `节点 #${node.key}「${node.label}」: attrs.color = ${JSON.stringify(node.attrs.color)}`),
+        invalid.map((node) => `节点 #${keyText(node.key)}「${keyText(node.key)}」: attrs.color = ${JSON.stringify(node.attrs.color)}`),
     );
 };
 
@@ -112,7 +122,7 @@ const checkRootBlack: SceneCheckFunction = (document) => {
         );
     }
 
-    const rootKey = index.roots[0] as number;
+    const rootKey = index.roots[0] as SceneNodeKey;
     const color = colorOf(index.nodeByKey.get(rootKey) as SceneDocumentNode);
     if (color === 'red') {
         return fail(name, `根节点 ${nameOf(index, rootKey)} 是红色`, rootKey);
@@ -141,9 +151,9 @@ const checkRedChildrenBlack: SceneCheckFunction = (document) => {
             if (child !== undefined && colorOf(child) === 'red') {
                 return fail(
                     name,
-                    `节点 ${node.label} 是红色,孩子 ${child.label} 也是红色`,
+                    `节点 ${keyText(node.key)} 是红色,孩子 ${keyText(child.key)} 也是红色`,
                     node.key,
-                    [`红色节点「${node.label}」-> 红色孩子「${child.label}」`],
+                    [`红色节点「${keyText(node.key)}」-> 红色孩子「${keyText(child.key)}」`],
                 );
             }
         }
@@ -156,7 +166,7 @@ const checkRedChildrenBlack: SceneCheckFunction = (document) => {
 /** 黑高从"后代 nil 叶子"算起:nil 叶子算一个黑,节点自身是黑再加一(与旧实现同一口径) */
 interface BlackHeightViolation {
     readonly kind: 'cycle' | 'black-height';
-    readonly node: number;
+    readonly node: SceneNodeKey;
     /** 两侧黑高;只有 kind 为 black-height 时有意义 */
     readonly low: number;
     readonly high: number;
@@ -173,9 +183,9 @@ const checkBlackHeight: SceneCheckFunction = (document) => {
         return fail(name, '找不到唯一的根节点,无法计算黑高', index.roots[0] ?? null);
     }
 
-    const visited = new Set<number>();
+    const visited = new Set<SceneNodeKey>();
 
-    const heightOf = (key: number): HeightOutcome => {
+    const heightOf = (key: SceneNodeKey): HeightOutcome => {
         if (visited.has(key)) return { kind: 'cycle', node: key, low: 0, high: 0 };
         visited.add(key);
 
@@ -201,7 +211,7 @@ const checkBlackHeight: SceneCheckFunction = (document) => {
         return (expected ?? 1) + own;
     };
 
-    const outcome = heightOf(index.roots[0] as number);
+    const outcome = heightOf(index.roots[0] as SceneNodeKey);
     if (typeof outcome !== 'number') {
         if (outcome.kind === 'cycle') {
             return fail(name, `节点 ${nameOf(index, outcome.node)} 被重复引用(有环或共享孩子)`, outcome.node);
@@ -230,10 +240,10 @@ const checkBlackHeight: SceneCheckFunction = (document) => {
 
 // 5. 二叉搜索树有序
 
-type BstViolationReason = 'range' | 'shape' | 'cycle' | 'unreachable';
+type BstViolationReason = 'range' | 'shape' | 'cycle' | 'value' | 'unreachable';
 
 interface BstViolation {
-    readonly node: number;
+    readonly node: SceneNodeKey;
     readonly reason: BstViolationReason;
 }
 
@@ -254,69 +264,62 @@ const checkBstOrder: SceneCheckFunction = (document) => {
         return fail(name, '找不到唯一的根节点,无法检查有序性', index.roots[0] ?? null);
     }
 
-    const reached = new Set<number>();
+    const reached = new Set<SceneNodeKey>();
 
     const validate = (
-        key: number,
+        key: SceneNodeKey,
         low: number | null,
         high: number | null,
-        path: readonly number[],
+        path: readonly SceneNodeKey[],
     ): BstViolation | null => {
         if (path.includes(key)) return { node: key, reason: 'cycle' };
         reached.add(key);
 
         const node = index.nodeByKey.get(key) as SceneDocumentNode;
-        const value = toComparableLabel(node.label);
-        if (value !== null) {
-            if (low !== null && value <= low + LABEL_COMPARE_TOLERANCE) return { node: key, reason: 'range' };
-            if (high !== null && value >= high - LABEL_COMPARE_TOLERANCE) return { node: key, reason: 'range' };
-        }
+        const value = numericKeyOf(node);
+        if (value === null) return { node: key, reason: 'value' };
+        if (low !== null && value <= low) return { node: key, reason: 'range' };
+        if (high !== null && value >= high) return { node: key, reason: 'range' };
 
         const children = index.childrenOf.get(key) ?? [];
         if (children.length > 2) return { node: key, reason: 'shape' };
         if (children.length === 0) return null;
 
         const nextPath = [...path, key];
-        if (value === null) {
-            // 这一层无从判定:区间原样往下传,子树照查
-            for (const childKey of children) {
-                const bad = validate(childKey, low, high, nextPath);
-                if (bad !== null) return bad;
-            }
-            return null;
-        }
 
         if (children.length === 1) {
-            const childKey = children[0] as number;
+            const childKey = children[0] as SceneNodeKey;
             const asLeft = validate(childKey, low, value, nextPath);
             if (asLeft === null) return null;
             // 单孩子也可能是右孩子:同一棵子树换到右侧再试一次
             return validate(childKey, value, high, nextPath);
         }
 
-        const leftBad = validate(children[0] as number, low, value, nextPath);
+        const leftBad = validate(children[0] as SceneNodeKey, low, value, nextPath);
         if (leftBad !== null) return leftBad;
-        return validate(children[1] as number, value, high, nextPath);
+        return validate(children[1] as SceneNodeKey, value, high, nextPath);
     };
 
-    const violation = validate(index.roots[0] as number, null, null, []);
+    const violation = validate(index.roots[0] as SceneNodeKey, null, null, []);
     if (violation !== null) {
-        const label = nameOf(index, violation.node);
+        const nodeName = nameOf(index, violation.node);
         switch (violation.reason) {
             case 'shape':
-                return fail(name, `节点 ${label} 的子节点超过 2 个,二叉搜索树每个节点最多两个`, violation.node);
+                return fail(name, `节点 ${nodeName} 的子节点超过 2 个,二叉搜索树每个节点最多两个`, violation.node);
             case 'cycle':
-                return fail(name, `节点 ${label} 被重复引用(有环或共享孩子)`, violation.node);
+                return fail(name, `节点 ${nodeName} 被重复引用(有环或共享孩子)`, violation.node);
             case 'range':
-                return fail(name, `节点 ${label} 破坏了有序性(左子树应全小于、右子树应全大于;相等也算违规)`, violation.node);
+                return fail(name, `节点 ${nodeName} 破坏了有序性(左子树应全小于、右子树应全大于;相等也算违规)`, violation.node);
+            case 'value':
+                return fail(name, `节点 ${nodeName} 的 key 不是数字,无法检查数值有序性`, violation.node);
             default:
-                return fail(name, `节点 ${label} 从根不可达`, violation.node);
+                return fail(name, `节点 ${nodeName} 从根不可达`, violation.node);
         }
     }
 
     if (reached.size !== document.nodes.length) {
         const unreachable = document.nodes.find((node) => !reached.has(node.key)) as SceneDocumentNode;
-        return fail(name, `节点 ${unreachable.label} 从根不可达`, unreachable.key);
+        return fail(name, `节点 ${keyText(unreachable.key)} 从根不可达`, unreachable.key);
     }
     return pass(name);
 };

@@ -22,6 +22,7 @@
  * 渲染层量 `getBBox()` 后交给视口适应.
  */
 
+import type { SceneNodeKey } from '@/scene/scene_document';
 import {
     VISUAL_LAYOUT_COMPONENT_GAP,
     VISUAL_LAYOUT_GRAPH_CHORD,
@@ -40,18 +41,44 @@ import {
  *
  * 故意不 import datastruct 的 SceneDocument:视觉层与数据结构层互不认识;调用方
  * 把文档原样传进来即可(TS 结构化类型只检查字段形状).
+ *
+ * key 直接就是文档里的数据键(number | string),布局把它当**不透明标识**用:只比较
+ * / 查表 / 拼分组键,不解析它的内容.同一份输入里 key 同类型(由解析器保证),所以
+ * 排序规则只需要"同类型之间正确",不需要定义混类型的先后.
  */
 export interface SceneLayoutInput {
-    readonly nodes: readonly { readonly key: number }[];
-    readonly pointers: readonly { readonly from: number; readonly to: number }[];
-    readonly edges: readonly { readonly a: number; readonly b: number }[];
+    readonly nodes: readonly { readonly key: SceneNodeKey }[];
+    readonly pointers: readonly { readonly from: SceneNodeKey; readonly to: SceneNodeKey }[];
+    readonly edges: readonly { readonly a: SceneNodeKey; readonly b: SceneNodeKey }[];
 }
 
 /** 坐好标的节点(世界坐标) */
 export interface SceneLayoutNode {
-    readonly key: number;
+    readonly key: SceneNodeKey;
     readonly x: number;
     readonly y: number;
+}
+
+/**
+ * 两个节点 key 的先后(number 相减,string 按 `<` 比较).
+ *
+ * 不能直接写 `a - b`:字符串相减得到 NaN,`Array.prototype.sort` 拿到 NaN 比较器时
+ * 顺序由引擎随意决定,布局 / 锚定就不再确定.也不能用 `<` 混比:跨类型比较走的是
+ * JS 隐式转换(number 与 string 会被转成同一侧),而视觉层不该猜文档 key 的语义.
+ * 这里先按类型分流;混类型(解析器已拒绝,防御性兜底)按 String() 的字典序排,
+ * 至少保证结果稳定、可重复.
+ */
+export function compareSceneNodeKeys(a: SceneNodeKey, b: SceneNodeKey): number {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    const left = String(a);
+    const right = String(b);
+    if (left < right) return -1;
+    if (left > right) return 1;
+    // 文字相同的混类型 key(如 1 与 "1")比类型名,保证全序:比较器绝不能把不同 key 判成相等
+    const typeA = typeof a;
+    const typeB = typeof b;
+    if (typeA === typeB) return 0;
+    return typeA < typeB ? -1 : 1;
 }
 
 /** 平面上的一个点(世界坐标) */
@@ -70,8 +97,8 @@ export interface SceneLayoutPoint {
  * `directed` 只描述方向语义(视觉层据此决定画不画箭头),不改变端点.
  */
 export interface SceneLayoutLink {
-    readonly from: number;
-    readonly to: number;
+    readonly from: SceneNodeKey;
+    readonly to: SceneNodeKey;
     readonly directed: boolean;
     /** 起点(世界坐标,已收进节点圆边界并做过分道偏移) */
     readonly start: SceneLayoutPoint;
@@ -101,11 +128,11 @@ interface Component {
  * 先知道分量,所以搜索只写一份.分量与分量内节点都按输入顺序给出(确定性).
  */
 function collectComponents(
-    keyOfIndex: readonly number[],
-    adjacency: ReadonlyMap<number, readonly number[]>,
+    keyOfIndex: readonly SceneNodeKey[],
+    adjacency: ReadonlyMap<SceneNodeKey, readonly SceneNodeKey[]>,
 ): Component[] {
     const indexByKey = new Map(keyOfIndex.map((key, index) => [key, index] as const));
-    const visited = new Set<number>();
+    const visited = new Set<SceneNodeKey>();
     const components: Component[] = [];
     for (const key of keyOfIndex) {
         if (visited.has(key)) continue;
@@ -113,9 +140,9 @@ function collectComponents(
         const stack = [key];
         visited.add(key);
         while (stack.length > 0) {
-            const current = stack.pop() as number;
+            const current = stack.pop() as SceneNodeKey;
             const index = indexByKey.get(current);
-            if (index === undefined) throw new Error(`布局输入里没有节点 ${current}`);
+            if (index === undefined) throw new Error(`布局输入里没有节点 ${String(current)}`);
             memberIndexes.push(index);
             for (const next of adjacency.get(current) ?? []) {
                 if (visited.has(next)) continue;
@@ -131,12 +158,12 @@ function collectComponents(
 
 /** 建无向邻接表(指针与边都算连接) */
 function buildAdjacency(
-    keyOfIndex: readonly number[],
+    keyOfIndex: readonly SceneNodeKey[],
     pointers: SceneLayoutInput['pointers'],
     edges: SceneLayoutInput['edges'],
-): Map<number, number[]> {
-    const adjacency = new Map<number, number[]>(keyOfIndex.map((key) => [key, []]));
-    const add = (a: number, b: number): void => {
+): Map<SceneNodeKey, SceneNodeKey[]> {
+    const adjacency = new Map<SceneNodeKey, SceneNodeKey[]>(keyOfIndex.map((key) => [key, []]));
+    const add = (a: SceneNodeKey, b: SceneNodeKey): void => {
         adjacency.get(a)?.push(b);
         adjacency.get(b)?.push(a);
     };
@@ -149,7 +176,7 @@ function buildAdjacency(
 
 /** 子树内部算出来的相对坐标:根 x = 0,depth = 层号 */
 interface RelativeNode {
-    readonly key: number;
+    readonly key: SceneNodeKey;
     readonly x: number;
     readonly depth: number;
 }
@@ -172,7 +199,11 @@ interface SubtreeShape {
  * 父节点放在首尾孩子中点,而不是某一对孩子的中点:孩子数不固定时这是唯一
  * 与"左右对称"一致的位置;两个孩子时退化成以前的中点.
  */
-function placeSubtree(key: number, depth: number, childrenOf: ReadonlyMap<number, readonly number[]>): SubtreeShape {
+function placeSubtree(
+    key: SceneNodeKey,
+    depth: number,
+    childrenOf: ReadonlyMap<SceneNodeKey, readonly SceneNodeKey[]>,
+): SubtreeShape {
     const children = childrenOf.get(key) ?? [];
     if (children.length === 0) {
         return { nodes: [{ key, x: 0, depth }], left: [0], right: [0] };
@@ -237,7 +268,7 @@ function placeSubtree(key: number, depth: number, childrenOf: ReadonlyMap<number
 
 /** 一棵树的布局结果:节点相对坐标 + 包围盒(给多分量排布) */
 interface ComponentPlacement {
-    readonly nodes: readonly { readonly key: number; readonly x: number; readonly y: number }[];
+    readonly nodes: readonly { readonly key: SceneNodeKey; readonly x: number; readonly y: number }[];
     readonly minX: number;
     readonly minY: number;
     readonly maxX: number;
@@ -267,8 +298,8 @@ function boundsOf(nodes: readonly { x: number; y: number }[]): Omit<ComponentPla
  */
 function layoutTreeComponent(
     rootIndex: number,
-    keyOfIndex: readonly number[],
-    childrenOf: ReadonlyMap<number, readonly number[]>,
+    keyOfIndex: readonly SceneNodeKey[],
+    childrenOf: ReadonlyMap<SceneNodeKey, readonly SceneNodeKey[]>,
 ): ComponentPlacement {
     const rootKey = keyOfIndex[rootIndex];
     const shape = placeSubtree(rootKey, 0, childrenOf);
@@ -291,21 +322,21 @@ function layoutTreeComponent(
  */
 function isTreeLike(pointers: SceneLayoutInput['pointers'], edges: SceneLayoutInput['edges']): boolean {
     if (edges.length > 0) return false;
-    const inDegree = new Map<number, number>();
+    const inDegree = new Map<SceneNodeKey, number>();
     for (const pointer of pointers) {
         if (pointer.from === pointer.to) return false;
         inDegree.set(pointer.to, (inDegree.get(pointer.to) ?? 0) + 1);
         if ((inDegree.get(pointer.to) ?? 0) > 1) return false;
     }
     // 有向环检测:沿指针走,回到走过的节点就是环
-    const outgoing = new Map<number, number[]>();
+    const outgoing = new Map<SceneNodeKey, SceneNodeKey[]>();
     for (const pointer of pointers) {
         const list = outgoing.get(pointer.from) ?? [];
         list.push(pointer.to);
         outgoing.set(pointer.from, list);
     }
-    const state = new Map<number, 'visiting' | 'done'>();
-    const visit = (key: number): boolean => {
+    const state = new Map<SceneNodeKey, 'visiting' | 'done'>();
+    const visit = (key: SceneNodeKey): boolean => {
         const current = state.get(key);
         if (current === 'visiting') return false;
         if (current === 'done') return true;
@@ -330,7 +361,10 @@ function isTreeLike(pointers: SceneLayoutInput['pointers'], edges: SceneLayoutIn
  * 半径随节点数增长(圆周长 = 节点数 × 弧长),下限保证节点很少时圆不会缩成一点.
  * 圆心的 y 取半径,使分量的包围盒从 y = 0 开始(与树分量同一口径,便于并排).
  */
-function layoutGraphComponent(component: Component, keyOfIndex: readonly number[]): ComponentPlacement {
+function layoutGraphComponent(
+    component: Component,
+    keyOfIndex: readonly SceneNodeKey[],
+): ComponentPlacement {
     const count = component.memberIndexes.length;
     const radius = Math.max(VISUAL_LAYOUT_GRAPH_MIN_RADIUS, (count * VISUAL_LAYOUT_GRAPH_CHORD) / (2 * Math.PI));
     const center = { x: radius, y: radius };
@@ -347,9 +381,25 @@ function layoutGraphComponent(component: Component, keyOfIndex: readonly number[
 
 // 连线端点
 
+/**
+ * 一个 key 的**带类型**稳定排序 / 分组记号.
+ *
+ * JSON.stringify 会把字符串里的引号、冒号等转义掉,类型名又前缀在同一个数组里,
+ * 于是 `1`(number)与 `"1"`(string)、以及含 `:` / `|` 的字符串 key 都不会拼出同一个
+ * 记号.直接 `String(key)` 拼接的话,`1` 和 `"1"` 撞车、字符串里的分隔符还可能伪造出
+ * 另一个 key 的记号,分组就会把不相干的线并到一组.
+ */
+function keyToken(key: SceneNodeKey): string {
+    return JSON.stringify([typeof key, key]);
+}
+
 /** 同一对无向节点之间的连线分组键(方向不重要:反向指针也落在同一对里) */
-function linkPairKey(a: number, b: number): string {
-    return a <= b ? `${a}:${b}` : `${b}:${a}`;
+function linkPairKey(a: SceneNodeKey, b: SceneNodeKey): string {
+    const first = keyToken(a);
+    const second = keyToken(b);
+    // 先按 token 排序再整体 JSON.stringify:分组键无方向,且外层序列化把两个 token
+    // 的边界也定死(不依赖 token 内部有没有分隔符).
+    return first <= second ? JSON.stringify([first, second]) : JSON.stringify([second, first]);
 }
 
 /**
@@ -365,7 +415,7 @@ function linkPairKey(a: number, b: number): string {
  * 从零分组算完就丢:见 src/visual/motion.ts.
  */
 export function assignLinkLanes(
-    rawLinks: readonly { readonly from: number; readonly to: number }[],
+    rawLinks: readonly { readonly from: SceneNodeKey; readonly to: SceneNodeKey }[],
 ): number[] {
     const laneOffsets = new Array<number>(rawLinks.length).fill(0);
     const groups = new Map<string, number[]>();
@@ -435,15 +485,17 @@ export function linkEndpoints(
  * 这个 canonical 符号在这里折进去.
  */
 function buildLinks(
-    rawLinks: readonly { readonly from: number; readonly to: number; readonly directed: boolean }[],
-    pointOf: (key: number) => SceneLayoutPoint,
+    rawLinks: readonly { readonly from: SceneNodeKey; readonly to: SceneNodeKey; readonly directed: boolean }[],
+    pointOf: (key: SceneNodeKey) => SceneLayoutPoint,
 ): SceneLayoutLink[] {
     const laneOffsets = assignLinkLanes(rawLinks);
 
     return rawLinks.map((link, index) => {
         const from = pointOf(link.from);
         const to = pointOf(link.to);
-        const canonical = link.from <= link.to ? 1 : -1;
+        // canonical 符号按 key 的同类型先后定,必须与 linkPairKey 的"无向对"口径一致:
+        // 反向的两条线拿到相反符号,才会分到法向两侧而不是叠在一起.
+        const canonical = compareSceneNodeKeys(link.from, link.to) <= 0 ? 1 : -1;
         const endpoints = linkEndpoints(from, to, (laneOffsets[index] ?? 0) * canonical);
         return { ...link, ...endpoints };
     });
@@ -468,11 +520,11 @@ export function layoutScene(input: SceneLayoutInput): SceneLayout {
     const treeLike = isTreeLike(input.pointers, input.edges);
 
     // 树形布局要按"入度 0"找根:没有指针时每个节点自己就是一棵单节点树
-    const inDegree = new Map<number, number>();
+    const inDegree = new Map<SceneNodeKey, number>();
     for (const pointer of input.pointers) {
         inDegree.set(pointer.to, (inDegree.get(pointer.to) ?? 0) + 1);
     }
-    const childrenOf = new Map<number, number[]>();
+    const childrenOf = new Map<SceneNodeKey, SceneNodeKey[]>();
     for (const pointer of input.pointers) {
         const list = childrenOf.get(pointer.from) ?? [];
         list.push(pointer.to);
@@ -487,7 +539,7 @@ export function layoutScene(input: SceneLayoutInput): SceneLayout {
     });
 
     // 分量从左到右并排:每个分量的包围盒上沿对齐 y = 0,x 接在前一个右边
-    const placed = new Map<number, SceneLayoutNode>();
+    const placed = new Map<SceneNodeKey, SceneLayoutNode>();
     let offsetX = 0;
     for (const placement of placements) {
         for (const node of placement.nodes) {
@@ -498,12 +550,12 @@ export function layoutScene(input: SceneLayoutInput): SceneLayout {
 
     const nodes = keyOfIndex.map((key) => {
         const node = placed.get(key);
-        if (node === undefined) throw new Error(`布局没有给节点 ${key} 算坐标`);
+        if (node === undefined) throw new Error(`布局没有给节点 ${String(key)} 算坐标`);
         return node;
     });
-    const pointOf = (key: number): SceneLayoutPoint => {
+    const pointOf = (key: SceneNodeKey): SceneLayoutPoint => {
         const node = placed.get(key);
-        if (node === undefined) throw new Error(`布局没有给节点 ${key} 算坐标`);
+        if (node === undefined) throw new Error(`布局没有给节点 ${String(key)} 算坐标`);
         return node;
     };
     const rawLinks = [

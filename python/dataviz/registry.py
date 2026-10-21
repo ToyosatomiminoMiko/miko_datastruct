@@ -10,6 +10,9 @@
 没有手写 `roles=`:能推断的从注解 / 标量默认值推断,推断不出来的**报错**,不静默兜底.
 字段顺序 = 定义顺序 = Scene 里节点 / 边数组的顺序.
 
+节点的 scene key 取自数据对象的 `key` -> `id` -> `value` 属性(只认 `Attr` 角色),没有这样
+的属性时退回遍历序号;Scene 里显示与引用都用这个 key,不再有单独的展示字段.
+
 检查结论不在这份 JSON 里:web 侧「检查配置」窗口按函数名选择检查,载入后现算;
 Python 侧只负责描述结构,不跑检查.
 """
@@ -25,7 +28,7 @@ import types
 import typing
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 from .diagram import Diagram
 from .errors import RegistrationError
@@ -66,14 +69,13 @@ class Registry:
         *,
         name: str | None = None,
         as_: str = "node",
-        label: Callable[[Any], str] | str | None = None,
         subclasses: bool = False,
         override: bool = False,
         doc: str = "",
     ) -> Any:
         """装饰器:把一个类登记成结构,并**原样返回这个类**(不强制基类 / 元类).
 
-        两种写法都行:`@reg.structure` 与 `@reg.structure(name="rbt", label=...)`.
+        两种写法都行:`@reg.structure` 与 `@reg.structure(name="rbt")`.
         """
 
         def decorate(target: type) -> type:
@@ -81,7 +83,6 @@ class Registry:
                 target,
                 name=name,
                 as_=as_,
-                label=label,
                 subclasses=subclasses,
                 override=override,
                 doc=doc,
@@ -97,7 +98,6 @@ class Registry:
         *,
         name: str | None,
         as_: str,
-        label: Callable[[Any], str] | str | None,
         subclasses: bool,
         override: bool,
         doc: str,
@@ -129,7 +129,6 @@ class Registry:
             cls=cls,
             name=structure_name,
             as_=as_,
-            label=label,
             subclasses=subclasses,
             doc=doc or inspect.getdoc(cls) or "",
         )
@@ -199,11 +198,7 @@ class Registry:
         """调试用:结构 / 字段 / 角色表."""
         lines = [f"Registry {self.name!r}:{len(self._order)} 种结构"]
         for spec in self._order:
-            extras = []
-            if isinstance(spec.label, str):
-                extras.append(f"label={spec.label}")
-            if spec.subclasses:
-                extras.append("subclasses=True")
+            extras = ["subclasses=True"] if spec.subclasses else []
             suffix = ("  " + " ".join(extras)) if extras else ""
             lines.append(f"- {spec.name}  ({spec.fqn})  as={spec.as_}{suffix}")
             for spec_field in spec.fields:
@@ -244,7 +239,10 @@ class Registry:
     # 输出
 
     def to_scene(self, root: Any) -> Scene:
-        """生成中性场景(节点 / 有向指针 / 无向边,无坐标、不标树或图)."""
+        """生成中性场景(节点 / 有向指针 / 无向边,无坐标、不标树或图).
+
+        节点 key 就是数据键(见 SceneWriter);同一文档内 key 必须唯一且同类型.
+        """
         return SceneWriter(self._graph(root)).write()
 
     def diagram(self, root: Any) -> Diagram:
@@ -275,8 +273,6 @@ class Registry:
             else:
                 role = self._role_from_default(spec, field_name, default)
             fields.append(FieldSpec(name=field_name, role=role, default=default, annotation=annotation))
-
-        _validate_label_field(spec, fields)
 
         pointers = [spec_field for spec_field in fields if isinstance(spec_field.role, Pointer)]
         if spec.as_ == "edge":
@@ -453,26 +449,6 @@ def _is_scalar_type(annotation: Any) -> bool:
 
 
 # 小工具
-
-
-def _validate_label_field(spec: StructureSpec, fields: list[FieldSpec]) -> None:
-    """`label` 写成字段名时,该字段必须存在且是属性.
-
-    label 是展示文字,不能指向指针(指针是关系,不是值);写成可调用对象则不做字段校验.
-    """
-    if not isinstance(spec.label, str):
-        return
-    target = next((spec_field for spec_field in fields if spec_field.name == spec.label), None)
-    if target is None:
-        raise RegistrationError(
-            "bad-label",
-            f"{spec.fqn}.label = {spec.label!r},但没有这个字段",
-        )
-    if not isinstance(target.role, Attr):
-        raise RegistrationError(
-            "bad-label",
-            f"{spec.fqn}.label = {spec.label!r} 指向的是 {type(target.role).__name__},label 只能是属性字段",
-        )
 
 
 def _fingerprint(fields: Iterable[FieldSpec]) -> str:

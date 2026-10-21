@@ -2,7 +2,8 @@
 
 这是"图"的最小例子,同时演示结构种类与无向边:
 
-- `Place`(`as_="node"`,默认):4 块陆地,只有 `key` 属性;
+- `Place`(`as_="node"`,默认):4 块陆地,只有 `key` 属性;`key` 是数据键,Scene 的
+  `nodes[].key` 与画布显示都用它(K / N / S / E);
 - `Bridge`(`as_="edge"`):一座桥,恰好两个端点 `a` / `b` —— 无向边不是字段角色,
   而是另一种结构;
 - `Graph`(`as_="container"`):整张图,自己不出现在画面里,只是 `nodes` / `edges`
@@ -34,7 +35,7 @@ graph_registry = Registry("konigsberg-demo")
 @graph_registry.structure
 @dataclass
 class Place:
-    """一块陆地;key 是显示用的标识(K / N / S / E)."""
+    """一块陆地;key 是数据键(K / N / S / E),显示与引用都用它."""
 
     key: str
 

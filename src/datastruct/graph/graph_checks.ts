@@ -12,12 +12,18 @@
  */
 
 import type { SceneCheckDefinition, SceneCheckFunction, SceneCheckResult } from '@/scene/scene_check';
+import type { SceneNodeKey } from '@/scene/scene_document';
 
 function pass(name: string): SceneCheckResult {
     return { name, passed: true, detail: '', details: [], node: null };
 }
 
-function fail(name: string, detail: string, node: number | null, details: readonly string[] = []): SceneCheckResult {
+function fail(
+    name: string,
+    detail: string,
+    node: SceneNodeKey | null,
+    details: readonly string[] = [],
+): SceneCheckResult {
     return { name, passed: false, detail, details, node };
 }
 
@@ -27,8 +33,8 @@ const checkEulerCircuit: SceneCheckFunction = (document) => {
     if (document.edges.length === 0) return pass(name);
 
     // 度数:一条边给两端各加一;自环(a === b)会给同一个节点加两次,正好是 2
-    const degree = new Map<number, number>(document.nodes.map((node) => [node.key, 0] as const));
-    const adjacency = new Map<number, number[]>(document.nodes.map((node) => [node.key, []] as const));
+    const degree = new Map<SceneNodeKey, number>(document.nodes.map((node) => [node.key, 0] as const));
+    const adjacency = new Map<SceneNodeKey, SceneNodeKey[]>(document.nodes.map((node) => [node.key, []] as const));
     for (const edge of document.edges) {
         degree.set(edge.a, (degree.get(edge.a) ?? 0) + 1);
         degree.set(edge.b, (degree.get(edge.b) ?? 0) + 1);
@@ -40,19 +46,19 @@ const checkEulerCircuit: SceneCheckFunction = (document) => {
     if (odd.length > 0) {
         return fail(
             name,
-            `奇数度节点:${odd.map((node) => `${node.label}(度${degree.get(node.key) ?? 0})`).join(', ')} -- 不存在欧拉回路`,
+            `奇数度节点:${odd.map((node) => `${String(node.key)}(度${degree.get(node.key) ?? 0})`).join(', ')} -- 不存在欧拉回路`,
             odd[0]?.key ?? null,
-            odd.map((node) => `节点 ${node.label}: 度 ${degree.get(node.key) ?? 0}`),
+            odd.map((node) => `节点 ${String(node.key)}: 度 ${degree.get(node.key) ?? 0}`),
         );
     }
 
     // 连通性:只统计真的挂了边的节点;孤立节点不影响回路
-    const withEdge = new Set<number>();
+    const withEdge = new Set<SceneNodeKey>();
     for (const edge of document.edges) {
         withEdge.add(edge.a);
         withEdge.add(edge.b);
     }
-    const visited = new Set<number>();
+    const visited = new Set<SceneNodeKey>();
     let components = 0;
     for (const key of withEdge) {
         if (visited.has(key)) continue;
@@ -60,7 +66,7 @@ const checkEulerCircuit: SceneCheckFunction = (document) => {
         const stack = [key];
         visited.add(key);
         while (stack.length > 0) {
-            const current = stack.pop() as number;
+            const current = stack.pop() as SceneNodeKey;
             for (const next of adjacency.get(current) ?? []) {
                 if (visited.has(next)) continue;
                 visited.add(next);

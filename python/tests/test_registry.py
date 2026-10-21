@@ -14,12 +14,6 @@ class DataNode:
     value: int = 1
 
 
-@dataclass
-class LinkedNode:
-    key: int = 0
-    left: "LinkedNode | None" = None
-
-
 class PlainNode:
     key = 0
     value = 1
@@ -40,7 +34,7 @@ class RegistryTest(unittest.TestCase):
     def test_decorator_with_options(self):
         reg = Registry()
 
-        @reg.structure(name="rbt", label="key")
+        @reg.structure(name="rbt")
         @dataclass
         class RbtNode:
             key: int = 0
@@ -48,7 +42,8 @@ class RegistryTest(unittest.TestCase):
         spec = reg.get(RbtNode)
         self.assertEqual(spec.name, "rbt")
         self.assertEqual(spec.as_, "node")
-        self.assertEqual(spec.label, "key")
+        # 注册信息里没有展示字段:scene key 由数据键承担
+        self.assertFalse(hasattr(spec, "label"))
 
     def test_get_accepts_instance(self):
         reg = Registry()
@@ -120,6 +115,8 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(entry["as_"], "node")
         # 布局提示不属于注册信息:Scene 的形状由内容推
         self.assertNotIn("shape", entry)
+        # 展示字段也不属于注册信息:scene key 就是数据键
+        self.assertNotIn("label", entry)
         self.assertEqual(len(entry["fingerprint"]), 16)
 
     def test_new_dataclass(self):
@@ -166,19 +163,11 @@ class RegistryTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             reg.structure(PlainNode, variant="color")  # type: ignore[call-arg]
 
-    def test_label_field_must_exist(self):
+    def test_label_is_not_a_registration_option(self):
+        # 展示文字就是数据键,注册时不再有单独的展示字段参数
         reg = Registry()
-        reg.structure(PlainNode, label="missing")
-        with self.assertRaises(RegistrationError) as caught:
-            reg.finalize()
-        self.assertEqual(caught.exception.code, "bad-label")
-
-    def test_label_must_point_to_attr(self):
-        reg = Registry()
-        reg.structure(LinkedNode, label="left")
-        with self.assertRaises(RegistrationError) as caught:
-            reg.finalize()
-        self.assertEqual(caught.exception.code, "bad-label")
+        with self.assertRaises(TypeError):
+            reg.structure(PlainNode, label="key")  # type: ignore[call-arg]
 
     def test_checks_is_not_a_registration_option(self):
         # 检查结论不进 JSON,也不再由 Python 注册:性质检查按结构名注册在 web 侧

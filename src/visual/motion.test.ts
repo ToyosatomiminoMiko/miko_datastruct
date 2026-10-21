@@ -6,13 +6,13 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import type { SceneDocument } from '@/scene/scene_document';
+import type { SceneDocument, SceneNodeKey } from '@/scene/scene_document';
 import {
     VISUAL_LINK_NODE_GAP,
     VISUAL_NODE_RADIUS,
 } from '@/visual/config';
 import type { SceneLayout } from '@/visual/layout';
-import { assignLinkLanes, linkEndpoints } from '@/visual/layout';
+import { assignLinkLanes, compareSceneNodeKeys, linkEndpoints } from '@/visual/layout';
 import {
     interpolateScenes,
     linkIdsOfDocument,
@@ -21,11 +21,11 @@ import {
 
 /** 由节点 key 与有向连接造一份最小文档 */
 function documentOf(
-    keys: readonly number[],
-    pointers: readonly (readonly [number, number])[] = [],
+    keys: readonly SceneNodeKey[],
+    pointers: readonly (readonly [SceneNodeKey, SceneNodeKey])[] = [],
 ): SceneDocument {
     return {
-        nodes: keys.map((key) => ({ key, label: String(key), attrs: {} })),
+        nodes: keys.map((key) => ({ key, attrs: {} })),
         pointers: pointers.map(([from, to]) => ({ from, to })),
         edges: [],
     };
@@ -34,15 +34,15 @@ function documentOf(
 /** 按给定坐标造一份布局(端点用布局层同一套公式,保证和真实布局同口径) */
 function layoutOf(
     document: SceneDocument,
-    positions: Readonly<Record<number, readonly [number, number]>>,
+    positions: Readonly<Record<string, readonly [number, number]>>,
 ): SceneLayout {
     const nodes = document.nodes.map((node) => {
-        const at = positions[node.key] ?? [0, 0];
+        const at = positions[String(node.key)] ?? [0, 0];
         return { key: node.key, x: at[0], y: at[1] };
     });
-    const pointOf = (key: number) => {
+    const pointOf = (key: SceneNodeKey) => {
         const node = nodes.find((candidate) => candidate.key === key);
-        if (node === undefined) throw new Error(`布局里没有节点 ${key}`);
+        if (node === undefined) throw new Error(`布局里没有节点 ${String(key)}`);
         return { x: node.x, y: node.y };
     };
     const raw = [
@@ -57,7 +57,7 @@ function layoutOf(
             ...linkEndpoints(
                 pointOf(link.from),
                 pointOf(link.to),
-                (lanes[index] ?? 0) * (link.from <= link.to ? 1 : -1),
+                (lanes[index] ?? 0) * (compareSceneNodeKeys(link.from, link.to) <= 0 ? 1 : -1),
             ),
         })),
     };
@@ -70,30 +70,44 @@ function distanceTo(x: number, y: number, point: { x: number; y: number }): numb
 
 describe('落定场景:sceneFromLayout', () => {
     it('节点位置 / 文字 / 变体 / 高亮状态 / 连线 id 都来自文档与 marks', () => {
-        const document = documentOf([0, 1], [[0, 1]]);
-        const layout = layoutOf(document, { 0: [0, 0], 1: [70, 70] });
         const documentWithAttrs: SceneDocument = {
-            ...document,
             nodes: [
-                { key: 0, label: '10', attrs: { color: 'black' } },
-                { key: 1, label: '5', attrs: { color: 'red' } },
+                { key: 10, attrs: { color: 'black' } },
+                { key: 5, attrs: { color: 'red' } },
             ],
+            pointers: [{ from: 10, to: 5 }],
+            edges: [],
         };
+        const layout = layoutOf(documentWithAttrs, { 10: [0, 0], 5: [70, 70] });
 
         const scene = sceneFromLayout(documentWithAttrs, layout, {
             variantOf: (attrs) => (typeof attrs.color === 'string' ? attrs.color : undefined),
-            marks: { nodes: [{ key: 1, state: 'active' }], links: [{ from: 0, to: 1, state: 'path' }] },
+            marks: { nodes: [{ key: 5, state: 'active' }], links: [{ from: 10, to: 5, state: 'path' }] },
         });
 
-        expect(scene.nodes.map((node) => node.label)).toEqual(['10', '5']);
+        // 节点文字一律由 key 派生,文档里没有单独的值字段
+        expect(scene.nodes.map((node) => node.text)).toEqual(['10', '5']);
         expect(scene.nodes[0]?.variant).toBe('black');
         expect(scene.nodes[1]).toMatchObject({ variant: 'red', state: 'active' });
-        expect(scene.links[0]).toMatchObject({ id: '0->1#0', state: 'path', opacity: 1 });
+        expect(scene.links[0]).toMatchObject({ id: '10->5#0', state: 'path', opacity: 1 });
+    });
+
+    it('字符串 key:显示文字 = String(key),连线按字符串 key 引用', () => {
+        const document: SceneDocument = {
+            nodes: [{ key: 'K', attrs: {} }, { key: 'N', attrs: {} }],
+            pointers: [],
+            edges: [{ a: 'K', b: 'N', attrs: {} }],
+        };
+        const layout = layoutOf(document, { K: [0, 0], N: [100, 0] });
+        const scene = sceneFromLayout(document, layout);
+
+        expect(scene.nodes.map((node) => node.text)).toEqual(['K', 'N']);
+        expect(scene.links[0]).toMatchObject({ from: 'K', to: 'N', directed: false });
     });
 
     it('同一对节点之间的多条线各有稳定 id(反向 / 平行不撞)', () => {
         const document: SceneDocument = {
-            nodes: [{ key: 0, label: 'A', attrs: {} }, { key: 1, label: 'B', attrs: {} }],
+            nodes: [{ key: 0, attrs: {} }, { key: 1, attrs: {} }],
             pointers: [{ from: 0, to: 1 }, { from: 1, to: 0 }, { from: 0, to: 1 }],
             edges: [],
         };
@@ -168,7 +182,7 @@ describe('旋转插值(极坐标)', () => {
     const motion = { kind: 'rotate', from: 1, to: 2 } as const;
     const nodePosition = (scene: ReturnType<typeof interpolateScenes>, key: number) => {
         const node = scene.nodes.find((candidate) => candidate.key === key);
-        if (node === undefined) throw new Error(`缺少节点 ${key}`);
+        if (node === undefined) throw new Error(`缺少节点 ${String(key)}`);
         return node.at;
     };
 

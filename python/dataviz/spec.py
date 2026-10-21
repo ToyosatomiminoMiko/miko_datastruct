@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from .roles import Role
 
@@ -59,8 +59,8 @@ class StructureSpec:
     注册信息里**没有布局提示**(树 / 图):那是场景内容自己的性质,由渲染端从
     nodes / pointers / edges 推,不由结构自报.
 
-    `label` 可以是可调用对象(自定义展示文字),也可以是字段名(字符串):后者从该字段
-    取值当标签,并把它从 `attrs` 里排除 —— `attrs` 是除通用槽之外的其余属性.
+    节点的显示文字与引用标识都由数据键承担:Scene 写端按 `key` -> `id` -> `value`
+    属性取 scene key(见 scene.py),注册信息里不再有单独的展示字段.
     """
 
     def __init__(
@@ -70,7 +70,6 @@ class StructureSpec:
         cls: type,
         name: str,
         as_: str,
-        label: Callable[[Any], str] | str | None,
         subclasses: bool,
         doc: str,
     ) -> None:
@@ -78,7 +77,6 @@ class StructureSpec:
         self.cls = cls
         self.name = name
         self.as_ = as_
-        self.label = label
         self.subclasses = subclasses
         self.doc = doc
         self._fields: tuple[FieldSpec, ...] | None = None

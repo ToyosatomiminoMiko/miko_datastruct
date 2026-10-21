@@ -20,6 +20,7 @@
  */
 
 import type { SceneCheckResult } from '@/scene/scene_check';
+import type { SceneNodeKey } from '@/scene/scene_document';
 import { runSceneChecks } from '@/datastruct/checks';
 import type { SceneTrace, TraceStep } from '@/datastruct/trace/trace';
 import { autoAnchorLayout, anchorLayout } from '@/visual/anchor';
@@ -123,7 +124,7 @@ interface PreparedStep {
     readonly scene: MotionScene;
     readonly checks: readonly SceneCheckResult[];
     /** 节点 key -> 锚定后的世界位置(镜头取景用) */
-    readonly points: ReadonlyMap<number, VisualPoint>;
+    readonly points: ReadonlyMap<SceneNodeKey, VisualPoint>;
 }
 
 /**
@@ -173,7 +174,7 @@ export function prepareTrace(
             marks: step.marks,
             variantOf: options.variantOf,
         });
-        const points = new Map<number, VisualPoint>(
+        const points = new Map<SceneNodeKey, VisualPoint>(
             scene.nodes.map((node) => [node.key, node.at] as const),
         );
         prepared.push({
@@ -188,7 +189,7 @@ export function prepareTrace(
 }
 
 /** 一拍的镜头请求;`null` = 保持当前镜头(没有 focus / frame / fit) */
-export function cameraRequestForStep(step: TraceStep, points: ReadonlyMap<number, VisualPoint>): DemoCameraRequest | null {
+export function cameraRequestForStep(step: TraceStep, points: ReadonlyMap<SceneNodeKey, VisualPoint>): DemoCameraRequest | null {
     if (step.framing === 'hold') return null;
     if (step.framing === 'fit') {
         const all = [...points.values()];

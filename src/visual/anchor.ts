@@ -17,12 +17,14 @@
  * 测试能断言"锚点前后像素级不动".
  */
 
+import type { SceneNodeKey } from '@/scene/scene_document';
+import { compareSceneNodeKeys } from '@/visual/layout';
 import type { SceneLayout, SceneLayoutNode } from '@/visual/layout';
 
 /** 锚定请求:anchor 是这一帧的节点,anchorAt 是上一帧的节点(缺省取同名 key) */
 export interface AnchorRequest {
-    readonly anchor?: number;
-    readonly anchorAt?: number;
+    readonly anchor?: SceneNodeKey;
+    readonly anchorAt?: SceneNodeKey;
 }
 
 /** 平移量:世界坐标里的整数 / 浮点增量 */
@@ -32,7 +34,7 @@ export interface AnchorOffset {
 }
 
 /** 布局里某个 key 的位置;找不到返回 null(布局应当包含所有 document 节点) */
-export function layoutPosition(layout: SceneLayout, key: number): SceneLayoutNode | null {
+export function layoutPosition(layout: SceneLayout, key: SceneNodeKey): SceneLayoutNode | null {
     return layout.nodes.find((node) => node.key === key) ?? null;
 }
 
@@ -98,6 +100,10 @@ export function anchorLayout(
  * 自动锚定:调用方没给 anchor,但两帧有共同节点时,拿"上一帧里 key 最小的共同节点"
  * 当锚,避免整棵树因为包围盒归零而无谓地滑.
  *
+ * "最小"按 key 本身的类型比较(数字相减、字符串按字典序,见
+ * `compareSceneNodeKeys`):字符串 key 不能直接相减,否则排序结果变成 NaN 比较、
+ * 锚点在不同帧之间飘.
+ *
  * 这是给"机械步骤 / 算法忘了写 anchor"的兜底,不替代算法显式锚定:
  * - 两帧文档完全一样时,布局也完全一样,自动锚定是恒等;
  * - 旋转 / 插入这类几何变化大的步骤,算法必须显式给 anchorAt,否则自动锚点
@@ -109,7 +115,7 @@ export function autoAnchorLayout(current: SceneLayout, previous: SceneLayout | n
     const common = current.nodes
         .map((node) => node.key)
         .filter((key) => previousKeys.has(key))
-        .sort((a, b) => a - b);
+        .sort(compareSceneNodeKeys);
     const anchor = common[0];
     if (anchor === undefined) return current;
     return anchorLayout(current, previous, { anchor });

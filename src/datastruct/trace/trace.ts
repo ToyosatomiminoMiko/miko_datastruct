@@ -23,7 +23,7 @@
  * 这一拍直接硬切(不插值),用于旋转 / 退化章节的开场.
  */
 
-import type { SceneDocument } from '@/scene/scene_document';
+import type { SceneDocument, SceneNodeKey } from '@/scene/scene_document';
 
 /** 节点高亮状态:动画词汇,和结构色变体(红 / 黑)叠加,不进 attrs */
 export type TraceNodeState = 'active' | 'path' | 'visited' | 'found' | 'ghost' | 'fresh';
@@ -31,16 +31,16 @@ export type TraceNodeState = 'active' | 'path' | 'visited' | 'found' | 'ghost' |
 /** 连线高亮状态:路径上的指针 / 已被断开的指针 */
 export type TraceLinkState = 'path' | 'ghost';
 
-/** 一个节点的高亮 */
+/** 一个节点的高亮:key 是场景文档里的节点 key(number | string) */
 export interface TraceNodeMark {
-    readonly key: number;
+    readonly key: SceneNodeKey;
     readonly state: TraceNodeState;
 }
 
 /** 一条连线的高亮:按两端 key 匹配(同一对之间多条线时全部命中) */
 export interface TraceLinkMark {
-    readonly from: number;
-    readonly to: number;
+    readonly from: SceneNodeKey;
+    readonly to: SceneNodeKey;
     readonly state: TraceLinkState;
 }
 

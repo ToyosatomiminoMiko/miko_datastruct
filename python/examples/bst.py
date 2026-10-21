@@ -5,8 +5,8 @@
 - `left` / `right` 的类型标注就是两条有向指针(`T | None` -> 0..1 条);
 - 没有 `parent` 字段,Scene 就是一棵干净的有向树;加了 `parent` 会多出反向指针,
   那是图的画法,不是这里要的树;
-- `label="key"`: `key` 进 label,并从 `attrs` 排除,所以节点只有 `key` / `label`,
-  JSON 里不会出现空 attrs;
+- `key` 字段就是节点的数据键:Scene 的 nodes[].key 直接输出 8 / 4 / 2 / …,渲染端显示
+  与检查定位都用它;它不重复进 attrs,所以节点没有 attrs;
 - 形状与 web 内置的「二叉搜索树」示例同形(8 / 4 / 12 / 2 / 6 / 10 / 14),
   写出的 JSON 可以直接粘进 web 对照.
 
@@ -23,10 +23,7 @@ from dataviz import Registry
 bst_registry = Registry("bst-demo")
 
 
-@bst_registry.structure(
-    name="bst",
-    label="key",
-)
+@bst_registry.structure(name="bst")
 @dataclass
 class BstNode:
     key: int

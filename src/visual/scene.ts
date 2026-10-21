@@ -32,13 +32,14 @@ export interface VisualPoint {
 /**
  * 一个节点:位置 + 值文字 + 可选语义变体.
  *
- * `label` 是**已经格式化好的可见文字**(如 `13` / `13B`);视觉层不拼接、不解读.
+ * `text` 是**已经格式化好的可见文字**:文档里没有单独的值字段,一律是节点 key 的
+ * `String(key)`(见 src/scene/scene_document.ts);视觉层不拼接、不解读.
  */
 export interface VisualNode {
     /** 节点中心在世界坐标里的位置(形状以它为中心) */
     readonly at: VisualPoint;
-    /** 节点值(可见文字) */
-    readonly label: string;
+    /** 节点上显示的文字(`String(key)`) */
+    readonly text: string;
     /**
      * 语义变体:写成 CSS 类名后缀(如 `red` / `black`),渲染层挂
      * `visual-node--<variant>`.不给就只有基础观感.

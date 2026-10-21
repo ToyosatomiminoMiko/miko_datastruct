@@ -8,6 +8,9 @@
  *
  * 两条检查共用同一份"先把链读出来"的逻辑:结构不合法时排序无从谈起,`checkListSorted`
  * 直接复用结构检查的违规原因,而不是在两个函数里各写一遍遍历.
+ *
+ * 值从 `key` 读:链表的 key 就是参与比较的数值,必须是 number;字符串 key 在有序性
+ * 检查里直接 FAIL,不静默跳过.
  */
 
 import type {
@@ -15,8 +18,7 @@ import type {
     SceneCheckFunction,
     SceneCheckResult,
 } from '@/scene/scene_check';
-import type { SceneDocument, SceneDocumentNode } from '@/scene/scene_document';
-import { LABEL_COMPARE_TOLERANCE, toComparableLabel } from '@/scene/label_value';
+import type { SceneDocument, SceneDocumentNode, SceneNodeKey } from '@/scene/scene_document';
 
 /** 链表结构违规的原因(定位用;文案由下面统一拼) */
 type ListViolationKind = 'edge' | 'no-head' | 'multi-head' | 'branch' | 'merge' | 'cycle' | 'disconnected';
@@ -24,12 +26,22 @@ type ListViolationKind = 'edge' | 'no-head' | 'multi-head' | 'branch' | 'merge' 
 interface ListViolation {
     readonly kind: ListViolationKind;
     /** 违规指向的节点 key;没有具体节点(例如"用了无向边")为 null */
-    readonly node: number | null;
+    readonly node: SceneNodeKey | null;
     readonly detail: string;
 }
 
 /** 读链的结果:要么是从表头开始的节点顺序,要么是一条违规 */
-type ListShape = { readonly order: readonly number[] } | ListViolation;
+type ListShape = { readonly order: readonly SceneNodeKey[] } | ListViolation;
+
+/** 节点在文案里的称呼:显示文字就是 key 本身 */
+function keyText(key: SceneNodeKey): string {
+    return String(key);
+}
+
+/** 有序性的数值口径:key 必须是 number;字符串 key 返回 null(调用方 FAIL) */
+function numericKeyOf(node: SceneDocumentNode): number | null {
+    return typeof node.key === 'number' ? node.key : null;
+}
 
 /** 从表头沿唯一的孩子往下走,读出一条单链;任何结构问题都收成一条违规 */
 function readList(document: SceneDocument): ListShape {
@@ -37,22 +49,22 @@ function readList(document: SceneDocument): ListShape {
         return { kind: 'edge', node: null, detail: '单链表只应有向指针,不应出现无向边' };
     }
 
-    const nodeByKey = new Map(document.nodes.map((node) => [node.key, node] as const));
-    const childrenOf = new Map<number, number[]>(document.nodes.map((node) => [node.key, []] as const));
-    const parentOf = new Map<number, number | null>(document.nodes.map((node) => [node.key, null] as const));
+    const nodeByKey = new Map<SceneNodeKey, SceneDocumentNode>(document.nodes.map((node) => [node.key, node] as const));
+    const childrenOf = new Map<SceneNodeKey, SceneNodeKey[]>(document.nodes.map((node) => [node.key, []] as const));
+    const parentOf = new Map<SceneNodeKey, SceneNodeKey | null>(document.nodes.map((node) => [node.key, null] as const));
 
     for (const pointer of document.pointers) {
         childrenOf.get(pointer.from)?.push(pointer.to);
         if (parentOf.get(pointer.to) !== null) {
             const child = nodeByKey.get(pointer.to) as SceneDocumentNode;
-            return { kind: 'merge', node: child.key, detail: `节点 ${child.label} 有两个父节点,不是单链` };
+            return { kind: 'merge', node: child.key, detail: `节点 ${keyText(child.key)} 有两个父节点,不是单链` };
         }
         parentOf.set(pointer.to, pointer.from);
     }
 
     for (const node of document.nodes) {
         if ((childrenOf.get(node.key)?.length ?? 0) > 1) {
-            return { kind: 'branch', node: node.key, detail: `节点 ${node.label} 有多个孩子,不是单链` };
+            return { kind: 'branch', node: node.key, detail: `节点 ${keyText(node.key)} 有多个孩子,不是单链` };
         }
     }
 
@@ -66,13 +78,12 @@ function readList(document: SceneDocument): ListShape {
         return { kind: 'multi-head', node: head.key, detail: `有 ${heads.length} 个节点没有父节点,不是一条单链` };
     }
 
-    const order: number[] = [];
-    const visited = new Set<number>();
-    let current: number | null = (heads[0] as SceneDocumentNode).key;
+    const order: SceneNodeKey[] = [];
+    const visited = new Set<SceneNodeKey>();
+    let current: SceneNodeKey | null = (heads[0] as SceneDocumentNode).key;
     while (current !== null) {
         if (visited.has(current)) {
-            const node = nodeByKey.get(current) as SceneDocumentNode;
-            return { kind: 'cycle', node: current, detail: `节点 ${node.label} 被第二次走到(链上有环)` };
+            return { kind: 'cycle', node: current, detail: `节点 ${keyText(current)} 被第二次走到(链上有环)` };
         }
         visited.add(current);
         order.push(current);
@@ -84,7 +95,7 @@ function readList(document: SceneDocument): ListShape {
         return {
             kind: 'disconnected',
             node: unreachable.key,
-            detail: `节点 ${unreachable.label} 从表头不可达`,
+            detail: `节点 ${keyText(unreachable.key)} 从表头不可达`,
         };
     }
 
@@ -95,7 +106,12 @@ function pass(name: string): SceneCheckResult {
     return { name, passed: true, detail: '', details: [], node: null };
 }
 
-function fail(name: string, detail: string, node: number | null, details: readonly string[] = []): SceneCheckResult {
+function fail(
+    name: string,
+    detail: string,
+    node: SceneNodeKey | null,
+    details: readonly string[] = [],
+): SceneCheckResult {
     return { name, passed: false, detail, details, node };
 }
 
@@ -109,7 +125,7 @@ const checkLinkedList: SceneCheckFunction = (document) => {
     return pass(name);
 };
 
-/** 单链表升序:沿表头读出每个节点的 label,必须严格递增 */
+/** 单链表升序:沿表头读出每个节点的 key,必须严格递增 */
 const checkListSorted: SceneCheckFunction = (document) => {
     const name = '单链表节点值严格递增';
     if (document.nodes.length === 0) return pass(name);
@@ -119,24 +135,24 @@ const checkListSorted: SceneCheckFunction = (document) => {
         return fail(name, `链表结构不合法,无法检查有序性: ${shape.detail}`, shape.node);
     }
 
-    const nodeByKey = new Map(document.nodes.map((node) => [node.key, node] as const));
-    let previousLabel: string | null = null;
+    const nodeByKey = new Map<SceneNodeKey, SceneDocumentNode>(document.nodes.map((node) => [node.key, node] as const));
+    let previousKey: SceneNodeKey | null = null;
     let previousValue: number | null = null;
     for (const key of shape.order) {
         const node = nodeByKey.get(key) as SceneDocumentNode;
-        const value = toComparableLabel(node.label);
+        const value = numericKeyOf(node);
         if (value === null) {
-            return fail(name, `节点 ${node.label} 的 label 不是数字,无法比较大小`, node.key);
+            return fail(name, `节点 ${keyText(node.key)} 的 key 不是数字,无法比较大小`, node.key);
         }
-        if (previousValue !== null && previousLabel !== null && value <= previousValue + LABEL_COMPARE_TOLERANCE) {
+        if (previousValue !== null && previousKey !== null && value <= previousValue) {
             return fail(
                 name,
-                `节点 ${previousLabel} -> ${node.label} 不是严格递增`,
+                `节点 ${keyText(previousKey)} -> ${keyText(node.key)} 不是严格递增`,
                 node.key,
-                [`前一个节点「${previousLabel}」= ${previousValue}`, `当前节点「${node.label}」= ${value}`],
+                [`前一个节点「${keyText(previousKey)}」= ${previousValue}`, `当前节点「${keyText(node.key)}」= ${value}`],
             );
         }
-        previousLabel = node.label;
+        previousKey = node.key;
         previousValue = value;
     }
     return pass(name);

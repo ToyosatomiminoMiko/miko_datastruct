@@ -13,8 +13,9 @@
 4. rbt       红黑树(有向指针 + Enum 属性).
 
 这个 demo 演示的是"生成中性表示"这一半:Python 只产出**没有坐标的 JSON**
-(`nodes` / `pointers` / `edges`).布局、像素与性质检查都在 web 那一半;检查由 web 的
-「检查配置」窗口按函数名选择,所以 JSON 里不带检查结论.
+(`nodes` / `pointers` / `edges`).节点 JSON 里的 `key` 就是数据键(BST 是 8 / 4 / …,
+图是 "K" / "N" / …),显示与排序都由它承担,没有额外的展示字段.布局、像素与性质检查
+都在 web 那一半;检查由 web 的「检查配置」窗口按函数名选择,所以 JSON 里不带检查结论.
 """
 
 from __future__ import annotations
@@ -87,13 +88,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     # 3. 二叉搜索树:只有两条 0..1 有向指针,没有 attrs
     bst_root = bst_example.sample_tree()
     bst_diagram = bst_example.bst_registry.diagram(bst_root)
-    _section("3. 二叉搜索树:标注即指针 + label,没有 attrs")
+    _section("3. 二叉搜索树:标注即指针 + key,没有 attrs")
     _print_diagram(bst_diagram)
 
-    # 4. 红黑树:有向指针 + Enum + label 钩子
+    # 4. 红黑树:有向指针 + Enum + key/attrs
     rbt_root = rbt_example.sample_tree()
     rbt_diagram = rbt_example.rbt_registry.diagram(rbt_root)
-    _section("4. 红黑树:标注即指针 + label / attrs")
+    _section("4. 红黑树:标注即指针 + key / attrs")
     _print_diagram(rbt_diagram)
 
     # 5. 推断失败的错误形态

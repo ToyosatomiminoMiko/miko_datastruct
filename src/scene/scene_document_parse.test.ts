@@ -4,8 +4,9 @@
  * 钉三件事:合法文档能读成什么形状(含省略字段的默认值)、每一类结构错误的稳定错误码、
  * 以及未知字段被忽略(向前兼容:Python 侧加字段时旧 web 不拒收).
  *
- * 检查结论与结构名都不是文档字段:解析器只认 nodes / pointers / edges,`checks` /
- * `structure` 这类旧字段会被当成未知字段忽略.检查由查看器的检查配置在载入后现算.
+ * 节点的 key 就是数据键:number 或 string,同文档唯一且同类型;没有 label,节点展示
+ * 文字由 key 现算.检查结论与结构名都不是文档字段:解析器只认 nodes / pointers /
+ * edges,`checks` / `structure` 这类旧字段会被当成未知字段忽略.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -30,43 +31,48 @@ function expectError(source: string, code: string): SceneDocumentError {
 
 describe('中性场景文档:解析', () => {
     it('最小文档:只有 nodes;指针 / 边默认成空数组', () => {
-        const document = parseSceneDocument('{"nodes":[{"key":0,"label":"A"}]}');
-        expect(document.nodes).toEqual([{ key: 0, label: 'A', attrs: {} }]);
+        const document = parseSceneDocument('{"nodes":[{"key":0}]}');
+        expect(document.nodes).toEqual([{ key: 0, attrs: {} }]);
         expect(document.pointers).toEqual([]);
         expect(document.edges).toEqual([]);
     });
 
-    it('完整文档:attrs / pointer / edge 全部读出来', () => {
+    it('完整文档:attrs / pointer / edge 全部读出来(边没有 label,展示文字不占文档字段)', () => {
         const document = parseSceneDocument(JSON.stringify({
             nodes: [
-                { key: 0, label: '10', attrs: { color: 'black', weight: 2, visited: false } },
-                { key: 1, label: '5' },
+                { key: 10, attrs: { color: 'black', weight: 2, visited: false } },
+                { key: 5 },
             ],
-            pointers: [{ from: 0, to: 1 }],
-            edges: [{ a: 0, b: 1, label: '桥', attrs: { weight: 3 } }],
+            pointers: [{ from: 10, to: 5 }],
+            edges: [{ a: 10, b: 5, attrs: { weight: 3 } }],
         }));
 
         expect(document.nodes[0]).toEqual({
-            key: 0,
-            label: '10',
+            key: 10,
             attrs: { color: 'black', weight: 2, visited: false },
         });
-        expect(document.pointers).toEqual([{ from: 0, to: 1 }]);
-        expect(document.edges).toEqual([{
-            a: 0,
-            b: 1,
-            label: '桥',
-            attrs: { weight: 3 },
-        }]);
+        expect(document.nodes[1]).toEqual({ key: 5, attrs: {} });
+        expect(document.pointers).toEqual([{ from: 10, to: 5 }]);
+        expect(document.edges).toEqual([{ a: 10, b: 5, attrs: { weight: 3 } }]);
     });
 
-    it('省略字段的默认值:edge label -> null', () => {
+    it('attrs 省略 -> 空对象;edge 省略 attrs -> 空对象', () => {
         const document = parseSceneDocument(JSON.stringify({
-            nodes: [{ key: 0, label: 'A' }, { key: 1, label: 'B' }],
+            nodes: [{ key: 0 }, { key: 1 }],
             edges: [{ a: 0, b: 1 }],
         }));
 
-        expect(document.edges[0]).toEqual({ a: 0, b: 1, label: null, attrs: {} });
+        expect(document.edges[0]).toEqual({ a: 0, b: 1, attrs: {} });
+    });
+
+    it('key 允许字符串(命名节点):图用 "K" / "N" 这类 key,引用也按字符串', () => {
+        const document = parseSceneDocument(JSON.stringify({
+            nodes: [{ key: 'K' }, { key: 'N' }],
+            pointers: [{ from: 'K', to: 'N' }],
+        }));
+
+        expect(document.nodes).toEqual([{ key: 'K', attrs: {} }, { key: 'N', attrs: {} }]);
+        expect(document.pointers).toEqual([{ from: 'K', to: 'N' }]);
     });
 
     it('空文档 {}:三组图元都是空的(UI 据此显示"没有内容"而不是报错)', () => {
@@ -77,13 +83,14 @@ describe('中性场景文档:解析', () => {
         });
     });
 
-    it('未知字段忽略:向前兼容,旧的 checks / structure 字段不再有语义也不拒收', () => {
+    it('未知字段忽略:向前兼容;旧文档残留的 label 不再有语义,也不会拒收', () => {
         const document = readSceneDocument({
             structure: 'rbt',
             checks: [{ name: '旧字段', passed: false }],
-            nodes: [{ key: 0, label: 'A', extra: 'ignored' }],
+            nodes: [{ key: 7, label: '旧展示文字', extra: 'ignored' }],
         });
         expect(document.nodes).toHaveLength(1);
+        expect(document.nodes[0]).toEqual({ key: 7, attrs: {} });
     });
 });
 
@@ -105,51 +112,60 @@ describe('中性场景文档:结构错误', () => {
         expect(expectError('{"nodes":[1]}', 'node-shape').path).toBe('nodes[0]');
     });
 
-    it('key 不是非负整数 -> node-key', () => {
-        expect(expectError('{"nodes":[{"key":"0","label":"A"}]}', 'node-key').path).toBe('nodes[0].key');
-        expect(expectError('{"nodes":[{"key":-1,"label":"A"}]}', 'node-key').path).toBe('nodes[0].key');
-        expect(expectError('{"nodes":[{"key":1.5,"label":"A"}]}', 'node-key').path).toBe('nodes[0].key');
+    it('key 缺失 / 不是数字或非空字符串 -> node-key', () => {
+        expect(expectError('{"nodes":[{"attrs":{}}]}', 'node-key').path).toBe('nodes[0].key');
+        expect(expectError('{"nodes":[{"key":null}]}', 'node-key').path).toBe('nodes[0].key');
+        expect(expectError('{"nodes":[{"key":true}]}', 'node-key').path).toBe('nodes[0].key');
+        expect(expectError('{"nodes":[{"key":""}]}', 'node-key').path).toBe('nodes[0].key');
+        expect(expectError('{"nodes":[{"key":1e999}]}', 'node-key').path).toBe('nodes[0].key');
     });
 
     it('key 重复 -> node-key-duplicate', () => {
         const error = expectError(
-            '{"nodes":[{"key":0,"label":"A"},{"key":0,"label":"B"}]}',
+            '{"nodes":[{"key":0},{"key":0}]}',
             'node-key-duplicate',
         );
         expect(error.path).toBe('nodes[1].key');
+        expect(error.message).toContain('0');
     });
 
-    it('label 缺失 / 不是字符串 -> node-label', () => {
-        expect(expectError('{"nodes":[{"key":0}]}', 'node-label').path).toBe('nodes[0].label');
-        expect(expectError('{"nodes":[{"key":0,"label":1}]}', 'node-label').path).toBe('nodes[0].label');
+    it('key 类型混用 -> node-key(布局排序需要一个明确的比较口径)', () => {
+        const error = expectError(
+            '{"nodes":[{"key":0},{"key":"A"}]}',
+            'node-key',
+        );
+        expect(error.path).toBe('nodes[1].key');
+        expect(error.message).toContain('同为');
     });
 
     it('attrs 不是对象 / 值是数组或 null -> node-attrs', () => {
-        expect(expectError('{"nodes":[{"key":0,"label":"A","attrs":[]}]}', 'node-attrs').path)
+        expect(expectError('{"nodes":[{"key":0,"attrs":[]}]}', 'node-attrs').path)
             .toBe('nodes[0].attrs');
-        expect(expectError('{"nodes":[{"key":0,"label":"A","attrs":{"x":[1]}}]}', 'node-attrs').path)
+        expect(expectError('{"nodes":[{"key":0,"attrs":{"x":[1]}}]}', 'node-attrs').path)
             .toBe('nodes[0].attrs.x');
-        expect(expectError('{"nodes":[{"key":0,"label":"A","attrs":{"x":null}}]}', 'node-attrs').path)
+        expect(expectError('{"nodes":[{"key":0,"attrs":{"x":null}}]}', 'node-attrs').path)
             .toBe('nodes[0].attrs.x');
     });
 
-    it('pointer 字段格式错 -> pointer-shape;引用不存在的 key -> pointer-ref', () => {
-        expect(expectError('{"nodes":[],"pointers":[{"from":"0","to":0}]}', 'pointer-shape').path)
+    it('pointer 字段格式错 / 类型与节点 key 不一致 -> pointer-shape;引用不存在的 key -> pointer-ref', () => {
+        expect(expectError('{"nodes":[{"key":0}],"pointers":[{"from":true,"to":0}]}', 'pointer-shape').path)
+            .toBe('pointers[0].from');
+        expect(expectError('{"nodes":[{"key":0}],"pointers":[{"from":"0","to":0}]}', 'pointer-shape').path)
             .toBe('pointers[0].from');
         expect(expectError(
-            '{"nodes":[{"key":0,"label":"A"}],"pointers":[{"from":0,"to":9}]}',
+            '{"nodes":[{"key":0}],"pointers":[{"from":0,"to":9}]}',
             'pointer-ref',
         ).path).toBe('pointers[0].to');
     });
 
-    it('edge 端点引用不存在的 key -> edge-ref;label 类型错 -> edge-shape', () => {
+    it('edge 端点引用不存在的 key -> edge-ref;类型不一致 -> edge-shape', () => {
         expect(expectError(
-            '{"nodes":[{"key":0,"label":"A"}],"edges":[{"a":0,"b":9}]}',
+            '{"nodes":[{"key":0}],"edges":[{"a":0,"b":9}]}',
             'edge-ref',
         ).path).toBe('edges[0].b');
         expect(expectError(
-            '{"nodes":[{"key":0,"label":"A"}],"edges":[{"a":0,"b":0,"label":1}]}',
+            '{"nodes":[{"key":0}],"edges":[{"a":0,"b":"0"}]}',
             'edge-shape',
-        ).path).toBe('edges[0].label');
+        ).path).toBe('edges[0].b');
     });
 });

@@ -85,22 +85,31 @@ CI / 部署(`npm ci`)行为不变.链接之后:库的 `styles/` **零构建立�
 ```json
 {
   "nodes": [
-    { "key": 0, "label": "10", "attrs": { "color": "black" } },
-    { "key": 1, "label": "5",  "attrs": { "color": "red" } }
+    { "key": 10, "attrs": { "color": "black" } },
+    { "key": 5,  "attrs": { "color": "red" } }
   ],
-  "pointers": [{ "from": 0, "to": 1 }],
+  "pointers": [{ "from": 10, "to": 5 }],
   "edges": []
 }
 ```
 
 | 字段 | 形状 | 说明 |
 | --- | --- | --- |
-| `nodes[].key` | 非负整数 | 文档内唯一;`pointers` / `edges` 都按它引用节点 |
-| `nodes[].label` | 字符串 | 画在节点上、也是实体列表里的名字 |
-| `nodes[].attrs` | 对象,值只能是字符串 / 数字 / 布尔 | 结构特有属性;实体列表逐条显示,`color` 还决定节点配色(见下) |
-| `pointers[]` | `{ from, to }` | **有向**;树就是父 -> 子 |
-| `edges[]` | `{ a, b, label?, attrs? }` | **无向**;图里的一条边 |
+| `nodes[].key` | 有限数字 / 非空字符串 | 必填;节点的**数据键**,同文档内唯一且同类型:指针 / 边按它引用,有序检查按它比较,节点上画的就是 `String(key)` |
+| `nodes[].attrs` | 对象(可省略),值只能是字符串 / 数字 / 布尔 | 结构特有属性;实体列表逐条显示,`color` 还决定节点配色(见下) |
+| `pointers[]` | `{ from, to }` | **有向**;树就是父 -> 子,两端都是节点的 `key` |
+| `edges[]` | `{ a, b, attrs? }` | **无向**;图里的一条边,两端都是节点的 `key`,其余属性进 `attrs` |
 
+**`key` 就是数据键,没有 `label`,也没有"文档内编号"。** 旧契约把真正参与比较 / 显示的值
+塞进 `label`,再用 `key` 当引用编号,同一份信息要跨两个字段对齐,检查还得把 label 反解析成
+数字;现在节点的身份、引用、排序、展示都收敛到 `key` 一个字段.因此:
+
+- 同一文档内 `key` 唯一,且**同类型**(全 number 或全 string,不混用):唯一性撑起身份与
+  引用,同类型让比较规则明确,不依赖 JS 的隐式类型转换;
+- 有序检查(rbt / heap / list)直接比较 number 类型的 `key`;`key` 不是 number(命名节点 /
+  字符串 key)直接 FAIL"不是数字",不静默跳过;
+- **暂时不需要 `uuid`**:`key` 已经唯一,足够当身份.将来真出现"不同节点可以有相同 key"的
+  结构,再加一个可选 `uuid` 专做引用 -- 现在不预留,也不在文档里假装已有.
 - **JSON 里没有检查结论,也没有结构名**:像"根是黑色"这种结论由 web 侧注册的检查器算,
   不写在数据里;要跑哪些检查由「检查配置」窗口单独给;
 - **编辑不等于运行**:改完 JSON 点窗口标题栏的 RUN(或 `Ctrl/Cmd+Enter`)才重新解析 / 布局;
@@ -128,7 +137,6 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 | `src/datastruct/graph/graph_checks.ts` | `graph`:欧拉回路存在性(`checkEulerCircuit`) |
 | `src/datastruct/heap/heap_checks.ts` | `heap`:最小堆序(`checkHeapOrder`) |
 | `src/datastruct/list/list_checks.ts` | `list`:单链表结构合法 / 值严格递增(`checkLinkedList` / `checkListSorted`) |
-| `src/scene/label_value.ts` | label -> 数值的共用口径(rbt / heap / list 都用它) |
 | `src/ui/viewer/check_config.ts` | 「检查配置」编辑器内容(JSON 数组)的解析 |
 | `docs/checks.md` | **检查实现速查**:每个显示名 / id 对应哪个函数、判据是什么 |
 
@@ -195,8 +203,8 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 
 列表行沿用 graphcalc 的对象行骨架(库的 `RowList` + `createObjectRow` + `ui-badge`):
 
-- **实体行**:`label` + `attrs`(颜色画成"色块 + 明文值",其余是 `key: value` 小徽章),
-  行末「定位」;窗口顶部一行 `共 N 个节点`;
+- **实体行**:`String(key)` + `attrs`(颜色画成"色块 + 明文值",其余是 `属性名: 值`
+  小徽章),行末「定位」;窗口顶部一行 `共 N 个节点`;
 - **检查行**:PASS / FAIL 徽章 + 检查名 + 一行 `detail`;有 `details` 时收进 `<details>`
   (默认收起,行重建时展开态保留),FAIL 且有 `node` 时行末「定位」;窗口顶部一行
   `n 条中 m 条 FAIL`.检查名与文案来自注册的检查器,不读 JSON.
@@ -227,6 +235,8 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
   时长 280–900ms 随距离自适应;拖动 / 滚轮只打断当前镜头动画,「跟随镜头」关掉后不再抢镜头;
 - 几何:先按 `anchor / anchorAt` 平移整帧布局再插值(否则插一个最左叶子也会"整棵树一起滑");
   旋转用 `motion: rotate` 让 x / y 绕旧边中点走弧线,β 子树绕移动中的 x 走短弧;
+- 节点身份:每一帧的节点就是 `{ key, attrs? }`,`key` 直接是插入 / 比较的数据值(插入 8
+  则 key = 8);没有 `label` / 独立 value,高亮、锚定、旋转 motion 都按 key 引用;
 - 高亮:`visual-state--active / path / visited / found / ghost / fresh` 叠在结构色变体上,
   连线端点每帧按插值后的节点坐标 + 分道偏移重算,不会脱开圆边;
 - 步骤目录:横向进度条只给"到哪了",目录窗口回答"每步讲什么";它只在演示模式存在、
@@ -290,7 +300,7 @@ JSON 只写数据结构内容;性质检查属于"这种结构该满足什么"的
 
 | 图元 | 表示 | 状态 |
 | --- | --- | --- |
-| **节点 node** | 圆 + 居中的值文字;语义差异用 `visual-node--<variant>` 变体类表达 | 已实现 |
+| **节点 node** | 圆 + 居中的 `String(key)`;语义差异用 `visual-node--<variant>` 变体类表达 | 已实现 |
 | **有向指针 pointer** | 直线段 + 终点箭头(`visual-link--pointer` + `visual-pointer-arrow`) | 已实现 |
 | **无向边 edge** | 只有直线段(`visual-link--edge`),不画箭头 | 已实现 |
 | **内存块 block** | 一段连续的存储格(下标 + 值),用于数组 / 栈 / 队列 / 哈希桶数组 | **未实现**:现在没有数组类结构,类型与渲染分支都不预埋 |
@@ -325,7 +335,6 @@ src/scene/              中性场景文档:类型 / 解析校验 / 检查注册�
 src/scene/scene_document.ts       文档类型(nodes / pointers / edges)
 src/scene/scene_document_parse.ts 解析 / 校验(错误码 + 路径)
 src/scene/scene_check.ts          检查注册表:检查 id -> 运行函数
-src/scene/label_value.ts          label -> 数值的共用口径(rbt / heap / list)
 
 src/datastruct/         纯逻辑:性质检查 + 演示轨迹生成(不碰 DOM)
 src/datastruct/checks.ts                     内置检查集注册入口(rbt / graph / heap / list)
@@ -334,7 +343,7 @@ src/datastruct/graph/graph_checks.ts         图(欧拉回路)检查
 src/datastruct/heap/heap_checks.ts           最小堆检查
 src/datastruct/list/list_checks.ts           单链表检查
 src/datastruct/trace/trace.ts                动画轨迹契约(TraceStep / SceneTrace / TraceBuilder / TreeOp)
-src/datastruct/bst/bst.ts                    BST 模型(稳定 key / 快照)+ 查找 / 插入 / 删除 / 遍历 / 旋转
+src/datastruct/bst/bst.ts                    BST 模型(key 即数据键 / 快照)+ 查找 / 插入 / 删除 / 遍历 / 旋转
 src/datastruct/rbt/rbt_ops.ts                红黑树插入 / 删除 / 五条性质讲解帧
 
 src/visual/             视觉层:所有结构共用(场景模型 / 落笔 / 绘制面 / 视口 / 自动布局 / 动画)
@@ -398,9 +407,9 @@ python/                 中性 JSON 生成(纯标准库;与 web 不是前后端�
 npm test        # vitest
 ```
 
-- 纯逻辑(node 环境):中性文档解析器 / 检查注册表 / 红黑树 / 图 / 堆 / 链表检查 /
-  内置示例清单 / 自动布局 / JSON 高亮 / 文案映射;演示轨迹(BST / RBT 逐帧合法、教学情形、
-  确定性)、锚定 / 场景插值 / 补间 / 7 个剧本的契约;
+- 纯逻辑(node 环境):中性文档解析器(节点 key 契约:唯一 / 同类型 / 无 label)/ 检查注册表 /
+  红黑树 / 图 / 堆 / 链表检查 / 内置示例清单 / 自动布局 / JSON 高亮 / 文案映射;演示轨迹
+  (BST / RBT 逐帧合法、教学情形、确定性)、锚定 / 场景插值 / 补间 / 7 个剧本的契约;
 - 标记契约与行为(happy-dom):桌面装配、六扇窗口清单、标题栏示例 / RUN + 任务栏演示、两个
   CodeEditor、实体 / 检查两个列表窗口、输入不自动运行而 RUN / Ctrl+Enter 才运行、示例菜单
   整组换 JSON + 检查配置、按检查配置重算、检查配置错误与未找到函数名的诊断提示、定位 /
@@ -453,3 +462,8 @@ SVG.之后依次做过:编辑器换成库的 `CodeEditor`、面板换成桌面�
   视口边上翻转 / 夹取);应用侧只负责把按钮包进锚点,落点 / 开合都是库的事.
   部署仍吃 npm 的 `miko_ui@0.1.18`(锚点还是 block),`viewer.css` 里 `0.1.18 过渡`那条
   `.dock .menu-popover` 规则等升依赖后删.
+- 2026-10 补:**节点身份与数据键统一为 `key`**:删掉 `nodes[].label` / `edges[].label`
+  与"文档内编号",`key` 直接承载数据键(有限 number 或非空 string,同文档唯一且同类型),
+  指针 / 边按它引用、有序检查直接比较 number key、节点显示 `String(key)`;删掉
+  `src/scene/label_value.ts`(`toComparableLabel` / `LABEL_COMPARE_TOLERANCE`)与 Python 的
+  `formatting.format_scalar`.将来真出现 key 会重复的结构再加可选 `uuid` 专做引用,现在不预留.

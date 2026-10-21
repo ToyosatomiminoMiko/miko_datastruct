@@ -36,7 +36,7 @@ class PlainAmbiguous:
 
 class ScalarDefaults:
     key = 0
-    label = "x"
+    title = "x"
 
 
 class WithMeta:
@@ -79,7 +79,7 @@ class EdgeMany:
 
 
 @dataclass
-class EdgeWithLabel:
+class EdgeWithName:
     a: Place
     b: Place
     name: str = ""
@@ -112,7 +112,7 @@ class FieldsTest(unittest.TestCase):
     def test_plain_scalar_defaults_are_attrs(self):
         reg = Registry()
         reg.structure(ScalarDefaults)
-        self.assertEqual([field.name for field in reg.get(ScalarDefaults).fields], ["key", "label"])
+        self.assertEqual([field.name for field in reg.get(ScalarDefaults).fields], ["key", "title"])
         self.assertTrue(all(isinstance(field.role, Attr) for field in reg.get(ScalarDefaults).fields))
 
     def test_none_without_annotation_is_ambiguous(self):
@@ -166,12 +166,13 @@ class FieldsTest(unittest.TestCase):
             reg.finalize()
         self.assertEqual(caught.exception.code, "bad-edge")
 
-    def test_edge_can_have_label_attributes(self):
+    def test_edge_can_have_attr_fields(self):
+        # 边只有两个端点指针 + 若干普通属性;属性进 attrs,没有单独的展示文字字段
         reg = Registry()
         reg.structure(Place)
-        reg.structure(EdgeWithLabel, as_="edge")
+        reg.structure(EdgeWithName, as_="edge")
         reg.finalize()
-        self.assertEqual([field.name for field in reg.get(EdgeWithLabel).fields], ["a", "b", "name"])
+        self.assertEqual([field.name for field in reg.get(EdgeWithName).fields], ["a", "b", "name"])
 
     def test_container_accepts_many_pointers(self):
         reg = Registry()

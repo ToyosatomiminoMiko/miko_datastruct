@@ -18,7 +18,7 @@
  * 同一份文档 + 同一个 id 列表永远得到同一组结论(顺序 = 配置数组顺序).
  */
 
-import type { SceneDocument } from '@/scene/scene_document';
+import type { SceneDocument, SceneNodeKey } from '@/scene/scene_document';
 
 /**
  * 一条结构检查结论(不是 JSON 字段).
@@ -39,7 +39,7 @@ export interface SceneCheckResult {
     /** 展开后的补充行,可以为空数组 */
     readonly details: readonly string[];
     /** 结论指向的节点 key;没有具体节点为 null */
-    readonly node: number | null;
+    readonly node: SceneNodeKey | null;
 }
 
 /** 一条检查:吃整份文档,交回一条结论 */

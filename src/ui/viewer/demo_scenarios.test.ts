@@ -8,20 +8,26 @@
 import { describe, expect, it } from 'vitest';
 
 import { readSceneDocument } from '@/scene/scene_document_parse';
+import type { SceneNodeKey } from '@/scene/scene_document';
 import { runSceneChecks } from '@/datastruct/checks';
 import type { SceneTrace, TraceStep } from '@/datastruct/trace/trace';
 import { DEMO_SCENARIOS, demoScenarioMenuGroups, findDemoScenario } from '@/ui/viewer/demo_scenarios';
-import { toComparableLabel } from '@/scene/label_value';
 
-/** 每一帧都能被解析器接受,且 label 是检查器认的十进制数 */
+/**
+ * 每一帧都能被解析器接受,节点 key 直接承载数据键(BST / RBT 演示里都是数字),
+ * 且文档里不再有独立的 label 展示字段.
+ */
 function assertDocumentValid(step: TraceStep): void {
     const document = readSceneDocument(step.document);
+    const keys = new Set<SceneNodeKey>();
     for (const node of document.nodes) {
-        expect(toComparableLabel(node.label), `节点 ${node.key} 的 label 不是十进制数: ${node.label}`)
-            .not.toBeNull();
+        expect(typeof node.key, `节点 key 必须是数字,实际是 ${String(node.key)}`).toBe('number');
+        expect('label' in node, '节点不再有 label 字段,显示文字取 String(key)').toBe(false);
+        keys.add(node.key);
     }
+    // 同一文档里 key 唯一(解析器已校验,这里再用 Set 钉住"引用按 key 找"的前提)
+    expect(keys.size).toBe(document.nodes.length);
     // focus / frame / anchor 引用的 key 必须存在于这一帧
-    const keys = new Set(document.nodes.map((node) => node.key));
     if (step.focus !== undefined) expect(keys.has(step.focus)).toBe(true);
     for (const key of step.frame ?? []) expect(keys.has(key)).toBe(true);
     if (step.anchor !== undefined) expect(keys.has(step.anchor)).toBe(true);

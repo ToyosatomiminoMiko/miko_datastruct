@@ -27,7 +27,7 @@ function documentOf(
     pointers: readonly (readonly [number, number])[] = [],
 ): SceneDocument {
     return {
-        nodes: keys.map((key) => ({ key, label: String(key), attrs: {} })),
+        nodes: keys.map((key) => ({ key, attrs: {} })),
         pointers: pointers.map(([from, to]) => ({ from, to })),
         edges: [],
     };

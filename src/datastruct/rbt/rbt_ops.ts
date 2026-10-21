@@ -1,8 +1,8 @@
 /*
  * 红黑树(RBT)插入 / 删除的演示轨迹生成(纯逻辑,不碰 DOM).
  *
- * 结构模型与快照复用 `@/datastruct/bst/bst` 的 `TreeModel`:节点身份、旋转、中性文档
- * 都只有一份实现.颜色是 RBT 独有的结构语义,只在本文件里改.
+ * 结构模型与快照复用 `@/datastruct/bst/bst` 的 `TreeModel`:节点 `key` 就是数据键、旋转、
+ * 中性文档都只有一份实现.颜色是 RBT 独有的结构语义,只在本文件里改.
  *
  * 算法按 CLRS 讲:
  * - 插入:新节点先染红,fixup 情形 1(叔叔红)/ 2(内侧孩子先转成外侧)/ 3(外侧孩子
@@ -59,7 +59,7 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
     let goLeft = true;
     let current: TreeNode | null = tree.root;
     while (current !== null) {
-        if (current.value === value) {
+        if (current.key === value) {
             yield {
                 ...hold,
                 title: `已存在 ${value}`,
@@ -70,11 +70,11 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
             };
             return;
         }
-        const left = value < current.value;
+        const left = value < current.key;
         yield {
             ...hold,
-            title: `比较 ${value} 与 ${current.value}`,
-            detail: left ? `${value} < ${current.value},走左子树` : `${value} > ${current.value},走右子树`,
+            title: `比较 ${value} 与 ${current.key}`,
+            detail: left ? `${value} < ${current.key},走左子树` : `${value} > ${current.key},走右子树`,
             focus: current.key,
             anchor: current.key,
             marks: { nodes: [...path.map((node) => ({ key: node.key, state: 'path' as const })), { key: current.key, state: 'active' }] },
@@ -101,7 +101,7 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
         title: `插入 ${value}(红)`,
         detail: parent === null
             ? `空树,${value} 先作为红色根节点`
-            : `${value} 先染红,挂在 ${parent.value} 的${goLeft ? '左' : '右'}边;此时可能违反"红孩子"`,
+            : `${value} 先染红,挂在 ${parent.key} 的${goLeft ? '左' : '右'}边;此时可能违反"红孩子"`,
         focus: node.key,
         ...(parent === null ? {} : { anchor: parent.key }),
         marks: { nodes: [...path.map((item) => ({ key: item.key, state: 'path' as const })), { key: node.key, state: 'fresh' }] },
@@ -124,7 +124,7 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
             yield {
                 ...hold,
                 title: `情形 1:叔叔是红色`,
-                detail: `父 / 叔染黑,祖父染红,把祖父 ${g.value} 当作新的当前节点继续上移`,
+                detail: `父 / 叔染黑,祖父染红,把祖父 ${g.key} 当作新的当前节点继续上移`,
                 focus: g.key,
                 frame: [p.key, uncle.key, g.key],
                 framing: 'hold',
@@ -154,7 +154,7 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
             yield {
                 ...hold,
                 title: `情形 2:当前节点是内侧孩子`,
-                detail: `先绕父节点旋转,把内侧孩子 ${inner.value} 转成外侧(只改形状,不改颜色;就是 BST 双旋的第一下)`,
+                detail: `先绕父节点旋转,把内侧孩子 ${inner.key} 转成外侧(只改形状,不改颜色;就是 BST 双旋的第一下)`,
                 focus: inner.key,
                 frame: [p.key, inner.key],
                 framing: 'hold',
@@ -181,7 +181,7 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
         yield {
             ...hold,
             title: `情形 3:当前节点是外侧孩子`,
-            detail: `父 ${outerParent.value} 染黑、祖父 ${grandParent.value} 染红,绕祖父旋转;这一支的红黑性质恢复(就是 BST 的单旋)`,
+            detail: `父 ${outerParent.key} 染黑、祖父 ${grandParent.key} 染红,绕祖父旋转;这一支的红黑性质恢复(就是 BST 的单旋)`,
             focus: outerParent.key,
             frame: [outerParent.key, grandParent.key],
             framing: 'hold',
@@ -200,7 +200,7 @@ export function* rbtInsertFrames(tree: TreeModel, value: number, options?: Frame
         yield {
             ...hold,
             title: `根染黑`,
-            detail: `根节点 ${tree.root.value} 必须是黑色,染黑后黑高恢复`,
+            detail: `根节点 ${tree.root.key} 必须是黑色,染黑后黑高恢复`,
             focus: tree.root.key,
             framing: 'hold',
             marks: { nodes: [{ key: tree.root.key, state: 'active' }] },
@@ -253,7 +253,7 @@ function* deleteFixupFrames(
                 yield {
                     ...hold,
                     title: `双黑 · 情形 1:兄弟是红色`,
-                    detail: `兄弟染黑、父染红,绕父 ${parent.value} 左旋;双黑位置不变,换成黑兄弟后继续`,
+                    detail: `兄弟染黑、父染红,绕父 ${parent.key} 左旋;双黑位置不变,换成黑兄弟后继续`,
                     focus: parent.key,
                     frame: [parent.key, ...(sibling === null ? [] : [sibling.key])],
                     framing: 'hold',
@@ -268,7 +268,7 @@ function* deleteFixupFrames(
                 yield {
                     ...hold,
                     title: `双黑 · 情形 2:兄弟是黑色且两个孩子都是黑色`,
-                    detail: `兄弟是 nil(黑色),双黑上移到父节点 ${x.value} 继续处理`,
+                    detail: `兄弟是 nil(黑色),双黑上移到父节点 ${x.key} 继续处理`,
                     focus: x.key,
                     framing: 'hold',
                     marks: { nodes: [{ key: x.key, state: 'active' }] },
@@ -284,7 +284,7 @@ function* deleteFixupFrames(
                 yield {
                     ...hold,
                     title: `双黑 · 情形 2:兄弟是黑色且两个孩子都是黑色`,
-                    detail: `兄弟 ${sibling.value} 染红,双黑上移到父节点 ${x.value};父节点是红色时直接染黑就结束`,
+                    detail: `兄弟 ${sibling.key} 染红,双黑上移到父节点 ${x.key};父节点是红色时直接染黑就结束`,
                     focus: x.key,
                     framing: 'hold',
                     marks: { nodes: [{ key: x.key, state: 'active' }] },
@@ -335,7 +335,7 @@ function* deleteFixupFrames(
                 yield {
                     ...hold,
                     title: `双黑 · 情形 1:兄弟是红色`,
-                    detail: `兄弟染黑、父染红,绕父 ${parent.value} 右旋;双黑位置不变,换成黑兄弟后继续`,
+                    detail: `兄弟染黑、父染红,绕父 ${parent.key} 右旋;双黑位置不变,换成黑兄弟后继续`,
                     focus: parent.key,
                     frame: [parent.key, ...(sibling === null ? [] : [sibling.key])],
                     framing: 'hold',
@@ -349,7 +349,7 @@ function* deleteFixupFrames(
                 yield {
                     ...hold,
                     title: `双黑 · 情形 2:兄弟是黑色且两个孩子都是黑色`,
-                    detail: `兄弟是 nil(黑色),双黑上移到父节点 ${x.value} 继续处理`,
+                    detail: `兄弟是 nil(黑色),双黑上移到父节点 ${x.key} 继续处理`,
                     focus: x.key,
                     framing: 'hold',
                     marks: { nodes: [{ key: x.key, state: 'active' }] },
@@ -364,7 +364,7 @@ function* deleteFixupFrames(
                 yield {
                     ...hold,
                     title: `双黑 · 情形 2:兄弟是黑色且两个孩子都是黑色`,
-                    detail: `兄弟 ${sibling.value} 染红,双黑上移到父节点 ${x.value};父节点是红色时直接染黑就结束`,
+                    detail: `兄弟 ${sibling.key} 染红,双黑上移到父节点 ${x.key};父节点是红色时直接染黑就结束`,
                     focus: x.key,
                     framing: 'hold',
                     marks: { nodes: [{ key: x.key, state: 'active' }] },
@@ -411,8 +411,8 @@ function* deleteFixupFrames(
         x.color = 'black';
         yield {
             ...hold,
-            title: `双黑消除:${x.value} 染黑`,
-            detail: `双黑落在红节点 ${x.value} 上,直接染黑就把多出来的一层黑吸收掉`,
+            title: `双黑消除:${x.key} 染黑`,
+            detail: `双黑落在红节点 ${x.key} 上,直接染黑就把多出来的一层黑吸收掉`,
             focus: x.key,
             framing: 'hold',
             marks: { nodes: [{ key: x.key, state: 'active' }] },
@@ -435,12 +435,12 @@ export function* rbtDeleteFrames(tree: TreeModel, value: number, options?: Frame
 
     const path: TreeNode[] = [];
     let current: TreeNode | null = tree.root;
-    while (current !== null && current.value !== value) {
-        const goLeft: boolean = value < current.value;
+    while (current !== null && current.key !== value) {
+        const goLeft: boolean = value < current.key;
         yield {
             ...hold,
-            title: `比较 ${value} 与 ${current.value}`,
-            detail: goLeft ? `${value} < ${current.value},走左子树找` : `${value} > ${current.value},走右子树找`,
+            title: `比较 ${value} 与 ${current.key}`,
+            detail: goLeft ? `${value} < ${current.key},走左子树找` : `${value} > ${current.key},走右子树找`,
             focus: current.key,
             anchor: current.key,
             marks: { nodes: [...path.map((node) => ({ key: node.key, state: 'path' as const })), { key: current.key, state: 'active' }] },
@@ -493,7 +493,7 @@ export function* rbtDeleteFrames(tree: TreeModel, value: number, options?: Frame
             yield {
                 ...hold,
                 title: `找右子树最小`,
-                detail: `${candidate.value} 还有左孩子,继续往左找更小的`,
+                detail: `${candidate.key} 还有左孩子,继续往左找更小的`,
                 focus: candidate.key,
                 anchor: candidate.key,
                 marks: { nodes: [{ key: target.key, state: 'ghost' }, { key: candidate.key, state: 'ghost' }] },
@@ -503,8 +503,8 @@ export function* rbtDeleteFrames(tree: TreeModel, value: number, options?: Frame
         successor = candidate;
         yield {
             ...hold,
-            title: `找到后继 ${successor.value}`,
-            detail: `右子树最小节点 ${successor.value} 接替 ${value} 的位置(物理移植,连同颜色)`,
+            title: `找到后继 ${successor.key}`,
+            detail: `右子树最小节点 ${successor.key} 接替 ${value} 的位置(物理移植,连同颜色)`,
             focus: successor.key,
             anchor: successor.key,
             marks: { nodes: [{ key: target.key, state: 'ghost' }, { key: successor.key, state: 'found' }] },
@@ -576,12 +576,12 @@ export function* rbtDeleteFrames(tree: TreeModel, value: number, options?: Frame
     yield {
         ...hold,
         ...fitOf(options),
-        title: doubleBlack ? `双黑出现在 ${x === null ? 'nil / 空位' : x.value}` : `物理移植完成`,
+        title: doubleBlack ? `双黑出现在 ${x === null ? 'nil / 空位' : x.key}` : `物理移植完成`,
         detail: !needsFixup
             ? '被摘掉的是红节点,不影响黑高,无需修复'
             : doubleBlack
                 ? '被摘掉的是黑节点,顶替位置多背一层黑 -> 双黑,开始四情形修复'
-                : `顶替节点 ${x === null ? '(nil)' : x.value} 是红色,直接染黑就能吸收多出来的一层黑`,
+                : `顶替节点 ${x === null ? '(nil)' : x.key} 是红色,直接染黑就能吸收多出来的一层黑`,
         focus: x?.key ?? successor?.key ?? targetParent?.key ?? tree.root?.key,
         ...(targetParent === null
             ? (successor === null && x === null ? {} : { anchor: (successor ?? x)?.key, anchorAt: target.key })
@@ -627,7 +627,7 @@ export function* rbtPropertiesFrames(tree: TreeModel, options?: FrameOptions): G
     yield {
         ...hold,
         title: `性质 2:根节点是黑色`,
-        detail: root === null ? '空树也算满足' : `根节点 ${root.value} 的颜色是 ${root.color === 'red' ? '红(违反!)' : '黑'}`,
+        detail: root === null ? '空树也算满足' : `根节点 ${root.key} 的颜色是 ${root.color === 'red' ? '红(违反!)' : '黑'}`,
         ...(root === null ? {} : { focus: root.key }),
         framing: 'hold',
         marks: { nodes: root === null ? [] : [{ key: root.key, state: 'active' }] },
@@ -641,7 +641,7 @@ export function* rbtPropertiesFrames(tree: TreeModel, options?: FrameOptions): G
         title: `性质 3:红色节点的孩子都是黑色`,
         detail: redNode === null
             ? '当前没有红色节点:红孩子这条性质空真'
-            : `拿红节点 ${redNode.value} 当例子:它的孩子必须是黑色`,
+            : `拿红节点 ${redNode.key} 当例子:它的孩子必须是黑色`,
         ...(redNode === null ? {} : { focus: redNode.key }),
         framing: 'hold',
         marks: { nodes: redNode === null ? [] : [{ key: redNode.key, state: 'active' }] },
@@ -666,7 +666,7 @@ export function* rbtPropertiesFrames(tree: TreeModel, options?: FrameOptions): G
     yield {
         ...hold,
         title: `性质 5:二叉搜索树有序(中序升序)`,
-        detail: `中序访问序列:${ordered.length === 0 ? '(空)' : ordered.map((node) => node.value).join(' ')}`,
+        detail: `中序访问序列:${ordered.length === 0 ? '(空)' : ordered.map((node) => node.key).join(' ')}`,
         frame: ordered.map((node) => node.key),
         framing: 'fit',
         marks: { nodes: ordered.map((node) => ({ key: node.key, state: 'visited' as const })) },

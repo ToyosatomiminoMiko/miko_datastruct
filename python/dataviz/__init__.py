@@ -2,9 +2,14 @@
 
 一个字段只有两种角色:
 
-- **属性 `Attr`**:标量 / Enum,进节点的 `label`,其余进 `attrs`(结构特有属性);
+- **属性 `Attr`**:标量 / Enum;被选作 scene key 的字段成为节点的数据键,其余进 `attrs`
+  (结构特有属性);
 - **指针 `Pointer`**:有向地指向另一个已注册对象,由类型标注定死:
   `T | None` / `T` 是 0..1 条,`list[T]` / `Sequence[T]` 是 0..n 条.
+
+节点 scene key 的取值顺序:`key` -> `id` -> `value` 属性(只认 `Attr`),都没有就用遍历
+序号.同一份文档里 key 唯一且同类型;它就是节点在画布上的显示文字,也是 pointers /
+edges 引用它的标识.
 
 结构种类 `as_`: `node`(圆节点,默认)/ `edge`(无向边)/ `container`(聚合根,不画).
 
@@ -48,7 +53,7 @@ from .spec import MISSING, FieldSpec, StructureSpec
 from .registry import Registry, default_registry, structure
 from .traversal import Graph, RenderContext
 
-__version__ = "0.3.0-demo"
+__version__ = "0.4.0-demo"
 
 __all__ = [
     # 注册

@@ -2,9 +2,10 @@
 
 - `left: "RbtNode | None"` / `right: "RbtNode | None"` -> 两条 0..1 的**有向指针**;
   不再写 `roles=` —— 标注本身就是声明.
-- `color: Color` -> 普通属性(Enum).Scene 的节点通用槽是 key / label,其余属性进
-  `attrs`:所以红黑树的颜色就是 `"attrs": {"color": "black"}`,没有单独的 variant 字段.
-- `label="key"` -> `key` 是节点的通用展示槽:进 Scene 的 `label`,并从 `attrs` 里排除.
+- `color: Color` -> 普通属性(Enum).Scene 的节点通用槽是 key,其余属性进 `attrs`:
+  所以红黑树的颜色就是 `"attrs": {"color": "black"}`,没有单独的 variant 字段.
+- `key` 是数据键:Scene 的 nodes[].key 输出 13 / 8 / 1 / …(显示与引用都用它),
+  也不再重复进 attrs.
 
 这里**没有** `parent` 字段:加上它就会多出从子指向父的有向指针,Scene 里的树会变成
 带反向指针的图.想要父指针就自己加,那是另一张图.
@@ -27,10 +28,7 @@ class Color(Enum):
     BLACK = "black"
 
 
-@rbt_registry.structure(
-    name="rbt",
-    label="key",
-)
+@rbt_registry.structure(name="rbt")
 @dataclass
 class RbtNode:
     key: int

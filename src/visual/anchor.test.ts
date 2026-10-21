@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import type { SceneNodeKey } from '@/scene/scene_document';
 import type { SceneLayout } from '@/visual/layout';
 import {
     anchorLayout,
@@ -15,7 +16,7 @@ import {
 } from '@/visual/anchor';
 
 /** 由 [key, x, y] 三元组建一份只有节点的布局 */
-function layoutOf(entries: readonly (readonly [number, number, number])[]): SceneLayout {
+function layoutOf(entries: readonly (readonly [SceneNodeKey, number, number])[]): SceneLayout {
     return { nodes: entries.map(([key, x, y]) => ({ key, x, y })), links: [] };
 }
 
@@ -89,5 +90,15 @@ describe('自动锚定', () => {
         const current = layoutOf([[2, 10, 10]]);
         expect(autoAnchorLayout(current, previous)).toBe(current);
         expect(autoAnchorLayout(current, null)).toBe(current);
+    });
+
+    it('字符串 key 按字典序取最小共同节点(不能直接相减)', () => {
+        const previous = layoutOf([['N', 70, 0], ['K', 50, 0], ['S', 150, 0]]);
+        const current = layoutOf([['S', 0, 0], ['N', 100, 0], ['E', 200, 0]]);
+
+        const anchored = autoAnchorLayout(current, previous);
+        // 共同节点里 "N" < "S",以 N 对齐:整体左移 30
+        expect(layoutPosition(anchored, 'N')).toMatchObject({ x: 70, y: 0 });
+        expect(layoutPosition(anchored, 'S')).toMatchObject({ x: -30, y: 0 });
     });
 });

@@ -1,9 +1,9 @@
 /**
  * 两种列表行(实体 / 检查)的 DOM 契约(happy-dom).
  *
- * 钉的是"行里实际渲染了什么":实体行的 label / 颜色 / 其余属性、检查行的 PASS / FAIL
- * 徽章与折叠详情、以及「定位」按钮出现的条件.行引擎(RowList)的增删复用由查看器的行为
- * 测试覆盖,这里只管单行的结构.
+ * 钉的是"行里实际渲染了什么":实体行的节点文字(`String(key)`)/ 颜色 / 其余属性、
+ * 检查行的 PASS / FAIL 徽章与折叠详情、以及「定位」按钮出现的条件.行引擎(RowList)
+ * 的增删复用由查看器的行为测试覆盖,这里只管单行的结构.
  *
  * @vitest-environment happy-dom
  */
@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { SceneDocumentNode } from '@/scene/scene_document';
 import type { SceneCheckResult } from '@/scene/scene_check';
+import { VIEWER_LOCATE_BUTTON_LABEL } from '@/ui/viewer/config';
 import { CheckItem, EntityItem } from '@/ui/viewer/viewer_items';
 
 beforeEach(() => {
@@ -19,8 +20,7 @@ beforeEach(() => {
 
 function entityNode(overrides: Partial<SceneDocumentNode> = {}): SceneDocumentNode {
     return {
-        key: 0,
-        label: '10',
+        key: 10,
         attrs: {},
         ...overrides,
     };
@@ -38,16 +38,16 @@ function check(overrides: Partial<SceneCheckResult> = {}): SceneCheckResult {
 }
 
 describe('实体行', () => {
-    it('label / 颜色定义 / 其余属性都画出来;颜色不是只靠色块', () => {
+    it('节点文字 = String(key),颜色定义 / 其余属性都画出来;颜色不是只靠色块', () => {
         const item = new EntityItem(entityNode({
-            key: 3,
-            label: '8',
+            key: 8,
             attrs: { color: 'black', weight: 2 },
         }), () => {});
 
         expect(item.row.classList.contains('object-row')).toBe(true);
         expect(item.row.classList.contains('entity-row')).toBe(true);
-        expect(item.row.dataset.nodeKey).toBe('3');
+        expect(item.row.dataset.nodeKey).toBe('8');
+        expect(item.row.title).toBe('节点 #8');
         expect(item.row.querySelector('.object-name')?.textContent).toBe('8');
         // 颜色:色块 + 明文值(色觉 / 低对比度用户也能读到定义)
         expect(item.row.querySelector('.viewer-color-code')?.textContent).toBe('black');
@@ -56,6 +56,15 @@ describe('实体行', () => {
         // 其余属性走 key: value 小徽章
         expect([...item.row.querySelectorAll('.viewer-attr')].map((node) => node.textContent))
             .toEqual(['weight: 2']);
+    });
+
+    it('字符串 key 直接当节点文字,读屏文案也带同一个 key', () => {
+        const item = new EntityItem(entityNode({ key: 'K' }), () => {});
+
+        expect(item.row.querySelector('.object-name')?.textContent).toBe('K');
+        expect(item.row.title).toBe('节点 #K');
+        expect(item.row.querySelector('.row-locate-btn')?.getAttribute('aria-label'))
+            .toBe(`${VIEWER_LOCATE_BUTTON_LABEL}: 节点 K`);
     });
 
     it('行末「定位」按钮接上回调', () => {
@@ -71,9 +80,12 @@ describe('实体行', () => {
 
     it('内容键跟着会被渲染的字段走', () => {
         expect(EntityItem.cacheKey(entityNode()))
-            .not.toBe(EntityItem.cacheKey(entityNode({ label: '11' })));
+            .not.toBe(EntityItem.cacheKey(entityNode({ key: 11 })));
         expect(EntityItem.cacheKey(entityNode()))
             .not.toBe(EntityItem.cacheKey(entityNode({ attrs: { color: 'red' } })));
+        // "1" 与 1 是两个不同的节点 key(同一文档同类型,但内容键本身不能撞)
+        expect(EntityItem.cacheKey(entityNode({ key: 1 })))
+            .not.toBe(EntityItem.cacheKey(entityNode({ key: '1' })));
     });
 });
 

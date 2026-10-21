@@ -3,7 +3,8 @@
 错误分三类,对应"三层不要混":
 - `RegistrationError`:注册表 / 字段角色的问题(重名、角色歧义、注解解析失败);
 - `TraversalError`:遍历用户对象时的问题(未注册类型、缺字段、指针类型不对、层数超限);
-- `RenderError`:写 Scene / JSON 阶段的问题(钩子抛错、边的端点缺失 / 指向非节点).
+- `RenderError`:写 Scene / JSON 阶段的问题(节点 key 非法 / 重复 / 类型不一致、
+  边的端点缺失 / 指向非节点).
 
 文案是给人看的,可能改;错误码是契约,加新码时不要复用旧码.
 """
@@ -33,4 +34,4 @@ class TraversalError(DatavizError):
 
 
 class RenderError(DatavizError):
-    """写输出阶段的错误:钩子抛错、边的端点缺失 / 指向非节点等."""
+    """写输出阶段的错误:节点 key 非法 / 重复 / 类型不一致、边的端点缺失 / 指向非节点等."""

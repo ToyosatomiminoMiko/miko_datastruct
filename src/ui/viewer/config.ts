@@ -323,7 +323,7 @@ export const VIEWER_DOCK_ACTIONS = [
 
 /** JSON 编辑器的占位文案(库没有 placeholder 选项,建完写回 textarea) */
 export const VIEWER_EDITOR_PLACEHOLDER =
-    '粘贴一份中性场景 JSON:{"nodes":[{"key":0,"label":"10"}]}';
+    '粘贴一份中性场景 JSON:{"nodes":[{"key":10,"attrs":{"color":"black"}}]}';
 
 /** 编辑器行号槽的宽度下限(px),交给 CodeEditor 的 gutterMinWidth */
 export const VIEWER_EDITOR_GUTTER_MIN_WIDTH = 32;
@@ -471,9 +471,9 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
     {
         title: '字段',
         lines: [
-            'nodes: [{ key, label, attrs? }] -- attrs 是结构特有属性 (如红黑树的 color)。',
-            'pointers: [{ from, to }] -- 有向;树就是父 -> 子。',
-            'edges: [{ a, b, label?, attrs? }] -- 无向;图里的边。',
+            'nodes: [{ key, attrs? }] -- key 就是数据键 (number 或 string), 显示 / 有序检查都用它; attrs 是结构特有属性 (如红黑树的 color)。',
+            'pointers: [{ from, to }] -- 有向;树就是父 -> 子, 两端按 key 引用节点。',
+            'edges: [{ a, b, attrs? }] -- 无向;图里的一条边。',
         ],
     },
     {
@@ -523,7 +523,7 @@ export const VIEWER_HELP_ENTRIES: readonly ViewerHelpEntry[] = [
     {
         title: '列表',
         lines: [
-            '实体窗口: 每个节点一行, 显示 label 与 attrs。',
+            '实体窗口: 每个节点一行, 显示 key 与 attrs。',
             '检查窗口: 每条结论一行; FAIL 行可展开详情, 并可按结论里的节点定位。',
             '检查配置窗口: 编辑检查函数名的 JSON 数组,内容变化后检查窗口立刻重算。',
             '诊断窗口: JSON 解析失败 / 空输入 / 检查配置错误或未找到函数名走库的消息区 (错误 / 警告两级)。',

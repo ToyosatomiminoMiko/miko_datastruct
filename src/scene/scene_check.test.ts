@@ -16,7 +16,7 @@ import {
 } from '@/scene/scene_check';
 
 const DOCUMENT: SceneDocument = {
-    nodes: [{ key: 0, label: 'A', attrs: {} }],
+    nodes: [{ key: 0, attrs: {} }],
     pointers: [],
     edges: [],
 };

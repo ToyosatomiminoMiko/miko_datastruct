@@ -6,7 +6,9 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import type { SceneNodeKey } from '@/scene/scene_document';
 import {
+    assignLinkLanes,
     layoutScene,
     type SceneLayout,
     type SceneLayoutInput,
@@ -22,16 +24,16 @@ import {
 } from '@/visual/config';
 
 /** 按 key 取布局出来的坐标(取不到直接抛错,而不是让断言读 undefined) */
-function point(layout: SceneLayout, key: number): { x: number; y: number } {
+function point(layout: SceneLayout, key: SceneNodeKey): { x: number; y: number } {
     const node = layout.nodes.find((candidate) => candidate.key === key);
-    if (!node) throw new Error(`布局里没有节点 ${key}`);
+    if (!node) throw new Error(`布局里没有节点 ${String(key)}`);
     return { x: node.x, y: node.y };
 }
 
 /** 一份只有节点和指针的输入 */
 function treeInput(
-    nodeKeys: readonly number[],
-    pointers: readonly { from: number; to: number }[],
+    nodeKeys: readonly SceneNodeKey[],
+    pointers: readonly { from: SceneNodeKey; to: SceneNodeKey }[],
 ): SceneLayoutInput {
     return {
         nodes: nodeKeys.map((key) => ({ key })),
@@ -253,6 +255,47 @@ describe('布局:图(环形)', () => {
         // 分量 {0,1} 是一个圆,节点 2 是孤立分量,排到它右边
         const componentRight = Math.max(point(layout, 0).x, point(layout, 1).x);
         expect(point(layout, 2).x).toBeGreaterThan(componentRight);
+    });
+});
+
+describe('布局:key 类型(number | string)', () => {
+    it('字符串 key 的树按同一套布局:指针按字符串 key 引用', () => {
+        const layout = layoutScene({
+            nodes: [{ key: 'root' }, { key: 'left' }, { key: 'right' }],
+            pointers: [{ from: 'root', to: 'left' }, { from: 'root', to: 'right' }],
+            edges: [],
+        });
+
+        expect(layout.nodes.map((node) => node.key)).toEqual(['root', 'left', 'right']);
+        expect(layout.links.map((link) => ({ from: link.from, to: link.to })))
+            .toEqual([{ from: 'root', to: 'left' }, { from: 'root', to: 'right' }]);
+        expect(point(layout, 'root').y).toBe(0);
+        expect(point(layout, 'left').y).toBe(VISUAL_LAYOUT_TREE_LAYER_STEP);
+        expect(point(layout, 'root').x)
+            .toBeCloseTo((point(layout, 'left').x + point(layout, 'right').x) / 2);
+    });
+
+    it('字符串 key 重复照样抛错(唯一性按 key 本身,不分类型)', () => {
+        expect(() => layoutScene({
+            nodes: [{ key: 'a' }, { key: 'a' }],
+            pointers: [],
+            edges: [],
+        })).toThrow('重复');
+    });
+
+    it('分道分组键按"类型 + 值"编码:1 与 "1"、含冒号的字符串不会并组', () => {
+        // 旧写法 `${a}:${b}` 会把这两条并成 "1:2" 一组(分道偏移 ±7);带类型前缀后是两组
+        expect(assignLinkLanes([{ from: 1, to: 2 }, { from: '1', to: 2 }])).toEqual([0, 0]);
+        // 旧写法则会把这两条都拼成 "a:b:c";JSON token 后各自一组
+        expect(assignLinkLanes([{ from: 'a:b', to: 'c' }, { from: 'a', to: 'b:c' }])).toEqual([0, 0]);
+        // 同一对(含反向)仍然并组,左右对称分道
+        expect(assignLinkLanes([{ from: 1, to: 2 }, { from: 2, to: 1 }]))
+            .toEqual([-VISUAL_LINK_LANE_GAP / 2, VISUAL_LINK_LANE_GAP / 2]);
+        expect(assignLinkLanes([
+            { from: 'K', to: 'N' },
+            { from: 'K', to: 'N' },
+            { from: 'K', to: 'N' },
+        ])).toEqual([-VISUAL_LINK_LANE_GAP, 0, VISUAL_LINK_LANE_GAP]);
     });
 });
 

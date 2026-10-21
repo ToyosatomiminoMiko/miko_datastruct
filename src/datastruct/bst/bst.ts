@@ -2,14 +2,15 @@
  * 二叉搜索树(BST)的结构模型 + 演示轨迹生成(纯逻辑,不碰 DOM).
  *
  * 这一层只做两件事:
- * - `TreeModel`:节点身份(`key` = 创建序号,稳定)+ 整棵树的快照;
+ * - `TreeModel`:节点身份(`key` 就是节点里的数据键,稳定)+ 整棵树的快照;
  * - `*Frames()`:普通算法,外加每改完一拍 `yield` 一个 `TraceFrame`. 帧里没有 document:
  *   记录器(`recordFrames` / `TraceBuilder`)会在 yield 那一刻向模型要快照,所以算法
  *   不可能把"改到一半"的结构拍下来(见 docs/animation.md §2、§4).
  *
  * 几条必须守住的约定(见 docs/animation.md §4、§5.4、§13):
- * - 节点身份是 `key`(创建序号),`label` 才是 `String(value)`;删除双孩子节点用
- *   **物理移植**——把后继节点整个接到被删位置,不是复制值,颜色 / 高亮才跟着节点走;
+ * - 节点身份就是它的数据键 `key`(插入 8 则 key = 8):引用 / 高亮 / 排序 / 显示都用
+ *   `key`,没有另一份"展示文字"字段;删除双孩子节点用 **物理移植**——把后继节点整个
+ *   接到被删位置,不是复制 key,颜色 / 高亮才跟着节点走;
  * - 快照里 `nodes` 按 key 升序,`pointers` 按"父节点 key 升序,每个父 left 再 right"
  *   输出;`pointers` 顺序承载左右语义(自动布局按输入顺序从左到右放孩子);
  * - 旋转的三次指针改写是一帧内的**原子操作**:`rotateLeft` / `rotateRight` 内部不
@@ -26,11 +27,10 @@ import type { TraceFrame, TraceLinkMark, TraceNodeMark, TraceNodeState } from '@
 /** 节点颜色:BST 不使用,红黑树用它表达结构语义 */
 export type TreeNodeColor = 'red' | 'black';
 
-/** 树上的一颗节点:身份是 `key`,展示值是 `label`(= `String(value)`) */
+/** 树上的一颗节点:身份就是数据键 `key`(不再另存 value / label) */
 export interface TreeNode {
-    /** 稳定身份 = 创建序号;轨迹的 focus / marks / motion 都按它引用节点 */
+    /** 数据键,也是稳定身份;轨迹的 focus / marks / motion 与文档节点都按它引用 */
     readonly key: number;
-    readonly value: number;
     left: TreeNode | null;
     right: TreeNode | null;
     parent: TreeNode | null;
@@ -50,35 +50,29 @@ export interface FrameOptions {
     readonly fitCamera?: boolean;
 }
 
-/** 树模型:根 + 节点登记表 + 稳定 key 分配器 */
+/** 树模型:根 + 节点登记表;key 就是数据键,不需要额外的编号分配器 */
 export class TreeModel {
     root: TreeNode | null = null;
     /** key -> 节点(只含仍在树上的节点;删除时同步移除) */
     readonly nodes = new Map<number, TreeNode>();
 
-    /** 下一个要分配的 key.清空后归零:一棵新树从 0 开始,轨迹才可复现 */
-    private nextKey = 0;
-
-    /** 分配 key 并登记节点;不挂到树上(挂接由调用方做,便于"创建即可见"的帧) */
+    /** 用数据键建节点并登记;不挂到树上(挂接由调用方做,便于"创建即可见"的帧) */
     createNode(value: number, color: TreeNodeColor = 'black'): TreeNode {
         const node: TreeNode = {
-            key: this.nextKey,
-            value,
+            key: value,
             left: null,
             right: null,
             parent: null,
             color,
         };
-        this.nextKey += 1;
         this.nodes.set(node.key, node);
         return node;
     }
 
-    /** 清空成一棵空树(节点登记表与 key 分配器一起重置) */
+    /** 清空成一棵空树(根与节点登记表一起重置) */
     clear(): void {
         this.root = null;
         this.nodes.clear();
-        this.nextKey = 0;
     }
 
     /** 普通 BST 插入(不产轨迹),按 values 顺序建树;重复值忽略 */
@@ -90,8 +84,8 @@ export class TreeModel {
     find(value: number): TreeNode | null {
         let current = this.root;
         while (current !== null) {
-            if (value === current.value) return current;
-            current = value < current.value ? current.left : current.right;
+            if (value === current.key) return current;
+            current = value < current.key ? current.left : current.right;
         }
         return null;
     }
@@ -100,7 +94,7 @@ export class TreeModel {
         return this.nodes.get(key) ?? null;
     }
 
-    /** 中序遍历:节点按值升序(合法 BST 的前提) */
+    /** 中序遍历:节点按 key 升序(合法 BST 的前提) */
     inOrder(): TreeNode[] {
         const result: TreeNode[] = [];
         const visit = (node: TreeNode | null): void => {
@@ -169,7 +163,8 @@ export class TreeModel {
     /**
      * 这一帧的完整中性场景文档.
      *
-     * - `nodes` 按 key 升序(遍历后排序,不依赖 Map 插入顺序);
+     * - `nodes` 按 key 升序(遍历后排序,不依赖 Map 插入顺序),节点只有 `{ key, attrs }`
+     *   —— key 就是数据键,显示文字由消费方取 `String(key)`;
      * - `pointers` 按父节点 key 升序、每个父 left 再 right;
      * - `attrs` 默认 `{}`,红黑树传 `{ colors: true }` 才写 `{ color }`.
      */
@@ -187,7 +182,7 @@ export class TreeModel {
         const colors = options?.colors === true;
         const nodes: SceneDocumentNode[] = live.map((node) => {
             const attrs: Readonly<Record<string, string>> = colors ? { color: node.color } : {};
-            return { key: node.key, label: String(node.value), attrs };
+            return { key: node.key, attrs };
         });
 
         const pointers: SceneDocumentPointer[] = [];
@@ -207,8 +202,8 @@ export class TreeModel {
         }
         let current = this.root;
         while (true) {
-            if (value === current.value) return current;
-            if (value < current.value) {
+            if (value === current.key) return current;
+            if (value < current.key) {
                 if (current.left === null) {
                     const created = this.createNode(value);
                     current.left = created;
@@ -235,7 +230,7 @@ export class TreeModel {
 /** 左旋:node 下沉、node.right 上位,返回新的子树根 y */
 export function rotateLeft(tree: TreeModel, node: TreeNode): TreeNode {
     const y = node.right;
-    if (y === null) throw new Error(`节点 ${node.value} 没有右孩子,不能左旋`);
+    if (y === null) throw new Error(`节点 ${node.key} 没有右孩子,不能左旋`);
     node.right = y.left;
     if (y.left !== null) y.left.parent = node;
     y.parent = node.parent;
@@ -254,7 +249,7 @@ export function rotateLeft(tree: TreeModel, node: TreeNode): TreeNode {
 /** 右旋:node 下沉、node.left 上位,返回新的子树根 y */
 export function rotateRight(tree: TreeModel, node: TreeNode): TreeNode {
     const y = node.left;
-    if (y === null) throw new Error(`节点 ${node.value} 没有左孩子,不能右旋`);
+    if (y === null) throw new Error(`节点 ${node.key} 没有左孩子,不能右旋`);
     node.left = y.right;
     if (y.right !== null) y.right.parent = node;
     y.parent = node.parent;
@@ -322,7 +317,7 @@ export function* searchFrames(tree: TreeModel, value: number, options?: FrameOpt
     const path: TreeNode[] = [];
     let current: TreeNode | null = tree.root;
     while (current !== null) {
-        if (current.value === value) {
+        if (current.key === value) {
             yield {
                 ...hold,
                 title: `命中 ${value}`,
@@ -333,11 +328,11 @@ export function* searchFrames(tree: TreeModel, value: number, options?: FrameOpt
             };
             return;
         }
-        const goLeft: boolean = value < current.value;
+        const goLeft: boolean = value < current.key;
         yield {
             ...hold,
-            title: `比较 ${value} 与 ${current.value}`,
-            detail: goLeft ? `${value} < ${current.value},走左子树` : `${value} > ${current.value},走右子树`,
+            title: `比较 ${value} 与 ${current.key}`,
+            detail: goLeft ? `${value} < ${current.key},走左子树` : `${value} > ${current.key},走右子树`,
             focus: current.key,
             anchor: current.key,
             marks: trailMarks(path, current, 'active'),
@@ -352,7 +347,7 @@ export function* searchFrames(tree: TreeModel, value: number, options?: FrameOpt
         title: `未找到 ${value}`,
         detail: last === undefined
             ? `${value} 将插在这里(成为根)`
-            : `走到空位,${value} 将插在这里(节点 ${last.value} 的${value < last.value ? '左' : '右'}边)`,
+            : `走到空位,${value} 将插在这里(节点 ${last.key} 的${value < last.key ? '左' : '右'}边)`,
         ...(last === undefined ? {} : { focus: last.key }),
         marks: trailMarks(path, null),
     };
@@ -370,7 +365,7 @@ export function* insertFrames(tree: TreeModel, value: number, options?: FrameOpt
     let goLeft = true;
     let current: TreeNode | null = tree.root;
     while (current !== null) {
-        if (current.value === value) {
+        if (current.key === value) {
             yield {
                 ...hold,
                 title: `已存在 ${value}`,
@@ -381,11 +376,11 @@ export function* insertFrames(tree: TreeModel, value: number, options?: FrameOpt
             };
             return;
         }
-        const left = value < current.value;
+        const left = value < current.key;
         yield {
             ...hold,
-            title: `比较 ${value} 与 ${current.value}`,
-            detail: left ? `${value} < ${current.value},走左子树` : `${value} > ${current.value},走右子树`,
+            title: `比较 ${value} 与 ${current.key}`,
+            detail: left ? `${value} < ${current.key},走左子树` : `${value} > ${current.key},走右子树`,
             focus: current.key,
             anchor: current.key,
             marks: trailMarks(path, current, 'active'),
@@ -417,7 +412,7 @@ export function* insertFrames(tree: TreeModel, value: number, options?: FrameOpt
         title: `插入 ${value}`,
         detail: parent === null
             ? `空树,${value} 成为根节点;中序仍然升序`
-            : `${value} 挂在节点 ${parent.value} 的${goLeft ? '左' : '右'}边;中序仍然升序`,
+            : `${value} 挂在节点 ${parent.key} 的${goLeft ? '左' : '右'}边;中序仍然升序`,
         focus: created.key,
         ...(parent === null ? {} : { anchor: parent.key }),
         marks: { nodes },
@@ -440,12 +435,12 @@ export function* deleteFrames(tree: TreeModel, value: number, options?: FrameOpt
 
     const path: TreeNode[] = [];
     let current: TreeNode | null = tree.root;
-    while (current !== null && current.value !== value) {
-        const goLeft: boolean = value < current.value;
+    while (current !== null && current.key !== value) {
+        const goLeft: boolean = value < current.key;
         yield {
             ...hold,
-            title: `比较 ${value} 与 ${current.value}`,
-            detail: goLeft ? `${value} < ${current.value},走左子树找` : `${value} > ${current.value},走右子树找`,
+            title: `比较 ${value} 与 ${current.key}`,
+            detail: goLeft ? `${value} < ${current.key},走左子树找` : `${value} > ${current.key},走右子树找`,
             focus: current.key,
             anchor: current.key,
             marks: trailMarks(path, current, 'active'),
@@ -496,7 +491,7 @@ export function* deleteFrames(tree: TreeModel, value: number, options?: FrameOpt
             yield {
                 ...hold,
                 title: `找右子树最小`,
-                detail: `${successor.value} 还有左孩子,继续往左找更小的`,
+                detail: `${successor.key} 还有左孩子,继续往左找更小的`,
                 focus: successor.key,
                 anchor: successor.key,
                 marks: {
@@ -510,8 +505,8 @@ export function* deleteFrames(tree: TreeModel, value: number, options?: FrameOpt
         }
         yield {
             ...hold,
-            title: `找到后继 ${successor.value}`,
-            detail: `右子树最小节点是 ${successor.value},它接替 ${value} 的位置`,
+            title: `找到后继 ${successor.key}`,
+            detail: `右子树最小节点是 ${successor.key},它接替 ${value} 的位置`,
             focus: successor.key,
             anchor: successor.key,
             marks: {
@@ -545,7 +540,7 @@ export function* deleteFrames(tree: TreeModel, value: number, options?: FrameOpt
         }
         replacement = successor;
         title = `删除双孩子节点 ${value}(物理移植后继)`;
-        detail = `${successor.value}(后继)接过 ${value} 的位置;${value} 被摘除,中序仍然升序`;
+        detail = `${successor.key}(后继)接过 ${value} 的位置;${value} 被摘除,中序仍然升序`;
     } else if (replacement === null) {
         if (parent === null) {
             tree.root = null;
@@ -569,8 +564,8 @@ export function* deleteFrames(tree: TreeModel, value: number, options?: FrameOpt
             child.parent = parent;
         }
         motion = { kind: 'subtree', root: child.key };
-        title = `删除单孩子节点 ${value}(${child.value} 整棵子树向上接替)`;
-        detail = `节点 ${value} 只有一个孩子 ${child.value},孩子的子树整体上移;中序仍然升序`;
+        title = `删除单孩子节点 ${value}(${child.key} 整棵子树向上接替)`;
+        detail = `节点 ${value} 只有一个孩子 ${child.key},孩子的子树整体上移;中序仍然升序`;
     }
 
     tree.nodes.delete(target.key);
@@ -621,8 +616,8 @@ export function* traverseFrames(
         visited.push(node);
         yield {
             ...hold,
-            title: `${orderName}遍历:访问 ${node.value}`,
-            detail: `已访问序列:${visited.map((item) => item.value).join(' ')}`,
+            title: `${orderName}遍历:访问 ${node.key}`,
+            detail: `已访问序列:${visited.map((item) => item.key).join(' ')}`,
             focus: node.key,
             anchor: node.key,
             marks: { nodes: marksOf(visited, 'visited').map((mark) =>
@@ -662,7 +657,7 @@ export function* rotateFrames(
     yield {
         ...hold,
         title: `认出旋转轴:${direction === 'left' ? '左旋' : '右旋'} ${value}`,
-        detail: `只改三根指针:${value} 下沉,${child.value} 上位,β 子树换父;中序不变,p→x 变成 p→y`,
+        detail: `只改三根指针:${value} 下沉,${child.key} 上位,β 子树换父;中序不变,p→x 变成 p→y`,
         focus: target.key,
         frame: introKeys,
         framing: 'hold',
@@ -684,8 +679,8 @@ export function* rotateFrames(
     }
     yield {
         ...hold,
-        title: `${direction === 'left' ? '左旋' : '右旋'}完成:${child.value} 上位`,
-        detail: `${child.value} 顶到 ${value} 原来的位置,${value} 下沉;β 子树改挂到 ${value} 的${direction === 'left' ? '右' : '左'}边`,
+        title: `${direction === 'left' ? '左旋' : '右旋'}完成:${child.key} 上位`,
+        detail: `${child.key} 顶到 ${value} 原来的位置,${value} 下沉;β 子树改挂到 ${value} 的${direction === 'left' ? '右' : '左'}边`,
         focus: child.key,
         frame: completionKeys,
         framing: 'hold',
@@ -701,7 +696,7 @@ export function* rotateFrames(
         },
     };
 
-    const sequence = tree.inOrder().map((node) => node.value).join(' ');
+    const sequence = tree.inOrder().map((node) => node.key).join(' ');
     yield {
         ...hold,
         title: `验证中序不变`,
@@ -733,7 +728,7 @@ export function* shapeFrames(tree: TreeModel, options?: FrameOptions): Generator
     yield {
         ...hold,
         title: '中序遍历就是升序',
-        detail: `中序访问序列:${ordered.length === 0 ? '(空)' : ordered.map((node) => node.value).join(' ')}`,
+        detail: `中序访问序列:${ordered.length === 0 ? '(空)' : ordered.map((node) => node.key).join(' ')}`,
         frame: keys,
         framing: 'fit',
         marks: { nodes: marksOf(ordered, 'visited') },

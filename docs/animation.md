@@ -20,8 +20,10 @@
   (§15);叙事顺序 BST -> 旋转 -> 退化 -> RBT。
 - **已拍板**:§14 的四个问题按下述口径实现 —— 演示入口放**任务栏**「演示」动作、RBT 删除本轮
   已做、JSON 编辑器默认不跟随(写回 JSON 未做)、自由操作沙盒留到 M5。
-- **现状**:M0–M4 已实现并有测试(全仓 294 项通过);演示可播放 / 暂停 / 单步 /
+- **现状**:M0–M4 已实现并有测试(全仓 303 项通过);演示可播放 / 暂停 / 单步 /
   回退 / 拖进度条 / 变速 / 跟随镜头开关 / 键盘控制;左侧有「步骤」目录窗口(§9.3.1)。
+- **当前契约(2026-10)**:节点身份 / 数据键统一为 `nodes[].key`(number 或 string),
+  没有 `label`、没有文档内编号;轨迹每帧的 `document` 都遵守这一契约(§4).
 - **下一步**:M5 剩下的部分(自由操作沙盒、BST/RBT 对照演出);可选「把当前帧写回 JSON」。
 
 ---
@@ -115,7 +117,7 @@ SceneTrace = [ { document, title, detail, focus|frame, anchor, marks, motion, ho
 
 | 层 | 管什么 | 实现 | 时长量级 |
 | --- | --- | --- | --- |
-| **结构动画** | 节点位移、连线重接、进入 / 离开、染色 | 每个节点按稳定 id 复用元素,逐帧写属性 | 240–520ms |
+| **结构动画** | 节点位移、连线重接、进入 / 离开、染色 | 每个节点按 `key` 复用元素,逐帧写属性 | 240–520ms |
 | **镜头动画** | 世界层 `transform`(`x` / `y` / `k`) | 在视口层对 `PlaneViewState` 插值 | 280–900ms,距离自适应 |
 | **叙述** | 步骤停留,让人读得完 | 虚拟时钟的 `hold` | `clamp(700 + 24×字数, 700, 1800)`ms |
 
@@ -159,7 +161,7 @@ interface TraceStep {
     readonly framing?: 'point' | 'fit' | 'hold';
     /**
      * 帧间锚定:这一帧里的 `anchor` 节点,尽量落在上一帧 `anchorAt` 节点的位置
-     * (`anchorAt` 不给 = 取上一帧的同名节点)。布局每次都会按包围盒重新归零,
+     * (`anchorAt` 不给 = 取上一帧里同一个 key 的节点)。布局每次都会按包围盒重新归零,
      * 不锚定的话整棵树会跟着平移,真正变化的那几个节点反而看不清。细则见 §5.4。
      */
     readonly anchor?: number;
@@ -199,9 +201,11 @@ interface SceneTrace {
 
 约定:
 
-- **节点身份 = `nodes[].key`**。算法内部给每个节点一个稳定 key(= 创建序号),`label`
-  才是值。删除两个孩子的节点时用**物理移植**(把后继节点整个接到被删位置),而不是
-  "复制值再删后继":这样颜色、key、高亮都跟着节点走,画面不会出现"值瞬移 + 颜色跳变"。
+- **节点身份 = `nodes[].key`,key 就是数据键**。`TreeModel` 里节点 key 直接取插入 / 比较的
+  数值(插入 8 则 key = 8),没有独立的 label / value 字段;引用、高亮、排序、显示
+  (`String(key)`)都用它。删除两个孩子的节点时用**物理移植**(把后继节点整个接到被删
+  位置),而不是"复制数据再删后继":key 是身份,复制 key 会造出重复键;物理移植后颜色 /
+  高亮 / key 都跟着节点走,画面不会出现"值瞬移 + 颜色跳变"。
 - **`pointers` 顺序承载左右语义**(`docs/checks.md` 已写明),算法输出孩子时必须
   **按 key 升序**,否则自动布局会把左右子树画反。
 - 每帧 `document` 都能被现有 `parseSceneDocument` 解析,也能直接喂给
@@ -212,8 +216,9 @@ interface SceneTrace {
 - **轨迹不进中性 JSON**:一份 JSON 仍然只描述"一个结构";轨迹是展示层产物,由初始
   结构 + 操作序列现算。否则 Python 写出的静态 JSON 会和 web 的动画状态互相污染,
   "同一份 JSON 打开应当看到同一个结构"这条契约就破了。
-- **标签必须是十进制数**:BST / RBT 的检查器走 `src/scene/label_value.ts`,把 `label`
-  按十进制读;演示剧本的 `label` 只能是 `"5"` 这类,不能是 `"5a"` / `"节点5"`。
+- **树 / 堆 / 链的 key 必须是 number**:BST / RBT 的检查器直接比较 `nodes[].key`,不再有
+  `label -> 数值` 的解析层;演示剧本里树节点只能写 `{"key": 5}` 这类数字 key,字符串 key
+  (图里的命名节点)会让有序检查直接 FAIL"不是数字",不静默跳过。
 
 操作序列也用简单数据描述(剧本文件里直接写):
 
@@ -229,56 +234,82 @@ type TreeOp =
 
 ### 4.1 一段轨迹长什么样(插入 5)
 
-轨迹就是**一个 JSON 数组**,每一步的 `document` 都是一份完整的中性文档(下面省略了
-重复的节点 / 指针,只保留会变的部分和元信息):
+轨迹就是**一个 JSON 数组**,每一步的 `document` 都是一份完整的中性文档(所有节点 /
+指针都写全,不是相对上一帧的 diff;这里省略空的 `attrs`)。下面按 `snapshot()` 的形状
+写:`nodes` 按 key 升序,`pointers` 按父节点 key 升序(同一父先左后右);节点只有
+`key`,没有坐标、没有 label:
 
 ```json
 [
   {
     "document": {
       "nodes": [
-        {"key": 0, "label": "8"}, {"key": 1, "label": "4"}, {"key": 2, "label": "2"},
-        {"key": 3, "label": "6"}, {"key": 4, "label": "12"}, {"key": 5, "label": "10"},
-        {"key": 6, "label": "14"}
+        {"key": 2}, {"key": 4}, {"key": 6}, {"key": 8},
+        {"key": 10}, {"key": 12}, {"key": 14}
       ],
       "pointers": [
-        {"from": 0, "to": 1}, {"from": 1, "to": 2}, {"from": 1, "to": 3},
-        {"from": 0, "to": 4}, {"from": 4, "to": 5}, {"from": 4, "to": 6}
+        {"from": 4, "to": 2}, {"from": 4, "to": 6},
+        {"from": 8, "to": 4}, {"from": 8, "to": 12},
+        {"from": 12, "to": 10}, {"from": 12, "to": 14}
       ],
       "edges": []
     },
     "title": "从根开始",
     "detail": "要插入 5,先和根 8 比较",
-    "focus": 0,
-    "marks": {"nodes": [{"key": 0, "state": "active"}]}
+    "focus": 8,
+    "marks": {"nodes": [{"key": 8, "state": "active"}]}
   },
   {
-    "document": { "...": "结构不变,省略" },
+    "document": {
+      "nodes": [
+        {"key": 2}, {"key": 4}, {"key": 6}, {"key": 8},
+        {"key": 10}, {"key": 12}, {"key": 14}
+      ],
+      "pointers": [
+        {"from": 4, "to": 2}, {"from": 4, "to": 6},
+        {"from": 8, "to": 4}, {"from": 8, "to": 12},
+        {"from": 12, "to": 10}, {"from": 12, "to": 14}
+      ],
+      "edges": []
+    },
     "title": "5 < 8",
     "detail": "去左子树",
-    "focus": 1,
+    "focus": 4,
     "marks": {
-      "nodes": [{"key": 0, "state": "path"}, {"key": 1, "state": "active"}]
+      "nodes": [{"key": 8, "state": "path"}, {"key": 4, "state": "active"}]
     }
   },
   {
-    "document": { "...": "在上面那份基础上加一个节点和一条指针" },
+    "document": {
+      "nodes": [
+        {"key": 2}, {"key": 4}, {"key": 5}, {"key": 6},
+        {"key": 8}, {"key": 10}, {"key": 12}, {"key": 14}
+      ],
+      "pointers": [
+        {"from": 4, "to": 2}, {"from": 4, "to": 6}, {"from": 6, "to": 5},
+        {"from": 8, "to": 4}, {"from": 8, "to": 12},
+        {"from": 12, "to": 10}, {"from": 12, "to": 14}
+      ],
+      "edges": []
+    },
     "title": "挂到 6 的左孩子",
     "detail": "5 < 6,左孩子为空,插入完成;中序仍是升序",
-    "focus": 7,
-    "anchor": 3,
+    "focus": 5,
+    "anchor": 6,
     "marks": {
-      "nodes": [{"key": 3, "state": "path"}, {"key": 7, "state": "fresh"}]
+      "nodes": [{"key": 6, "state": "path"}, {"key": 5, "state": "fresh"}]
     }
   }
 ]
 ```
 
-三个要点:
+四个要点:
 
 - **没有坐标、没有 keyframes**:节点画在哪由 web 用这一帧的 `document` 重新布局;
 - **没有"动画指令"**:`focus / marks / anchor` 是给播放器的提示,不是时间轴。真正
   怎么动(多快、什么曲线、先动谁)由视觉层统一决定;
+- **节点没有 label**:`document.nodes[]` 只有 `key` / `attrs`,`String(key)` 就是显示文字;
+  `focus / frame / anchor / marks` 引用的都是这些 key,没有另一套编号;
 - 这份轨迹**可以落盘、可以 diff、可以用 Python 生成**,因为它只是数据。哪天想把算法
   挪到 Python 侧,输出格式不用变。
 
@@ -395,7 +426,7 @@ linkEndpoints(from: VisualPoint, to: VisualPoint, laneOffset: number): { start, 
 "所有节点一起滑",真正变化的那几个节点反而看不清。
 
 所以每一步先对整帧布局做一次**纯平移**:让 `anchor` 节点落在上一帧 `anchorAt` 节点的
-位置(`anchorAt` 缺省取上一帧的同名节点),再在平移后的两帧之间插值。锚点取法:
+位置(`anchorAt` 缺省取上一帧里同一个 key 的节点),再在平移后的两帧之间插值。锚点取法:
 
 | 步骤 | `anchor` / `anchorAt` |
 | --- | --- |
@@ -793,8 +824,8 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 | 层 | 文件(已落地) | 职责 |
 | --- | --- | --- |
 | datastruct | `trace/trace.ts` | `TraceStep` / `SceneTrace` / 状态枚举 / `TraceBuilder` / `TreeOp`(纯类型 + 小工具) |
-| datastruct | `bst/bst.ts` | `TreeModel`(稳定 key / 快照)+ search/insert/delete/traverse/**rotateLeft/rotateRight**,产出 `TraceFrame` |
-| datastruct | `rbt/rbt_ops.ts` | 红黑树插入 / 删除模型 + fixup,产出轨迹(复用 BST 的旋转与稳定 key) |
+| datastruct | `bst/bst.ts` | `TreeModel`(key 即数据键 / 快照)+ search/insert/delete/traverse/**rotateLeft/rotateRight**,产出 `TraceFrame` |
+| datastruct | `rbt/rbt_ops.ts` | 红黑树插入 / 删除模型 + fixup,产出轨迹(复用 BST 的旋转与节点 key) |
 | visual | `tween.ts` | 可注入时钟(`TweenClock`)+ 缓动 + `tween()`;单帧 delta 夹取 |
 | visual | `anchor.ts` | 帧间锚定:按 `anchor / anchorAt` 平移整帧布局(纯算术);另有 `autoAnchorLayout` 兜底 |
 | visual | `motion.ts` | 两帧场景 -> 插值帧:节点位置、分道偏移、高亮状态、进入/离开;旋转的极坐标插值 |
@@ -821,20 +852,20 @@ JSON 编辑器默认**不被改写**:演示是"看",编辑器是"改",两者混�
 
 | 层 | 测试 | 断言 |
 | --- | --- | --- |
-| 纯逻辑 | `bst.test.ts` | 每帧解析通过;每帧 `checkBstOrder` PASS;删除三情形各出现;升序插入层数 = n |
+| 纯逻辑 | `bst.test.ts` | 每帧解析通过;每帧 `checkBstOrder` PASS;删除三情形各出现;升序插入层数 = n;快照节点只有 `key`(没有 label),key 即数据键 |
 | 纯逻辑 | `bst_rotation.test.ts` | 左旋 / 右旋前后**中序序列完全相同**;连续两次反向旋转回到原结构;之字形单旋层数不变、双旋降 1;右重线形左旋降 1;根旋转后根 key 正确;旋转帧全部是合法 BST |
 | 纯逻辑 | `rbt_ops.test.ts` | 最后一帧五条检查全 PASS;情形 1/2/3 各至少一次;根最终为黑;黑高相等 |
-| 纯逻辑 | `trace.test.ts` | 轨迹确定性(同输入逐字节同输出);每步 `document` 节点 key 唯一、引用有效 |
+| 纯逻辑 | `trace.test.ts` | 轨迹确定性(同输入逐字节同输出);每步 `document` 节点 key 唯一、引用有效、节点无 label |
 | 纯数学 | `tween.test.ts` | e(0)=0 / e(1)=1 / 单调;手动时钟推进;单帧 delta 夹取;cancel / abort;duration=0 |
 | 纯数学 | `viewport.test.ts` 扩展 | 中心 + 对数插值端点精确;定位 / 框组取景;时长夹在 280~900;`animateTo` 在虚拟时钟上插值;用户拖动立即打断 |
-| 纯数学 | `anchor.test.ts` | 锚点节点平移前后坐标完全相等;anchorAt 缺省取同名节点;节点缺失时的回退规则;自动锚定取最小共同 key |
+| 纯数学 | `anchor.test.ts` | 锚点节点平移前后坐标完全相等;anchorAt 缺省取同一 key 节点;节点缺失时的回退规则;自动锚定取最小共同 key |
 | 纯数学 | `motion.test.ts` | 直线 / 极坐标 / 子树平移;连线端点始终在圆边;进入/离开透明度;旋转半径线性、路径不回摆 |
 | DOM(happy-dom) | `painter.test.ts` | 两次落笔复用同一批 DOM;状态类 / 变体类叠加与切换;settled 才移除退场元素并量包围盒 |
 | DOM(happy-dom) | `demo_player.test.ts` | 构造落第 0 拍;单步 / 回退 / seek;自动播放播完暂停;速度换算;reduce-motion / `cut` 硬切;镜头 hold / 跟随开关 |
 | DOM(happy-dom) | `demo_outline.test.ts` | 目录按章列出全部步骤;点步骤 / 章头上报 `onSeek`;`update` 只留一个 `is-current`、之前的步骤 `is-past`;「收起」按钮可选;dispose 摘监听 |
 | DOM | `viewer.test.ts` 扩展 | 「定位」平滑镜头接线;窗口 / 回正 |
 | DOM | `demo_mode.test.ts` | 任务栏「演示」按钮与菜单;进入后窗口让位 / 控制窗口与步骤目录出现 / 第 0 拍落笔;单步与进度点;目录点击与高亮同步;「步骤」开关与「收起」双向同步;速度档为库 segmented(`aria-pressed` / `.active`);键盘 Esc / Space;退出恢复窗口与静态画面;RUN 先退出演示 |
-| 纯逻辑 | `demo_scenarios.test.ts` | 7 个剧本每帧可解析、章节连续、检查已登记;BST 每帧有序;RBT 末帧五条全 PASS;情形 1/2/3、双黑四情形、退化层数等教学路径覆盖 |
+| 纯逻辑 | `demo_scenarios.test.ts` | 7 个剧本每帧可解析、章节连续、检查已登记;BST 每帧有序;每帧节点只有 `key`(无 label)且 key 为数字;RBT 末帧五条全 PASS;情形 1/2/3、双黑四情形、退化层数等教学路径覆盖 |
 
 约定:
 
@@ -872,8 +903,9 @@ M5 是下一轮的可选项。
    正是这个原因;动画移动节点时也只改组 `transform` 属性,形状的 scale 归 CSS。
 4. **`pointers` 顺序 = 左右。** 红黑树旋转后如果孩子顺序没按 key 排,布局会把左右画反,
    而且检查全 PASS —— 这是最隐蔽的一类错。轨迹测试里加"中序序列升序"的断言。
-5. **删除双孩子用物理移植。** 复制值再删后继会让"被删节点的颜色 / 高亮"留在原位而
-   值瞬移,红黑树尤其乱;物理移植才能看到"后继接替了它的位置和颜色"。
+5. **删除双孩子用物理移植。** key 就是节点身份,复制 key 再删后继既会造出重复 key,
+   又会让"被删节点的颜色 / 高亮"留在原位而值瞬移,红黑树尤其乱;物理移植才能看到
+   "后继接替了它的位置、颜色和 key"。
 6. **镜头所有权。** 演示的跟随与用户的拖动必须有一方说了算:用户手势只打断**当前**
    动画,「跟随镜头」开关决定下一步是否重新接管;不要靠 `manual` 开关硬切。
 7. **控制窗口遮画布。** 镜头可用区要扣掉贴底的演示窗口,否则当前节点会被窗口压住
@@ -954,7 +986,7 @@ M5 是下一轮的可选项。
 | 样式 | `src/visual/visual.css`、`tokens.css` | 新增状态类、染色 transition、reduced-motion;保留现有 220ms 入场动画 | 小改 |
 | 取景常数 | `src/visual/config.ts` | 复用 `VISUAL_FOCUS_MIN_ZOOM`(0.8)/ `VISUAL_FIT_MAX_ZOOM`(1)/ `VISUAL_MIN_ZOOM` / `VISUAL_MAX_ZOOM` | 不改 |
 | 测试环境 | `happy-dom` | `getBBox()` 恒空;rAF 由测试 fake timer / 注入时钟驱动 | 播放器注入 `ManualClock`;视口镜头动画注入时钟;量不到就不动镜头 |
-| 值口径 | `src/scene/label_value.ts` | BST / RBT 剧本的 `label` 必须是十进制数,检查器按它读数 | 遵守 |
+| 值口径 | `nodes[].key`(`src/scene/scene_document.ts`) | BST / RBT 剧本里节点 key 就是插入 / 比较的数值;有序检查直接比较 number 类型的 key,不是 number 直接 FAIL | 遵守(不再有 `label_value.ts` / label 解析层) |
 
 菜单那一格是**本轮唯一的库改动**:`.menu-anchor` 一律不许影响触发按钮的布局 —— 它生成盒子
 就是父容器(`line box` / flex item)里的一员,高度、基线、父级 `align-items` 都会先分给它,
@@ -1007,7 +1039,7 @@ M5 是下一轮的可选项。
 
 ### 17.2 已经核对过的事实
 
-- **web**:`npm test` = 294 项通过;`npm run typecheck` 通过;`npm run build` 通过。
+- **web**:`npm test` = 303 项通过;`npm run typecheck` 通过;`npm run build` 通过。
 - **浏览器实测**(headful Chromium + Vite dev):进入「BST · 查找 / 插入 / 删除」控制窗口为 29 步、
   第 0 拍整棵树;单步后标题 / 计数 / 检查行同步;RBT 综合插入 57 步,情形 2 / 3 帧上
   检查窗口当场 FAIL / PASS;左侧目录列出全部 57 步,点行 / 章头跳转、自动播放时高亮与滚动
@@ -1015,13 +1047,15 @@ M5 是下一轮的可选项。
 - **教学路径**:RBT 综合序列 `7,3,18,10,22,8,11,26,2,6,13` 情形 1/2/3 全出现;删除序
   `26,22,18,13,11` 双黑四情形全出现;升序 `1..7` BST 层数 7、RBT 层数 4(黑高一致)。
 - **确定性**:同一剧本两次生成轨迹逐字节相同;删除双孩子用物理移植(节点 key 不变)。
-- **Python**:`python3 -m unittest discover -s tests -t .` 57 项通过;`bst.json` 与 web
-  「二叉搜索树」示例同形(本轮未改 Python)。
+- **契约**:每帧节点的 `key` 就是数据键(演示里全是 number),快照节点只有 `key` /
+  `attrs`,没有 label;`focus / frame / anchor / marks` 都按 key 引用。
+- **Python**:`python3 -m unittest discover -s tests -t .` 60 项通过;`bst.json` 与 web
+  「二叉搜索树」示例同形。
 
 ### 17.3 验收方式
 
 ```bash
-npm test           # 294 项:纯逻辑 / 纯数学 / happy-dom 行为
+npm test           # 303 项:纯逻辑 / 纯数学 / happy-dom 行为
 npm run typecheck  # tsc --noEmit(含 noUnusedLocals / noUnusedParameters)
 npm run build      # clean -> test -> typecheck -> vite build
 # 浏览器: npm run dev 后打开 http://localhost:5173/miko_datastruct/
