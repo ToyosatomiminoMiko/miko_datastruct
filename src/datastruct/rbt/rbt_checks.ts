@@ -8,9 +8,9 @@
  * - 颜色从 `attrs.color` 读(`red` / `black`,大小写不敏感);颜色写错本身就是一条
  *   FAIL,不能让"没有颜色"被当成"不是红色"而蒙混通过;
  * - 父子关系从 `pointers` 读:出边是孩子;左右顺序按 pointers 数组顺序(与树形布局
- *   同一口径:第一个孩子是左,第二个是右).中性表示丢掉了 Python 字段名(left /
- *   right),单孩子因此分不出左右:有序检查对"左 / 右"两种解释都试一次,任一成立
- *   即算有序;
+ *   同一口径:第一个孩子是左,第二个是右).只剩一个孩子时顺序说不清左右,按 key 与
+ *   父节点比较定(小左大右,与布局同一条规则);堆这类左右由数组下标决定的结构不能
+ *   靠 key 比较,需要它自己的检查 / 布局;
  * - 值从 `key` 读:树 / 堆 / 链的 key 就是参与比较的数值,有序检查要求它是 number;
  *   字符串 key(图里的命名节点)不参与数值比较,直接 FAIL 而不是静默跳过.
  *
@@ -252,8 +252,8 @@ interface BstViolation {
  *
  * - 用区间递归而不是只比父子:只比父子会漏掉"孙子比爷爷大"这种错;
  * - 区间是开区间:等于祖先的值也算乱序(查找时这个值落在哪一边不确定);
- * - 节点最多两个孩子,出边顺序第一个是左、第二个是右;只有一个孩子时左右都可能,
- *   两种解释任一成立即算有序.
+ * - 节点最多两个孩子,出边顺序第一个是左、第二个是右;只有一个孩子时没有兄弟可比
+ *   顺序,按 key 与父节点比较定左右(小的走左、大的走右),与布局同一口径.
  */
 const checkBstOrder: SceneCheckFunction = (document) => {
     const name = '二叉搜索树有序';
@@ -289,10 +289,14 @@ const checkBstOrder: SceneCheckFunction = (document) => {
 
         if (children.length === 1) {
             const childKey = children[0] as SceneNodeKey;
-            const asLeft = validate(childKey, low, value, nextPath);
-            if (asLeft === null) return null;
-            // 单孩子也可能是右孩子:同一棵子树换到右侧再试一次
-            return validate(childKey, value, high, nextPath);
+            // 单孩子没有兄弟给顺序:按 key 与父节点比较定左右(与布局同一口径).
+            // 这里的比较和"左右两种解释各试一次"结果等价:能过左区间的只可能是
+            // 小于父节点的孩子,反之亦然;非数字 key 交给 validate 报"不是数字".
+            const childValue = numericKeyOf(index.nodeByKey.get(childKey) as SceneDocumentNode);
+            const goesRight = childValue !== null && childValue > value;
+            return goesRight
+                ? validate(childKey, value, high, nextPath)
+                : validate(childKey, low, value, nextPath);
         }
 
         const leftBad = validate(children[0] as SceneNodeKey, low, value, nextPath);

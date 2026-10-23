@@ -1,8 +1,9 @@
 /**
  * 中性场景自动布局(纯几何,node 环境)的契约.
  *
- * 钉的是"从连接关系推形状"的几条不变量:树按层排、父在子正中、同层不撞;有边 / 有环
- * 走环形布局;多个连通分量并排;同一输入永远给同一坐标.
+ * 钉的是"从连接关系推形状"的几条不变量:树按层排、父在子正中、同层不撞;
+ * 单孩子按 key 与父节点比较落左 / 右槽(分不出时居中);有边 / 有环走环形布局;
+ * 多个连通分量并排;同一输入永远给同一坐标.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -16,6 +17,7 @@ import {
 import {
     VISUAL_LAYOUT_COMPONENT_GAP,
     VISUAL_LAYOUT_GRAPH_MIN_RADIUS,
+    VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET,
     VISUAL_LAYOUT_TREE_LAYER_STEP,
     VISUAL_LAYOUT_TREE_MIN_GAP,
     VISUAL_LINK_LANE_GAP,
@@ -80,17 +82,43 @@ describe('布局:树形', () => {
         }
     });
 
-    it('单链:每个节点在父节点正下方,层距逐层累加', () => {
+    it('数值升序单链:每层子 key > 父 key,按比较向右偏半个中心距', () => {
         const layout = layoutScene(treeInput([0, 1, 2, 3], [
             { from: 0, to: 1 },
             { from: 1, to: 2 },
             { from: 2, to: 3 },
         ]));
 
-        expect(point(layout, 0).x).toBe(point(layout, 1).x);
-        expect(point(layout, 1).x).toBe(point(layout, 2).x);
-        expect(point(layout, 2).x).toBe(point(layout, 3).x);
+        expect(point(layout, 1).x - point(layout, 0).x).toBeCloseTo(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
+        expect(point(layout, 2).x - point(layout, 1).x).toBeCloseTo(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
+        expect(point(layout, 3).x - point(layout, 2).x).toBeCloseTo(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
         expect(point(layout, 3).y).toBe(VISUAL_LAYOUT_TREE_LAYER_STEP * 3);
+    });
+
+    it('单孩子按 key 与父节点比较落槽:小的在左、大的在右', () => {
+        const left = layoutScene(treeInput([6, 5], [{ from: 6, to: 5 }]));
+        const right = layoutScene(treeInput([6, 7], [{ from: 6, to: 7 }]));
+
+        expect(point(left, 5).x - point(left, 6).x).toBeCloseTo(-VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
+        expect(point(right, 7).x - point(right, 6).x).toBeCloseTo(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
+        // 偏移是同层最小中心距的一半:补上另一侧孩子时该孩子正好落在同一位置
+        expect(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET * 2).toBe(VISUAL_LAYOUT_TREE_MIN_GAP);
+    });
+
+    it('单孩子槽位与"补上另一侧孩子"的位置一致:补孩子时原孩子不横向跳', () => {
+        const one = layoutScene(treeInput([6, 5], [{ from: 6, to: 5 }]));
+        const two = layoutScene(treeInput([6, 5, 7], [
+            { from: 6, to: 5 },
+            { from: 6, to: 7 },
+        ]));
+
+        expect(point(two, 5).x - point(two, 6).x).toBeCloseTo(point(one, 5).x - point(one, 6).x);
+        expect(point(two, 7).x - point(two, 6).x).toBeCloseTo(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
+    });
+
+    it('单孩子 key 分不出大小(字符串 / 相等)时保持居中', () => {
+        const strings = layoutScene(treeInput(['root', 'child'], [{ from: 'root', to: 'child' }]));
+        expect(point(strings, 'child').x).toBe(point(strings, 'root').x);
     });
 
     it('森林:多个分量从左到右并排,分量间留出固定间隙', () => {
@@ -100,7 +128,8 @@ describe('布局:树形', () => {
         const second = point(layout, 1);
         expect(first.x).toBe(0);
         expect(second.x - first.x).toBe(VISUAL_LAYOUT_COMPONENT_GAP);
-        expect(point(layout, 2).x).toBe(second.x);
+        // 第二棵是 1 -> 2 的单孩子(2 > 1),2 在 1 的右槽里
+        expect(point(layout, 2).x - second.x).toBeCloseTo(VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET);
     });
 
     it('连线顺序 = 指针输入顺序,节点坐标按输入顺序交回', () => {

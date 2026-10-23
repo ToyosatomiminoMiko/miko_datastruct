@@ -1,7 +1,8 @@
 /**
  * 红黑树性质检查(纯逻辑,node 环境)的契约.
  *
- * 检查吃的是**中性文档**:颜色在 attrs.color、父子在 pointers、左右按 pointers 数组顺序.
+ * 检查吃的是**中性文档**:颜色在 attrs.color、父子在 pointers;两个孩子按指针顺序定
+ * 左右,只剩一个孩子时按 key 与父节点比较定(小左大右).
  * 节点的 key 就是树里的值(13 / 8 / …),有序性直接比较 key,不再解析展示文字.
  * 所以测试不引用任何"Python 树对象",直接写 web 真正会收到的那份 JSON.
  */
@@ -131,12 +132,21 @@ describe('红黑树检查:每条性质的 FAIL 条件', () => {
         expect(check.node).toBe(12);
     });
 
-    it('单孩子无法从文档分辨左右:能解释成右孩子就算有序', () => {
+    it('单孩子按 key 与父节点比较定左右:比父大的走右子树', () => {
         const checks = run(rbtDocument(
             [[10, 'black'], [15, 'red']],
             [[10, 15]],
         ));
         expect(named(checks, BST).passed).toBe(true);
+    });
+
+    it('单孩子按比较定左右后仍做区间检查:左孩子子树里出现大值就 FAIL', () => {
+        // 5 是 10 的左孩子;5 的右子树出现 12(>10),按左子树区间必须全 < 10
+        const checks = run(rbtDocument(
+            [[10], [5], [12]],
+            [[10, 5], [5, 12]],
+        ));
+        expect(named(checks, BST).passed).toBe(false);
     });
 
     it('字符串 key 不能当数值判序 -> 二叉搜索树有序 FAIL(不静默跳过)', () => {

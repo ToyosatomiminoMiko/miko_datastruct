@@ -25,7 +25,7 @@
 | 根节点为黑色 | `checkRootBlack` | `src/datastruct/rbt/rbt_checks.ts` → `checkRootBlack` | 入度为 0 的节点必须唯一且颜色为黑；无根 / 多根 / 根为红 / 根无颜色都 FAIL |
 | 红色节点的孩子都是黑色 | `checkRedChildrenBlack` | `src/datastruct/rbt/rbt_checks.ts` → `checkRedChildrenBlack` | 扫全部节点：红节点的任意孩子不能是红(只扫可达节点会漏掉坏结构) |
 | 各路径黑色节点数量相同 | `checkBlackHeight` | `src/datastruct/rbt/rbt_checks.ts` → `checkBlackHeight` | 从唯一根递归：同一节点的各孩子黑高必须相等；nil 叶子算 1,节点自身为黑再 +1；顺带报环 / 共享孩子 / 从根不可达 |
-| 二叉搜索树有序 | `checkBstOrder` | `src/datastruct/rbt/rbt_checks.ts` → `checkBstOrder` | 开区间递归：左子树全 `<` 节点、右子树全 `>` 节点，比较的是节点的 number 类型 `key`；相等算违规；单孩子时左右两种解释任一成立即通过；>2 孩子 FAIL；`key` 不是 number 直接 FAIL |
+| 二叉搜索树有序 | `checkBstOrder` | `src/datastruct/rbt/rbt_checks.ts` → `checkBstOrder` | 开区间递归：左子树全 `<` 节点、右子树全 `>` 节点，比较的是节点的 number 类型 `key`；相等算违规；单孩子按 `key` 与父节点比较定左右(小左大右)，与布局同一口径；>2 孩子 FAIL；`key` 不是 number 直接 FAIL |
 | 存在欧拉回路 | `checkEulerCircuit` | `src/datastruct/graph/graph_checks.ts` → `checkEulerCircuit` | 所有节点度数为偶 + 所有带边的节点在同一连通分量；孤立节点不参与连通性 |
 | 最小堆序成立 | `checkHeapOrder` | `src/datastruct/heap/heap_checks.ts` → `checkHeapOrder` | 每条 `pointers` 上父节点的 `key` `<=` 孩子节点的 `key`(都按 number 比较)；`key` 不是 number 直接 FAIL |
 | 单链表结构合法 | `checkLinkedList` | `src/datastruct/list/list_checks.ts` → `checkLinkedList` | 只允许 `pointers`；唯一表头、每节点至多 1 父 1 子、从表头可达全部节点；出现 `edges` / 环 / 分叉 / 合流 / 不可达都 FAIL |
@@ -72,5 +72,7 @@
   没有 `label`，也没有文档内编号。
 - **有序性 / 堆序检查直接比较 `key`**：只有 number 类型的 key 可比；字符串 key 直接
   FAIL「不是数字」，读不出数值时不静默跳过（跳过会得到一条空真的 PASS）。
-- `pointers` 数组顺序承载左右语义；中性文档没有 `left` / `right` 字段名。
+- `pointers` 数组顺序承载左右语义；中性文档没有 `left` / `right` 字段名。只剩一个
+  孩子时顺序没有左右信息，按 `key` 与父节点比较定(小左大右)——堆这类左右由数组
+  下标决定的结构不能套用，需要自己的检查 / 布局。
 - 检查之间不短路：一次列全问题，不在第一条 FAIL 处停。

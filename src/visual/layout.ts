@@ -7,7 +7,8 @@
  * 输入:节点 + 有向指针 + 无向边
  *   │
  *   ├─ 只有 pointers 且构成森林(每个节点入度 <= 1、无环)
- *   │    -> 树形布局:自底向上合并轮廓,父节点在子节点正中(泛化到 N 个孩子)
+ *   │    -> 树形布局:自底向上合并轮廓,父节点在子节点正中(泛化到 N 个孩子);
+ *   │       单孩子按 key 与父节点比较落左 / 右槽(小左大右,分不出时居中)
  *   │
  *   └─ 其余(有 edges / 有环 / 一个节点多条入边)
  *        -> 环形布局:每个连通分量的节点排在一个圆上,边是圆内的弦
@@ -27,6 +28,7 @@ import {
     VISUAL_LAYOUT_COMPONENT_GAP,
     VISUAL_LAYOUT_GRAPH_CHORD,
     VISUAL_LAYOUT_GRAPH_MIN_RADIUS,
+    VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET,
     VISUAL_LAYOUT_TREE_LAYER_STEP,
     VISUAL_LAYOUT_TREE_MIN_GAP,
     VISUAL_LINK_LANE_GAP,
@@ -189,10 +191,29 @@ interface SubtreeShape {
 }
 
 /**
+ * 单孩子的横向落点:按 key 与父节点比较推出左右(小左、大右).
+ *
+ * 为什么可以比较:两个孩子时 pointers 顺序已经给出左右;只剩一个孩子时没有兄弟,
+ * 顺序里没有左右信息,而 BST / 红黑树这类结构的 key 本身就编码了左右(左子树全小、
+ * 右子树全大),所以 5 < 6 一定在 6 的左槽.偏移取同层最小中心距的一半
+ * (`VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET`),正好落在"两个孩子时该侧孩子"的位置,
+ * 之后补上另一侧孩子时已有孩子不会横向跳.
+ *
+ * 比较不成立时(字符串 key、或 key 相等这种没有大小关系的情况)返回 0:保持居中.
+ * 堆这类左右由数组下标决定、与 key 顺序无关的结构不能靠这里推断,需要它自己的布局.
+ */
+function inferChildSlotOffset(parentKey: SceneNodeKey, childKey: SceneNodeKey): number {
+    if (typeof parentKey !== 'number' || typeof childKey !== 'number') return 0;
+    if (childKey < parentKey) return -VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET;
+    if (childKey > parentKey) return VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET;
+    return 0;
+}
+
+/**
  * 放一棵子树:轮廓合并(泛化到任意多个孩子).
  *
  * - 叶子:根在 x = 0;
- * - 单孩子:孩子放正下方(x = 0);
+ * - 单孩子:按 key 与父节点比较,落在左 / 右槽;分不出左右时放正下方(x = 0);
  * - 多孩子:先把孩子各自的形状按输入顺序从左到右排开,相邻两棵的错开量取
  *   "每一层都不撞"的最小值;最后父节点放在第一个与最后一个孩子正中.
  *
@@ -207,6 +228,21 @@ function placeSubtree(
     const children = childrenOf.get(key) ?? [];
     if (children.length === 0) {
         return { nodes: [{ key, x: 0, depth }], left: [0], right: [0] };
+    }
+
+    // 单孩子没有兄弟,顺序里没有左右信息:按 key 大小把它放回左 / 右槽
+    if (children.length === 1) {
+        const only = children[0] as SceneNodeKey;
+        const shape = placeSubtree(only, depth + 1, childrenOf);
+        const offset = inferChildSlotOffset(key, only);
+        return {
+            nodes: [
+                { key, x: 0, depth },
+                ...shape.nodes.map((node) => ({ key: node.key, x: node.x + offset, depth: node.depth })),
+            ],
+            left: [0, ...shape.left.map((value) => value + offset)],
+            right: [0, ...shape.right.map((value) => value + offset)],
+        };
     }
 
     // 已放好的孩子(相对坐标,轮廓下标 0 = 孩子这一层),以及第一个 / 最后一个孩子的根 x

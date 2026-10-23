@@ -159,6 +159,15 @@ export const VISUAL_LAYOUT_TREE_LAYER_STEP = 70;
  */
 export const VISUAL_LAYOUT_TREE_MIN_GAP = 70;
 
+/**
+ * 树形布局:单孩子按 key 比较落到左 / 右槽时,相对父节点的横向偏移(px).
+ *
+ * 取同层最小中心距的一半:两个孩子都是叶子时,轮廓合并会把它们放到父节点左右
+ * 各 GAP/2 的位置.单孩子也用这个偏移,就正好落在"该侧那个位置",之后补上另一侧
+ * 孩子时已有孩子不会横向跳动(动画 / 锚定都稳定).
+ */
+export const VISUAL_LAYOUT_TREE_CHILD_SIDE_OFFSET = VISUAL_LAYOUT_TREE_MIN_GAP / 2;
+
 /** 多个连通分量并排时,分量之间的水平间隙(px) */
 export const VISUAL_LAYOUT_COMPONENT_GAP = 120;
 
